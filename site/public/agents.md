@@ -1,6 +1,6 @@
 # ourapps.app for agents
 
-ourapps.app is a private installer: developers register apps they built for friends and family, create share links, and friends install from those links. This document is the complete reference for driving it programmatically. Everything the web console does is available through this API.
+ourapps.app: Delivering Our Applications, built from Our Recipes, using Our Agentically-Engineered Components. Developers find a recipe in the public recipe library, or compose an application from components in the public component catalogue, and may publish what they make (section "Recipe library and component catalogue"). They register the resulting app, create private share links, and friends install from those links. This document is the complete reference for driving it programmatically. Everything the web console does is available through this API.
 
 Base URL: `https://ourapps.app`. All request and response bodies are JSON. Errors are `{"error": "message"}` with a 4xx or 5xx status.
 
@@ -224,6 +224,67 @@ Give the developer the `url`; one link per person or group is the convention so 
 
 `/latest` returns 503 `{"error": "no release of this app is available right now"}` when no release can be read (none published, or the developer's GitHub token cannot see the repository); treat that as "no update". It is what an installed app polls to offer updates: compare `version` with the running version, then open `android.apkUrl`, or `testflightUrl` on iPhone (TestFlight also updates the app by itself). On iPhone compare with `testflightVersion`, the newest build Apple has approved, which can be older than `version` while a new one is in beta review. The signed links inside are good for one hour, so fetch right before opening. Recommend a dedicated link labelled "In-app updates" that is never revoked.
 
+## Recipe library and component catalogue
+
+Recipes (applications assembled from questions) and components (reviewed parts) are published by developers and read by anyone. The service keeps each entry and a pointer to the publisher's GitHub release (repository, tag, asset name, digests). It never stores the package. What a recipe or component repository implements is in contract.md.
+
+### Reading (no authentication, JSON)
+
+```
+GET /api/recipes?category=&target=&tag=&deprecated=&limit=&offset=      -> { recipes: [summary], total, limit, offset, categories: [{ category, count }] }
+GET /api/recipes/search?q=&deprecated=&limit=                           -> { query, recipes: [summary] }
+GET /api/recipes/:name/:version                             -> the version (":version" may be "latest")
+GET /api/recipes/:name/:version/bundle                      -> { name, version, digest, asset, assetDigest, status, url, expiresAt, deprecations }
+GET /api/recipes/:name/:version/deprecations                -> { name, version, status, affected, checked, deprecations }
+GET /api/recipes/:name/:version/diagram.svg                 -> the design diagram
+GET /api/components?category=&target=&tag=&provides=&requires=&deprecated=&limit=&offset=
+GET /api/components/search?q=&deprecated=&limit=
+GET /api/components/:name/:version                          (":version" may be "latest")
+GET /api/components/:name/:version/bundle
+GET /api/components/:name/:version/deprecations
+```
+
+`:name` is the entry's short name (`poker-night`); full names are `<scope>/<name>` (`acme/poker-night`). `target` is a client target (`ios android web macos windows tvos`) or a server target. `provides` and `requires` match an interface type (`ae/card-deck`) or an interface id (`card-deck`). `limit` is 1 to 100 (default 50), `offset` starts at 0. Search matches whole words and word starts over name, title, summary, tags and description.
+
+A recipe summary is `{ name, slug, version, title, summary, category, tags, targets: { client, server }, publishedAt, publisher: { slug, displayName } or null, repository, url, status, deprecations }`. A recipe version adds `digest`, `source` `{ repository, tag }`, `bundle` `{ asset, digest, url }`, `description`, `diagram` (an address or null), `screenshots`, `components` (each recipe component with `catalogue`: the catalogue's `url`, `description`, `suitability` and `guardians`, or null when that version is not listed, and `deprecation`: that component's entry in `deprecations` or null), `jobs` (each with `candidates` and an optional `overrideQuestion`), `scale`, `questions` (id, ask, askAgent, askWhen, type, options, default, min, max, effects), `connections`, `tests` (default answers and answer sets), `instructions` and `versions`. A component version has `description`, `category`, `tags`, `targets`, `provides` (`{ id, type, version }`) and `requires` (the same, with `optional: true` on a requirement that may stay unconnected), `guardians`, `dependencies` (`{ name, version }` of components it builds on, usually empty), `suitability` (jobs and profiles with load, cost, regions, compliance, provider and optional `settings`), `migration` (stores, formats, whether it must stop, retention days) or null, `source`, `bundle`, `versions` and `usedBy` (recipes whose newest version names it).
+
+The bundle route reads the release asset with the publisher's token and answers with a signed `/dl/` link valid for one hour (`status` `available`). It answers 502 when the release or asset is missing or its digest differs from the recorded one. Fetch the link right before downloading it. When the publisher deleted their account (`status` `orphaned`) no token exists: a public release is fetched without one and works the same way; a private or missing release answers 200 with `status` `bundle-unavailable`, `url` null and `expiresAt` null.
+
+### Deprecated and orphaned entries
+
+A name is flagged for every version in one of two ways. `deprecated`: its publisher deprecated it (reason `owner-deprecated`), optionally naming a replacement. `orphaned`: its publisher deleted their account (reason `owner-deleted`); it stays listed and downloadable (see the bundle route), has no publisher (`publisher` null) and no maintainer. Every summary and version response, every `.json` and `.txt` page and every bundle response carries `deprecations`, an array (empty when nothing is flagged) of `{ name, version, status, reason, since, replacement?, via }`: one element for the entry itself when it is flagged (`via` is `[]`), and one for every flagged component it uses or builds on, followed through component dependencies (`via` names what pulls it in: the recipe, or the component that depends on it). `status` on the entry is `active`, `deprecated` or `orphaned`; a recipe that merely uses a flagged component is `active` with a non-empty `deprecations`. In the `.txt` pages each element is a line starting `DEPRECATION WARNING:`. Use it to search for other components or similar recipes, or to decide never to update.
+
+`GET /api/{recipes,components}/:name/:version/deprecations` resolves the whole tree of that version: `affected` is true when `deprecations` is not empty, `checked` counts the distinct components examined (listed or not). Every component a recipe names counts, including ones included only for some answers. `deprecated=exclude|include|only` filters lists and search on the entry's own flag; `include` is the default, so flagged entries appear with their warning. An orphaned name stays reserved: nobody can publish to it.
+
+### Plain text and JSON for every public page
+
+Each page has the same address with `.txt` or `.json`: `/recipes.txt`, `/recipes/:name.txt`, `/recipes/:name.json?version=0.1.0`, `/components.txt`, `/components/:name.json`. Lists take the same query parameters, and `?q=` searches. `GET /sitemap.xml` lists the public pages.
+
+### Publishing (developer session or `manage` key)
+
+```
+POST   /api/dev/components               the component entry
+POST   /api/dev/recipes                  the recipe entry
+GET    /api/dev/components               -> { components: [{ name, slug, repository, latestVersion, status, deprecated, versions: [{ version, digest, publishedAt, listed }] }] }
+GET    /api/dev/recipes                  -> { recipes: [...] }
+DELETE /api/dev/components/:name[/:version]   unlist one version, or every version
+DELETE /api/dev/recipes/:name[/:version]
+POST   /api/dev/components/:name/deprecate    optional { replacement: "<scope>/<name>" } of a published component; flags every version
+POST   /api/dev/components/:name/undeprecate  clears the flag
+POST   /api/dev/recipes/:name/deprecate       optional { replacement } of a published recipe
+POST   /api/dev/recipes/:name/undeprecate
+```
+
+Deprecate and undeprecate answer `{ ok, name, status, deprecated: { since, reason, replacement } or null }`, are repeatable, and apply only to the developer's own names (404 otherwise). An orphaned entry cannot be changed by anyone.
+
+Component entry: `{ format: 1, name, version, digest, description, category, tags, targets: { client, server }, guardians, provides: [{ id, type, version }], requires: [{ id, type, version, optional? }], dependencies: [{ name, version }], suitability, migration, source: { repository, tag }, bundle: { asset, digest } }`. `dependencies` is optional (default empty): the exact `<scope>/<name>` and version of other components this one builds on, at most 50. `suitability` is the package's `suitability.json`, whose profiles may carry `settings` (setting id to string, number or boolean); `migration` is null or `{ stores: [{ id, schema: { name, version } }], formats, portable: true, requiresStop, retentionDays }`.
+
+Recipe entry: `{ format: 1, recipe: <recipe.json>, digest, source: { repository, tag }, bundle: { asset, digest }, page: { description, diagram, screenshots } }`. `page.description` is text, `page.diagram` is an SVG string or null, `page.screenshots` are https addresses.
+
+`recipe.json` rules the publish check applies: components have an instance `id` and `includedWhen` (null or a condition); the instance id `application` is reserved for the recipe's own component, is valid in `connections` and in `sets` targets, and no component is named `application`. A condition is `{ question, equals | in | contains | truthy }`, `{ all: [..] }`, `{ any: [..] }` or `{ not: condition }`. A question may carry `askWhen` (a condition, with a `default` for when it is false) and `effects` of the form `{ sets: { "<componentId>.<settingId>": value } }`; a component is included only through `includedWhen`. A `sets` value is a literal, `"$answer"`, `{ map }`, `{ fromScale }`, `{ template }` or `{ ref }` (full forms in contract.md). Two questions that set one target to different values must have `askWhen` conditions that confine one question to different `equals` or `in` values.
+
+`digest` and `bundle.digest` are `sha256:` and 64 lowercase hex characters. `name` is `<scope>/<name>` in lowercase letters, digits and single hyphens, with the scope equal to the repository owner. Success is 201 `{ status: "published", name, version, url, api }`, or 200 `{ status: "unchanged", ... }` for the same version and digest again. Errors: 400 invalid entry (the message lists what is wrong), 409 the digest differs from the one recorded for that version or the name belongs to another developer or repository or the developer has no GitHub token saved, 403 the GitHub account cannot push to the repository, 422 GitHub cannot see the repository, the release or the asset, or the asset's digest differs, 502 GitHub could not be reached. Entries containing secret values are refused; use references. Unlisting hides versions from every public route and keeps their digests, and publishing the same version and digest again lists it.
+
 ## Limits worth telling the developer
 
 - Apple: TestFlight takes up to 10,000 people per app through the public link; each build lasts 90 days (while enabled, ourapps sends `my-store-release` two weeks before expiry); Apple's beta review checks the first build of each version. Universal iPhone and iPad apps need no extra fields; build one .ipa with TARGETED_DEVICE_FAMILY 1,2.
@@ -304,6 +365,6 @@ Put an iPhone app on TestFlight:
 
 Two prompts the developer can paste into a coding agent are shown on `/dev/agents`, pre-filled for their app: one for an agent inside the app repository (sets up releases to the contract), one for an agent that drives this API (register, check, set up TestFlight, share).
 
-Source code and issues: https://github.com/george-mcintyre/ourapps (public for reading, all rights reserved; outside pull requests are not accepted). Security problems: report privately at https://github.com/george-mcintyre/ourapps/security/advisories/new, never in a public issue.
+Source code and issues: https://github.com/ourapps-ae/ourapps (public for reading, all rights reserved; outside pull requests are not accepted). Security problems: report privately at https://github.com/ourapps-ae/ourapps/security/advisories/new, never in a public issue.
 
 Copyright Level N Ltd 2026.

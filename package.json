@@ -12,7 +12,8 @@
     "test": "npm test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces",
     "build": "npm run build -w site",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "validate-recipe": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/validate-recipe-file.ts"
   },
   "engines": {
     "node": ">=20"

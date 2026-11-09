@@ -202,6 +202,7 @@ function body(): Raw {
     <div class="guide">
       <nav class="toc">
         <a href="#types">Supported app types</a>
+        <a href="#recipes-components">Recipes and components</a>
         <a href="#where">Where everything runs</a>
         <a href="#ios">Native iPhone and iPad</a>
         <a href="#android">Native Android</a>
@@ -248,6 +249,29 @@ function body(): Raw {
           <p>Optional <code>install.macos.testflight</code> declares bundle identifier, minimum system and architectures; <code>install.tvos</code> declares bundle identifier and minimum system. These describe support, not readiness. The install page uses only the matching entry in <code>release.apple</code> for an invitation and its version, separate from the direct-package release version.</p>
           <p>Separate Mac and Apple TV cards on the app page call <code>GET, POST /api/dev/apps/:id/testflight/:platform</code>. Setup does not require declaring a direct package. Add the platform to the app's existing App Store Connect record. Mac setup requires your browser session, provisions installer signing on the server, and offers native Mac or Mac Catalyst profile selection. Workflows fetch signing and upload using the platform-specific build addresses in <a href="/contract.md">the contract</a>.</p>
           <p>For an Apple TV public invitation, install TestFlight on iPhone or iPad and Apple TV using the same App Store account. Accept the link on the iPhone or iPad, then install from TestFlight on Apple TV using the remote. <a href="https://testflight.apple.com/" target="_blank" rel="noopener">Apple's instructions and current system requirements</a>. Board and player modes are app behaviour, not manifest properties.</p>
+        </section>
+
+        <section id="recipes-components">
+          <h2>Recipes and components</h2>
+          <p>The public <a href="/recipes">recipe library</a> and <a href="/components">component catalogue</a> hold entries that developers publish. ourapps keeps each entry and a pointer to the publisher's GitHub release (repository, tag, asset name, digests); the package stays in the release and is handed out through a signed link valid for one hour. How to use them: <a href="/dev/guide#how-it-works">the guide</a>.</p>
+          <table class="table">
+            <tr><th>Thing</th><th>Format</th><th>Notes</th></tr>
+            <tr><td>Recipe</td><td><code>recipe.json</code>, format 1</td><td>Name, version, title, summary, category, tags, client and server targets, components, jobs, scale, questions, connections, tests, page and instructions. Questions carry <code>askWhen</code> conditions and <code>effects</code> that set component settings; components carry <code>includedWhen</code>.</td></tr>
+            <tr><td>Component</td><td><code>component.json</code> with <code>suitability.json</code>, and <code>migration.json</code> when it keeps data</td><td>Provided and required interfaces (<code>{ id, type, version }</code>, a requirement may be optional), guardians, dependencies on other components, suitability profiles (load, cost, regions, compliance, provider) and how data moves.</td></tr>
+            <tr><td>Names and versions</td><td><code>scope/name</code>, lowercase</td><td>The scope equals the repository owner. A version is bound to its <code>sha256:</code> digest; the same version with another digest is refused.</td></tr>
+          </table>
+          <table class="table">
+            <tr><th>Route</th><th>Who</th><th>What</th></tr>
+            <tr><td><code>GET /api/recipes</code>, <code>/api/recipes/search?q=</code>, <code>/api/recipes/:name/:version</code></td><td>anyone</td><td>List with <code>category</code>, <code>target</code>, <code>tag</code>, <code>deprecated</code>, <code>limit</code>, <code>offset</code>; search; one version (<code>latest</code> allowed)</td></tr>
+            <tr><td><code>GET /api/components</code>, <code>/api/components/search?q=</code>, <code>/api/components/:name/:version</code></td><td>anyone</td><td>The same, plus <code>provides</code> and <code>requires</code> to filter by interface</td></tr>
+            <tr><td><code>GET /api/{recipes,components}/:name/:version/bundle</code></td><td>anyone</td><td>A signed link to the package, valid one hour</td></tr>
+            <tr><td><code>GET /api/{recipes,components}/:name/:version/deprecations</code></td><td>anyone</td><td>The deprecation warnings for that version and everything it uses</td></tr>
+            <tr><td><code>/recipes.txt</code>, <code>/recipes/:name.json</code>, <code>/components.txt</code>, <code>/sitemap.xml</code></td><td>anyone</td><td>Plain text and JSON of every public page</td></tr>
+            <tr><td><code>POST /api/dev/recipes</code>, <code>POST /api/dev/components</code></td><td>signed in, or a manage key</td><td>Publish; checks the release and the asset digest with your saved GitHub token</td></tr>
+            <tr><td><code>POST /api/dev/{recipes,components}/:name/deprecate</code>, <code>/undeprecate</code></td><td>the publisher</td><td>Flag or clear every version, with an optional replacement</td></tr>
+            <tr><td><code>DELETE /api/dev/{recipes,components}/:name[/:version]</code></td><td>the publisher</td><td>Unlist a version or every version</td></tr>
+          </table>
+          <p>Limits: 50 recipes and 200 components per developer, 200 versions per name, 200,000 characters in a recipe.json. Every field and error: <a href="/agents.md">agents.md</a> and <a href="/contract.md">contract.md</a>.</p>
         </section>
 
         <section id="where">
@@ -422,7 +446,7 @@ export async function referencePage(root: HTMLElement): Promise<void> {
       root,
       html`
         <div class="ref-public">
-          <div class="topbar" style="display:block"><div class="row" style="max-width:1040px;margin:0 auto;padding-bottom:10px"><a class="brand" href="/" style="color:#fff">${icon("logo")} ourapps</a><span class="grow"></span><a href="/dev" style="color:var(--side-text)">Developer console</a></div></div>
+          <div class="topbar" style="display:block"><div class="row" style="max-width:1040px;margin:0 auto;padding-bottom:10px"><a class="brand" href="/" style="color:#fff">${icon("logo")} ourapps</a><span class="grow"></span><span class="row wrap" style="gap:18px"><a href="/recipes" style="color:var(--side-text)">Recipes</a><a href="/components" style="color:var(--side-text)">Components</a><a href="/dev" style="color:var(--side-text)">Developer console</a></span></div></div>
           <main class="content fade-in">
             <div class="page-head"><div><h1>Technical reference</h1><p>What kinds of app work, where every part runs, and the specifics behind each install path.</p></div></div>
             ${body()}

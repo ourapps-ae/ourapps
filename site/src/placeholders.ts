@@ -56,7 +56,7 @@ const FONT = "-apple-system,BlinkMacSystemFont,Inter,Segoe UI,Roboto,Helvetica,A
 export function screenshotSvg(name: string, tagline: string, index: number, shape: "phone" | "tablet" | "desktop" = "phone"): Raw {
   const { a, b, c } = palette(`${name}${index}`);
   const safeName = escapeHtml(name || "Your app");
-  const safeTag = escapeHtml(tagline || "Built for friends");
+  const safeTag = escapeHtml(tagline || "Delivered through ourapps");
   const angle = [20, 160, 300][index % 3];
   const letter = escapeHtml(initials(name, 1));
   // Ids must be unique: several carousels can sit on one page, some hidden.

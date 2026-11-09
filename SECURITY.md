@@ -1,7 +1,8 @@
 # Security
 
-How developer credentials and tokens are protected, what to do on rotation, and what the design
-does not cover.
+How ourapps protects developer credentials and tokens, what to do on rotation, and what the design
+does not cover. The public recipe library and component catalogue hold entries and release
+pointers only, never packages or secret values.
 
 ## What is stored and how
 
@@ -13,6 +14,7 @@ does not cover.
 | Apple Distribution certificate (public) | plain, `signing_certificates` | its private key is the `signingKey` field above, made in the developer's browser |
 | Session ids (192 random bits) | HMAC-SHA256 keyed hash | cookie `HttpOnly; Secure; SameSite=Lax`, 30 days, purpose string `session` |
 | Signed download links | HMAC-SHA256 over the payload with `LINK_SECRET` | expire after one hour |
+| Recipes and components (entry, page text, diagram, release pointer, digests) | plain, `recipes`, `components` and their version tables | public by design; never holds a package, token or secret value |
 | Audit log | plain text | event name, short detail, country; never values |
 
 `MASTER_KEY` and `LINK_SECRET` live only in Cloudflare Worker secrets. D1 is encrypted at rest by
@@ -41,11 +43,39 @@ tokens or sessions, and no way to forge any of them (forging a keyed hash needs 
 - The Apple key is validated as an EC P-256 PKCS#8 key before it is stored; GitHub tokens must
   match the `github_pat_`, `ghp_` or `gho_` shape.
 - Security events (sign-in, sign-out, credential saves and removals, signing setup, key creation
-  and revocation, build token rotation, app deletion) are written to the audit log
+  and revocation, build token rotation, app deletion, recipe and component publishing, unlisting and deprecation) are written to the audit log
   and shown under Settings, Security, with "Sign out everywhere" next to them.
 - Every response carries HSTS (preload), a strict Content Security Policy, `nosniff`,
   `X-Frame-Options: DENY`, `Cross-Origin-Opener-Policy: same-origin`, a Referrer-Policy and a
   Permissions-Policy.
+
+## Recipe library and component catalogue
+
+- Reads are public and carry no developer credentials. Responses name the publisher by display
+  name and page address only, or by nothing once the publisher deleted their account.
+- Publishing needs a browser session with the current terms accepted, or a `manage` API key. The
+  service checks with the publisher's saved GitHub token that the token can push to the named
+  repository and that the tagged release holds the named asset; a name's scope must equal the
+  repository owner, and a name stays with its first developer and repository.
+- A version is bound to its digest. Unlisting hides a version and keeps its digest.
+- Deleting an account removes the developer record and everything the developer owns except
+  recipes and components: those keep their rows with a null owner, flagged `owner-deleted`
+  (orphaned), and nobody can change, unlist or republish them. Deprecation by the owner
+  (`owner-deprecated`) is reversible; orphaning is not. Responses for anything that uses a flagged
+  entry carry a `deprecations` warning.
+- An orphaned bundle is fetched with no GitHub token: a public release downloads, a private one
+  answers `bundle-unavailable`. The deleted developer's token is gone with their credentials and is
+  never used.
+- Entries that contain a private key block, a GitHub token, an ourapps API key or an AWS access
+  key identifier are refused.
+- A diagram is an SVG without scripts, event handlers, embedded objects, doctype declarations
+  or references outside the file. It is served as an image with a sandboxing Content Security
+  Policy and is shown through `<img>`.
+- Bundles are fetched server-side with the publisher's token and handed out through the
+  signed one-hour `/dl/` link; the release asset's address and the token are never returned. A
+  link request fails if GitHub's recorded digest for the asset differs from the recorded one.
+- Search terms are quoted word by word before they reach the full-text index.
+- Limits: 50 recipes and 200 components per developer, 200 versions per name.
 
 ## Rotating the master key
 
@@ -86,7 +116,7 @@ Rotating `LINK_SECRET` only invalidates download links that are less than an hou
 
 ## Reporting a vulnerability
 
-Report it privately at https://github.com/george-mcintyre/ourapps/security/advisories/new
+Report it privately at https://github.com/ourapps-ae/ourapps/security/advisories/new
 (GitHub's private vulnerability reporting: only the maintainer sees it). Do not open a public
 issue for a security problem, and do not include real secrets or personal data in any report.
 Expect a reply within a few days; fixes are released before details are published.

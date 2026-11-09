@@ -2,7 +2,7 @@
 
 ## Repo identity
 
-`git -C ourapps remote -v` must show `github.com/george-mcintyre/ourapps`.
+`git -C ourapps remote -v` must show `github.com/ourapps-ae/ourapps`.
 Never derive the repo from the folder name.
 
 ## Branch model
@@ -10,7 +10,7 @@ Never derive the repo from the folder name.
 - `main` is deployable. Deploy is manual: `wrangler deploy` from a clean `main`.
 - Work on `feat/<topic>`, `fix/<topic>`, `chore/<topic>` branches. One feature per PR.
 - Commit small and often, imperative subject, one line. No em dashes anywhere.
-- Open PRs with `gh pr create --repo george-mcintyre/ourapps --base main`.
+- Open PRs with `gh pr create --repo ourapps-ae/ourapps --base main`.
 - Merge with `gh pr merge --merge` (keep the small commits).
 
 ## Public repository rules

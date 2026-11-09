@@ -18,7 +18,7 @@ export async function smallPage(root: HTMLElement): Promise<void> {
           <div style="padding:24px 0 8px">
             <span class="pill accent">Why small is powerful</span>
             <h1 style="font-size:40px;margin-top:12px">At eight people, the expensive parts are free</h1>
-            <p class="lead muted" style="font-size:19px">AI coding agents let you build an app for the people you know. Building for so few has a second benefit: video calls, multiplayer servers, databases and AI, which cost a public app real money every month, fit inside free plans when the audience is a family or a group of friends.</p>
+            <p class="lead muted" style="font-size:19px">Coding agents, working from recipes and components, let you build an application for the people you know. Building for so few has a second benefit: video calls, multiplayer servers, databases and AI, which cost a public app real money every month, fit inside free plans when the audience is a family or a group of friends.</p>
           </div>
 
           <h2>What a public app pays for</h2>

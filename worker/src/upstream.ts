@@ -6,8 +6,8 @@ import type { Deps, Env } from "./env.js";
 export function fetchUpstream(env: Env, deps: Deps, url: string, githubToken: string | undefined, accept?: string): Promise<Response> {
   const headers = new Headers({ "User-Agent": "ourapps" });
   const host = new URL(url).host;
-  if (host === "api.github.com" && githubToken) {
-    headers.set("Authorization", `Bearer ${githubToken}`);
+  if (host === "api.github.com") {
+    if (githubToken) headers.set("Authorization", `Bearer ${githubToken}`);
     headers.set("Accept", accept ?? "application/octet-stream");
   } else if (accept) {
     headers.set("Accept", accept);

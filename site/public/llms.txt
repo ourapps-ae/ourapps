@@ -1,13 +1,17 @@
 # ourapps.app
 
-> Private installer for apps people build for friends and family. Developers sign in with GitHub, register apps and create share links. Install paths cover iPhone and iPad through TestFlight, Android packages, Mac disk images, Windows installers, matching ready Mac and Apple TV TestFlight invitations, and web apps.
+> Delivering Our Applications, built from Our Recipes, using Our Agentically-Engineered Components. A public recipe library and component catalogue, and private share links that deliver the finished applications. Developers sign in with GitHub, publish recipes and components, register apps and create share links. Install paths cover iPhone and iPad through TestFlight, Android packages, Mac disk images, Windows installers, matching ready Mac and Apple TV TestFlight invitations, and web apps.
 
 - [API reference for agents](https://ourapps.app/agents.md): every endpoint, auth with `Authorization: Bearer oa_...`, workflows.
 - [Technical reference](https://ourapps.app/reference): supported app types, where every part runs, web app hosting on the developer's own Cloudflare account, engines and frameworks.
 - [Free services for small-audience apps](https://ourapps.app/free-tiers.md): video, realtime, databases, AI and more on free plans, with agent setup steps.
 - [Repository contract](https://ourapps.app/contract.md): what an app's GitHub repository must publish and the calls its workflow makes.
 - Target selection: six default-enabled switches (`ios`, `android`, `web`, `macos`, `windows`, `tvos`). Owners save one through `PUT /api/dev/apps/:id/targets/:target` with exactly `{enabled:boolean}`; workflows read `{targets:{six booleans}}` through `GET /api/build/:app/targets` with the app build token. Disabled targets leave shared install/update options and block new target work with 409 `Target is disabled.`; setup, artifacts and uploaded-build processing remain. Re-enable sends no build; normal scheduled expiry renewal resumes. Issued capabilities and existing Apple/hosted addresses remain usable. Exact scope and workflow rules: agents.md and contract.md.
+- Recipe library: https://ourapps.app/recipes (plain text: /recipes.txt, JSON: /api/recipes). Search: `/api/recipes/search?q=`. A recipe's questions (with `askWhen` and the settings each answer sets), components (with `includedWhen`), jobs, connections, suitability, guardians, targets and tested answer sets: `/recipes/<name>.txt`. Run one with `aepm create <name>`; its bundle link is `/api/recipes/<name>/<version>/bundle`.
+- Component catalogue: https://ourapps.app/components (plain text: /components.txt, JSON: /api/components). Filter by `provides=`, `requires=`, `category=`, `target=`, `tag=`, `deprecated=exclude|include|only`; search `/api/components/search?q=`.
+- Deprecated and orphaned entries: every recipe and component response, page and `.txt` carries a `deprecations` array (and a `DEPRECATION WARNING:` line in text) for the entry and the components it uses. A recipe's full tree: `/api/recipes/<name>/<version>/deprecations`. Search for replacements or similar recipes, or decide never to update. An orphaned entry's publisher deleted their account; its bundle link says `bundle-unavailable` unless the release is public.
+- Sitemap: https://ourapps.app/sitemap.xml
 - Console: https://ourapps.app/dev (sign in with GitHub). API keys and agent prompts: https://ourapps.app/dev/agents.
-- Source: https://github.com/george-mcintyre/ourapps
+- Source: https://github.com/ourapps-ae/ourapps
 
 Copyright Level N Ltd 2026.

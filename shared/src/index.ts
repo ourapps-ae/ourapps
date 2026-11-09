@@ -3,3 +3,6 @@ export * from "./desktop.js";
 export * from "./terms.js";
 export * from "./screenshots.js";
 export * from "./targets.js";
+export * from "./catalogue.js";
+export * from "./catalogue-example.js";
+export * from "./catalogue-views.js";

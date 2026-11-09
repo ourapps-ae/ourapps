@@ -1,7 +1,7 @@
 // Prompt text handed to coding agents. Kept in one place so the agents page and agents.md match.
 
 export function AGENT_REPO_PROMPT(v: { repo: string; appId: string; bundleId: string; name: string }): string {
-  return `You are working inside the GitHub repository ${v.repo}. Set it up to publish "${v.name}" through ourapps.app, a private installer for friends' devices.
+  return `You are working inside the GitHub repository ${v.repo}. Set it up to publish "${v.name}" through ourapps.app, which delivers applications built from recipes and components to the devices of the people I share them with.
 
 Read these two documents first and follow them exactly:
 - https://ourapps.app/contract.md  (what the repository must publish and the calls its workflow makes)
@@ -31,7 +31,7 @@ When finished, tell me: the files you created, the exact secrets that still need
 }
 
 export function AGENT_STORE_PROMPT(): string {
-  return `You manage my apps on ourapps.app, a private installer for apps I build for friends and family.
+  return `You manage my apps on ourapps.app, which delivers applications built from recipes and components, and keeps a public recipe library and component catalogue.
 
 Connection:
 - Base URL: https://ourapps.app
@@ -39,6 +39,8 @@ Connection:
 - Read https://ourapps.app/agents.md before the first call; it lists every endpoint with request and response shapes.
 
 Jobs you may be asked to do:
+- Find a recipe or component: GET /api/recipes/search?q=... and GET /api/components/search?q=... need no key (filters: category, target, tag, provides, requires, deprecated). Read /api/recipes/<name>/latest for the questions to ask me. Every response carries a deprecations list; tell me about each warning before you build or update, name any replacement, and let me decide.
+- Publish a recipe or component: POST /api/dev/recipes or /api/dev/components with the entry described in https://ourapps.app/contract.md; it needs my saved GitHub token and a release asset whose sha256 digest matches the entry. Deprecate or undeprecate my own entries with POST /api/dev/{recipes,components}/<name>/deprecate and /undeprecate.
 - Register an app: POST /api/dev/apps with name, repo (owner/name), bundleId (Apple apps: the Xcode bundle identifier, default for each Apple platform), tagline, description, iconUrl, screenshots (general list), screenshotsByPlatform (optional lists for iphone, ipad, android, web, macos, windows, tvos), size, minOs, ageNote, privacySummary. The response contains buildToken, shown only once, and app.id. Immediately store them in the app repository as Actions secrets, passing the values on standard input: printf '%s' "$BUILD_TOKEN" | gh secret set STORE_BUILD_TOKEN --repo <owner/name>, and the same for STORE_APP_ID. Never print the build token or put it in a file or in our chat: it lets its holder fetch Apple signing material. If it cannot be stored (no gh, no access, the repository does not exist yet), tell me; once that is fixed, make a new one with POST /api/dev/apps/<id>/build-token and store that.
 - Update a listing: PUT /api/dev/apps/<id> with only the fields that change.
 - Check a release: GET /api/dev/apps/<id>/release. If ok is false, explain each error in plain words and fix what is fixable. "no release visible" can mean the repository does not exist, has no published release, or is private and needs my GitHub token: check with gh repo view and gh release list before telling me which; if both say the repository cannot be found, it is either missing or private and invisible to your GitHub account, so say that and ask me. A token problem means Settings in the console, which only I can do; a missing release or a bad my-app.json means work in the repository.
