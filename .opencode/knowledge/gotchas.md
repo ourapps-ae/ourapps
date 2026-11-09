@@ -16,7 +16,7 @@
 - Apple JSON Web Tokens must expire within 20 minutes of `iat` (the worker uses 10).
 - Installs do not work inside most apps' web views (Instagram, Facebook, Gmail). The install
   page shows an "open in Safari" instruction; WhatsApp is the exception.
-- Developer slugs may not collide with `api`, `dl`, `dev`, `l` (see `RESERVED_SLUGS`).
+- Developer slugs may not collide with `api`, `dl`, `dev`, `l`, `recipes`, `components` or the other paths in `RESERVED_SLUGS`.
 - `wrangler` is not installed globally; use `npx wrangler` inside `worker/`.
 - GitHub Pages on a private repo needs a paid plan; this repo is public for that reason
   even though Pages is no longer used.
@@ -67,3 +67,9 @@
   `PUBLIC_ORIGIN=http://localhost:8787` every console save was refused as cross-site locally.
   `npm run dev -w worker` passes `--local-upstream localhost:8787`; running plain `wrangler dev`
   reproduces the refusal. Production is unaffected.
+- `catalogue_fts` is a virtual table: deleting a `recipes` or `components` row does not remove its search row. Remove entries only through `CatalogueDb`, and clear `catalogue_fts` before the entry tables in test cleanup (`clearDb`). Deleting a developer orphans their entries instead of removing them.
+- Search text goes through `ftsQuery` (each word quoted with a prefix star); never pass user text to `MATCH` directly, because FTS5 syntax characters raise errors.
+- Catalogue names use the short name (`slug`) in routes and are unique across scopes. Two scopes cannot publish the same short name.
+- A recipe's `page.diagram` is SVG text in D1, served as an image from the worker; it is never inserted into a page as markup.
+- SQLite CHECKs pass on NULL: `CHECK (a IS NOT NULL OR b = 'x')` accepts a NULL `b`; use `COALESCE(b, '')`, as `0019_recipes_components.sql` does.
+- Unauthenticated `api.github.com` asset requests return JSON metadata unless `Accept: application/octet-stream` is sent; `fetchUpstream` sets it for every `api.github.com` URL.

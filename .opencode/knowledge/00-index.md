@@ -1,6 +1,8 @@
-# ourapps - private link-only installer
+# ourapps - recipe library, component catalogue and link-only delivery
 
-Repo: github.com/george-mcintyre/ourapps (folder `ourapps/`; renamed from `app-game-store` on
+"Delivering Our Applications, built from Our Recipes, using Our Agentically-Engineered Components." is the tagline (constant `TAGLINE` in `site/src/pages/public.ts`; also in README, `site/index.html`, `llms.txt`, `agents.md`). Our Recipes and Our Components are the shared libraries at `/recipes` and `/components`. The story every page and document tells: a developer starts from a recipe or composes from components (optionally publishing the recipe), an agent builds the application, and a private share link delivers it. The guide (`site/src/pages/guide.ts`) opens with the sections `how-it-works`, `find-recipe`, `compose`, `publish` and `deprecation`, then the delivery steps.
+
+Repo: github.com/ourapps-ae/ourapps (folder `ourapps/`; renamed from `app-game-store` on
 2026-10-18, GitHub forwards the old URL). Confirm with `git remote -v`. Cloudflare resources keep
 the name `app-game-store` (Worker, D1 database); see `gotchas.md`. Public repo;
 privacy comes from unlisted share links, not from the code being hidden. Product definition:
@@ -8,7 +10,7 @@ privacy comes from unlisted share links, not from the code being hidden. Product
 
 ## What it is
 
-Developers sign in with GitHub, add apps, and create share links. A friend taps `/l/<id>`
+Developers sign in with GitHub, publish recipes and components to a public library and catalogue (`recipes.md`), add apps and create share links. A friend taps `/l/<id>`
 and ends up with the app on their home screen. The store reads each app's `my-app.json`
 (schema 1, owned by `@my:orchestrator`, see `../../.opencode/knowledge/app-manifest.md`)
 from the latest GitHub Release and serves artefacts through signed one-hour links.
@@ -19,7 +21,7 @@ from the latest GitHub Release and serves artefacts through signed one-hour link
 |---------------|-------------------------------------------------------------------|
 | `worker/`     | Cloudflare Worker: serves `site/dist`, `/api/*`, `/dl/*`; D1 data |
 | `site/`       | Vite + TypeScript, no framework, history routing                  |
-| `shared/`     | `validateManifest`, `TERMS_VERSION`, screenshot sets              |
+| `shared/`     | `validateManifest`, `validateRecipe`, `validateComponentEntry`, `TERMS_VERSION`, screenshot sets |
 | `CONTRACT.md` | what an app repo implements (signing, TestFlight upload, publish, `my-store-release`) |
 
 ## Conventions
@@ -31,6 +33,8 @@ from the latest GitHub Release and serves artefacts through signed one-hour link
 - User-facing text (site, guide, reference, agents.md, CONTRACT.md, README, SECURITY, messages) states only what is: no history, no "still", "older", "now", "no longer offered", no announced changes, no warnings about roads not taken. Changelogs and the example app's invented release notes are the exception. Owner's standing rule.
 
 ## Where to change X
+
+- Recipe library and component catalogue (storage, publishing, reads, search, pages, bundle links, deprecation and orphaning): `recipes.md`.
 
 - iPhone/iPad Apple TV discovery: `televisionSetupLink` and `televisionPanel` in `site/src/desktop.ts`, rendered by `site/src/pages/public.ts`, keep the phone install path and add a TV setup shortcut only for a declared target with matching ready invitation. Absent/disabled targets are hidden; unconfirmed targets have no working TV action. Current TestFlight tvOS18 requirement is separate from the app's declared minimum; source https://testflight.apple.com/ checked2026-10-28.
 
@@ -68,7 +72,7 @@ from the latest GitHub Release and serves artefacts through signed one-hour link
 - iPhone signing: the browser makes the RSA key and CSR (`site/src/signing.ts`); `POST /api/dev/signing` (`setUpSigning` in `worker/src/routes/dev.ts`) gets an Apple Distribution certificate, stores the key as the `signingKey` secret and the certificate in `signing_certificates` (migration 0006), and makes the App Store profile again (`renewStoreProfile`, `worker/src/testflight.ts`) for apps already on TestFlight; builds fetch everything from `GET|HEAD /api/build/:app/signing` (`worker/src/routes/build.ts`), 404 until TestFlight is set up. Settings card in `site/src/pages/dev.ts`.
 - Schema: `worker/migrations/*.sql`; queries: `worker/src/db.ts`.
 - Example story and mock install page: `site/src/pages/example.ts` (routes `/example`, `/example/poker-night`).
-- Site pages: `site/src/pages/public.ts` (store theme: landing, developer page, install, preview), `site/src/pages/dev.ts` (console: overview, apps, form, links, settings, agents), `site/src/pages/guide.ts` (A to Z guide), `site/src/pages/shell.ts` (console frame), `site/src/pages/prompts.ts` (agent prompts).
+- Site pages: `site/src/pages/public.ts` (store theme: landing, developer page, install, preview; `storeFrame` carries the nav with Recipes and Components), `site/src/pages/library.ts` (recipes and components), `site/src/pages/dev.ts` (console: overview, apps, form, links, settings, agents), `site/src/pages/guide.ts` (A to Z guide, recipes and components first), `site/src/pages/shell.ts` (console frame; its sidebar `NAV` lists Recipes and Components), `site/src/pages/prompts.ts` (agent prompts).
 - Design tokens and both themes: `site/src/style.css` (`[data-theme="store"]`, `[data-theme="dev"]`, dark variants). Placeholders: `site/src/placeholders.ts`. Shared components and icons: `site/src/ui.ts`.
 - Terms and data statement: `site/src/pages/terms.ts`; version constant `shared/src/terms.ts` (bump to force re-acceptance); gate `requireTerms` in `worker/src/auth.ts`; acceptance stored on `developers`.
 - Security model and rotation: `SECURITY.md`. Crypto primitives: `worker/src/crypto.ts`; credential envelopes: `worker/src/secrets.ts`; audit log: `worker/src/audit.ts`.

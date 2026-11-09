@@ -1,7 +1,7 @@
 // Routes a friend or a visitor hits without signing in.
-import { SCREENSHOT_PLATFORMS, type ScreenshotSets } from "@my/store-shared";
+import { SCREENSHOT_PLATFORMS, isAssetName, type ScreenshotSets } from "@my/store-shared";
 import { renderSVG } from "uqr";
-import { Db, type AppRow, type Developer, type LinkRow } from "../db.js";
+import { Db, type AppRow, type Developer, type DeveloperSecrets, type LinkRow } from "../db.js";
 import { downloadDisposition } from "../download-filename.js";
 import type { Deps, Env } from "../env.js";
 import { appleClient, deliveryRevision, dlUrl, projectDelivery, signManifestLinks } from "../flow.js";
@@ -223,11 +223,16 @@ export async function serveArtefact(env: Env, deps: Deps, token: string): Promis
   if (!env.LINK_SECRET) throw new HttpError(503, "LINK_SECRET is not configured");
   const link = await verifyLink(env.LINK_SECRET, token, deps.now());
   if (!link) throw new HttpError(403, "this link has expired; open the install page again");
-  const secrets = await loadSecrets(env, link.dev, ["githubToken"]);
+  // A link with no developer is for a public release of an orphaned entry: no token is sent.
+  const secrets: DeveloperSecrets = link.dev === "" ? {} : await loadSecrets(env, link.dev, ["githubToken"]);
   const upstream = await fetchUpstream(env, deps, link.url, secrets.githubToken);
   if (!upstream.ok) throw new HttpError(502, `upstream returned ${upstream.status}`);
   if (link.kind === "icon") {
     return new Response(upstream.body, { status: 200, headers: { "Content-Type": upstream.headers.get("Content-Type") ?? "image/png", "Cache-Control": "private, max-age=3600" } });
+  }
+  if (link.kind === "bundle") {
+    const name = isAssetName(link.name) ? link.name : "bundle";
+    return new Response(upstream.body, { status: 200, headers: { "Content-Type": "application/octet-stream", "Content-Disposition": `attachment; filename="${name}"`, "Cache-Control": "no-store" } });
   }
   const contentTypes = { apk: "application/vnd.android.package-archive", dmg: "application/x-apple-diskimage", exe: "application/vnd.microsoft.portable-executable" };
   return new Response(upstream.body, {

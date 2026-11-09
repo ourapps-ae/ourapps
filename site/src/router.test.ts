@@ -23,6 +23,23 @@ describe("matchRoute", () => {
     expect(matchRoute("/example/poker-night")).toEqual({ page: "example-app" });
   });
 
+  it("maps the recipe library and component catalogue", () => {
+    expect(matchRoute("/recipes")).toEqual({ page: "recipes" });
+    expect(matchRoute("/recipes/poker-night")).toEqual({ page: "recipe", slug: "poker-night" });
+    expect(matchRoute("/components")).toEqual({ page: "components" });
+    expect(matchRoute("/components/card-deck")).toEqual({ page: "component", slug: "card-deck" });
+  });
+
+  it("does not take /recipes or /components for developer pages", () => {
+    expect(matchRoute("/recipes").page).not.toBe("dev-page");
+    expect(matchRoute("/components").page).not.toBe("dev-page");
+    expect(matchRoute("/recipes/Bad")).toEqual({ page: "not-found" });
+    expect(matchRoute("/recipes/search")).toEqual({ page: "not-found" });
+    expect(matchRoute("/recipes/a/b")).toEqual({ page: "not-found" });
+    expect(matchRoute("/components/x")).toEqual({ page: "not-found" });
+    expect(matchRoute("/components/card-deck/0.1.0")).toEqual({ page: "not-found" });
+  });
+
   it("rejects everything else", () => {
     expect(matchRoute("/l")).toEqual({ page: "not-found" });
     expect(matchRoute("/l/a/b")).toEqual({ page: "not-found" });

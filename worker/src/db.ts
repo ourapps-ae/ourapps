@@ -224,8 +224,11 @@ export class Db {
   }
 
   // Removes the developer and, through cascades, their secrets, sessions, keys, apps, links and TestFlight records.
-  async deleteDeveloper(id: string): Promise<void> {
+  // Recipes and components stay: they lose their owner and are flagged owner-deleted.
+  async deleteDeveloper(id: string, now: string): Promise<void> {
     await this.d1.batch([
+      this.d1.prepare("UPDATE recipes SET developer_id = NULL, deprecated_at = ?, deprecated_reason = 'owner-deleted' WHERE developer_id = ?").bind(now, id),
+      this.d1.prepare("UPDATE components SET developer_id = NULL, deprecated_at = ?, deprecated_reason = 'owner-deleted' WHERE developer_id = ?").bind(now, id),
       this.d1.prepare("DELETE FROM audit_log WHERE developer_id = ?").bind(id),
       this.d1.prepare("DELETE FROM links WHERE developer_id = ?").bind(id),
       this.d1.prepare("DELETE FROM developers WHERE id = ?").bind(id),

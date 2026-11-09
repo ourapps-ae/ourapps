@@ -1,7 +1,8 @@
-# Contract for app repositories
+# Contract for repositories
 
-What an app's GitHub repository must publish for friends to install it on phones, computers and Apple TV, or open it in a browser.
-The store never looks at your source; it reads one release asset and talks to one workflow.
+What a repository must publish so ourapps can deliver its application to friends on phones, computers and Apple TV, or in a browser, and what a recipe or component repository must publish to join the public library and catalogue.
+The tagline is: Delivering Our Applications, built from Our Recipes, using Our Agentically-Engineered Components.
+ourapps never looks at your source; for an app it reads one release asset and talks to one workflow.
 Served at https://ourapps.app/contract.md; the API reference for agents is at
 https://ourapps.app/agents.md. The store dashboard at /dev/agents carries a prompt that sets a
 repository up to this contract.
@@ -401,6 +402,49 @@ redirect there, so home screen icons made from them open the app.
 - Storage, service workers and permissions belong to each link's origin. Allow the link
   origins (`^https://[0-9a-f]{16,64}\.ourapps\.app$`) in your API's CORS and use token
   authentication, not cookies.
+
+## Recipe and component repositories
+
+A recipe or a component is published from its own GitHub repository. ourapps keeps a catalogue entry (name, version, digests, descriptions, declarations) and a pointer to the repository's release; the package itself stays in the release.
+
+### A component repository implements
+
+- A GitHub release for each version, tagged for it (for example `v0.1.0`), with the package as a release asset (for example `card-deck-0.1.0.aepm`).
+- In the package: `component.json` with identity `<scope>/<name>`, its provided and required interfaces, and `suitability.json` (who the component suits: jobs, profiles with load, cost, regions, compliance). A component that keeps data also has `migration.json` with a portable export format.
+- Its scope equals the owner of the repository (`acme/card-deck` is published from a repository owned by `acme`).
+- `dependencies` in `component.json` (exact `{ name, version }` of components its code imports) are sent in the catalogue entry, so a deprecation of one of them reaches this component and the recipes that use it.
+- A `requires` entry is `{ id, type, version }` with an optional `optional: true`; an optional requirement may stay unconnected in a recipe. `provides` entries have no `optional`.
+- A `suitability.json` profile may carry `settings`, an object from setting id to a string, number or boolean that the profile applies when a recipe selects it.
+
+### A recipe repository implements
+
+- A GitHub release for each version with the package as a release asset.
+- In the package: `recipe.json` (format 1: name, version, title, summary, category, tags, `targets.client` from `web ios android macos windows tvos`, `targets.server`, components, jobs, scale, questions, connections, tests, page, instructions), the page description (Markdown or text), an optional SVG diagram, and `INSTRUCTIONS.md`.
+- Every component it names is a `<scope>/<name>` with an exact version and an instance `id`. The instance id `application` is reserved for the recipe's own component; no component is named `application`.
+- A component is included when its `includedWhen` is null or true. `includedWhen` and a question's `askWhen` are conditions: `{ "question": id, "equals": v }`, `{ "question": id, "in": [..] }`, `{ "question": id, "contains": v }` (a set contains v), `{ "question": id, "truthy": true }`, and `{ "all": [..] }`, `{ "any": [..] }`, `{ "not": condition }`. Nothing else is a condition, and a question's `askWhen` may not lead back to itself.
+- A question is `{ id, ask, askAgent, askWhen, type, options, default, min, max, effects }`. `type` is `set`, `choice`, `boolean`, `integer` (with `min` and `max`), `text`, `secretRef` or `account`. A question with `askWhen` has a `default`, which it takes when the condition is false. Questions of type `secretRef` carry no value and no default.
+- An effect is `{ "sets": { "<componentId>.<settingId>": value } }`; the component id may be `application`. `includes` is not an effect: a component is included only through `includedWhen`. A value is a literal, `"$answer"` (a set becomes a space-separated string), `{ "map": { "<option>": literal } }` (a choice question, one entry per option), `{ "fromScale": "concurrentPeople" | "requestsPerDay" | "storedMegabytes" }`, `{ "template": "prefix-{{answer}}" }` or `{ "ref": "<secretRef question id>" }`. A secret setting takes only `ref`. Two questions may not set one target to different values unless their `askWhen` conditions cannot both hold, which the check proves only when both confine one question to different `equals` or `in` values.
+- A job is `{ id, candidates: [{ component, profile, includedWhen? }], overrideQuestion? }`; `overrideQuestion` names a choice or text question whose answer restricts the candidates first. `scale` is `{ question, bands }`: the question is a choice whose options are the band ids, and a band is `{ id, label, load }`.
+- A connection joins `{ instance, port }` endpoints whose instances are component ids or `application`.
+
+### Publishing
+
+A signed-in developer, or a `manage` API key, sends the entry. The service validates it, checks with the developer's saved GitHub token that the token can push to the repository and that the tagged release holds the named asset (and that GitHub's recorded digest for it matches), then records the pointer.
+
+```
+POST /api/dev/components   the component entry
+POST /api/dev/recipes      { format: 1, recipe: <recipe.json>, digest, source, bundle, page }
+DELETE /api/dev/components/:name[/:version]
+DELETE /api/dev/recipes/:name[/:version]
+POST /api/dev/components/:name/deprecate     optional { replacement }; undeprecate reverses it
+POST /api/dev/recipes/:name/deprecate        the same for recipes
+```
+
+Every entry carries `digest` (the package fingerprint), `source` `{ repository, tag }` and `bundle` `{ asset, digest }` (the sha256 of the release asset, `sha256:` and 64 lowercase hex characters). Publishing the same version with the same digest changes nothing; the same version with a different digest is refused. A name stays bound to its first repository and developer. The component entry's `dependencies` is an optional list of `{ name, version }` (default empty). A recipe's `page` is `{ description, diagram, screenshots }`: text, an SVG without scripts or outside references (or null), and https image addresses.
+
+Deprecating a name flags every version; the catalogue then shows a warning on the entry and on every recipe and component that uses it, and agents read it as the `deprecations` array. A recipe or component whose developer deleted their account stays listed and downloadable, flagged orphaned; its bundle is served only while the release is public, and unavailable otherwise.
+
+Public reads, bundle links and the plain-text and JSON variants are in agents.md.
 
 ## Optional: in-app updates
 

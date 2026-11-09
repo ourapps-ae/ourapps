@@ -13,14 +13,15 @@ import { appIcon, avatar, callout, copyRow, fmtDate, icon, toast, wireCopy, wire
 
 // Shared frame for every store-themed page.
 export const COPYRIGHT = "Copyright Level N Ltd 2026";
-export const SOURCE_URL = "https://github.com/george-mcintyre/ourapps";
+export const TAGLINE = "Delivering Our Applications, built from Our Recipes, using Our Agentically-Engineered Components.";
+export const SOURCE_URL = "https://github.com/ourapps-ae/ourapps";
 
 export function storeFrame(body: Raw, opts: { me?: Me | null; nav?: boolean; footnote?: string } = {}): Raw {
   const right = opts.me
     ? html`<a href="/dev" class="row" style="gap:8px">${avatar(opts.me.developer.displayName, `https://github.com/${opts.me.developer.githubLogin}.png?size=64`, "sm")} <span>Console</span></a>`
     : html`<a href="/dev">For developers</a>`;
-  const nav = opts.nav === false ? "" : html`<nav class="store-nav"><a class="brand" href="/">${icon("logo")} ourapps</a>${right}</nav>`;
-  const footer = html`<footer class="store-footer"><span>${COPYRIGHT} · <a href="/terms">Terms</a></span><span>${opts.footnote ?? "Private by design. No search, no listings, no tracking."}</span></footer>`;
+  const nav = opts.nav === false ? "" : html`<nav class="store-nav"><a class="brand" href="/">${icon("logo")} ourapps</a><span class="row wrap" style="gap:18px"><a href="/recipes">Recipes</a><a href="/components">Components</a>${right}</span></nav>`;
+  const footer = html`<footer class="store-footer"><span>${COPYRIGHT} · <a href="/terms">Terms</a></span><span>${opts.footnote ?? "Share links are private. The recipe library and component catalogue are public. No tracking."}</span></footer>`;
   return html`<div class="store fade-in">${nav}${body}${footer}</div>`;
 }
 
@@ -30,7 +31,7 @@ function finish(root: HTMLElement): void {
 }
 
 export async function landing(root: HTMLElement): Promise<void> {
-  setTheme("store", "ourapps: apps we build for each other", true);
+  setTheme("store", `ourapps: ${TAGLINE}`, true);
   const me = await whoAmI();
   mount(
     root,
@@ -38,9 +39,9 @@ export async function landing(root: HTMLElement): Promise<void> {
       html`
         <section class="hero">
           <div>
-            <span class="pill accent">${icon("bot", "icon-16")} Built with AI agents, shared with friends</span>
-            <h1 style="margin-top:14px">Agentic programming with AI lets us build apps for the people we know.</h1>
-            <p class="lead">A coding agent and an evening produce a real app for your poker table, your family, your club. Not every app belongs in an app store. ourapps shares yours with the people you know: send a link, they open it and choose the version for their device.</p>
+            <span class="pill accent">${icon("bot", "icon-16")} Applications built from recipes and components</span>
+            <h1 style="margin-top:14px">${TAGLINE}</h1>
+            <p class="lead">Pick a <a href="/recipes">recipe</a> from the library, or compose your own from <a href="/components">components</a> in the catalogue. A coding agent builds the application in an evening, for your poker table, your family, your club. Not every app belongs in an app store: ourapps shares yours with the people you know. Send a link, and your friends open it and choose the version for their device.</p>
             <div class="ctas">
               ${me ? html`<a class="btn lg" href="/dev">Open your console ${icon("arrow")}</a>` : html`<a class="btn lg" href="/api/auth/github">${icon("github")} Sign in with GitHub</a>`}
               <a class="btn lg secondary" href="/example">See an example: Poker Night</a>
@@ -61,9 +62,20 @@ export async function landing(root: HTMLElement): Promise<void> {
             <div style="flex:1 1 300px">
               <span class="pill">Worked example</span>
               <h2 style="margin-top:8px">Poker Night: an app for eight people</h2>
-              <p class="muted">Just the three options your table uses, your house rules written the way you say them, a page of help for the friend who has never played, and your own photos on the felt. Built in an evening with an agent, installed from one link.</p>
+              <p class="muted">Just the three options your table uses, your house rules written the way you say them, a page of help for the friend who has never played, and your own photos on the felt. Built in an evening by an agent, from a recipe or from components, and installed from one link.</p>
             </div>
             <div class="stack" style="flex:0 0 auto"><a class="btn" href="/example">Read the story ${icon("arrow")}</a><a class="btn secondary" href="/example/poker-night">See the install page</a></div>
+          </div>
+        </section>
+
+        <section class="card pad-l" style="margin-top:14px">
+          <div class="row wrap top" style="gap:20px">
+            <div style="flex:1 1 300px">
+              <span class="pill accent">Recipe library</span>
+              <h2 style="margin-top:8px">Start from a recipe</h2>
+              <p class="muted">A recipe asks a few questions and an agent assembles the application from reviewed components for the devices you choose. Browse recipes by category and device, search by what an application does, and read the components behind each one.</p>
+            </div>
+            <div class="stack" style="flex:0 0 auto"><a class="btn" href="/recipes">Browse recipes ${icon("arrow")}</a><a class="btn secondary" href="/components">Component catalogue</a></div>
           </div>
         </section>
 
@@ -79,20 +91,20 @@ export async function landing(root: HTMLElement): Promise<void> {
         </section>
 
         <section class="how" id="how">
+          <div class="section-title"><h2>For you, the developer</h2></div>
+          <div class="grid-3">
+            <div class="card"><div class="num">1</div><h3>Choose how to start</h3><p class="muted">Pick a <a href="/recipes">recipe</a> and answer its questions, or compose your own from the <a href="/components">component catalogue</a>. A recipe you compose can be published for others to use.</p></div>
+            <div class="card"><div class="num">2</div><h3>Add your app</h3><p class="muted">Sign in with GitHub. Give the app a name, icon, screenshots and a few lines of text, and point it at the GitHub repository that publishes releases.</p></div>
+            <div class="card"><div class="num">3</div><h3>Share it</h3><p class="muted">Create one share link per person or group, with a label, an expiry and a revoke button. Each has a QR code. ourapps signs each iPhone build, sends it through TestFlight and asks for a fresh build before one expires.</p></div>
+          </div>
           <div class="section-title"><h2>For your friends</h2></div>
           <div class="grid-3">
             <div class="card"><div class="num">1</div><h3>Open the link</h3><p class="muted">A link or QR code from someone they know opens an install page that looks and feels like the store they already use.</p></div>
             <div class="card"><div class="num">2</div><h3>Choose your version</h3><p class="muted">Android, Mac and Windows offer direct packages. Apple devices use matching TestFlight invitations when ready. Web apps open in your browser.</p></div>
             <div class="card"><div class="num">3</div><h3>Follow the install steps</h3><p class="muted">The page shows system requirements, package choices and instructions. Updates arrive through TestFlight or a fresh download.</p></div>
           </div>
-          <div class="section-title"><h2>For you, the developer</h2></div>
-          <div class="grid-3">
-            <div class="card"><div class="num">1</div><h3>Sign in and add your app</h3><p class="muted">Name, icon, screenshots, a few lines of text. Point it at the GitHub repository that publishes releases.</p></div>
-            <div class="card"><div class="num">2</div><h3>Create share links</h3><p class="muted">One per person or group, with labels, expiry and revoke. Each has a QR code.</p></div>
-            <div class="card"><div class="num">3</div><h3>iPhone through TestFlight</h3><p class="muted">ourapps signs each iPhone build, uploads it to TestFlight and sends it to your friends, and asks for a fresh build before one expires.</p></div>
-          </div>
           <div class="card mt pad-l row wrap" style="justify-content:space-between">
-            <div style="flex:1 1 260px"><h3>Agents welcome</h3><p class="muted small">Everything in the console is also an API. Give your coding agent an API key and the prompts on the Agents and API page, and it can register apps, publish releases and hand you share links.</p></div>
+            <div style="flex:1 1 260px"><h3>Agents welcome</h3><p class="muted small">Everything in the console is also an API. Give your coding agent an API key and the prompts on the Agents and API page, and it can search recipes and components, publish your own, register apps, publish releases and hand you share links.</p></div>
             <div class="row wrap"><a class="btn secondary" href="/reference">Technical reference</a><a class="btn secondary" href="/agents.md">Read agents.md ${icon("external")}</a></div>
           </div>
         </section>
@@ -116,11 +128,11 @@ export async function devPage(root: HTMLElement, slug: string): Promise<void> {
           ${owner ? html`<div class="owner-bar"><span class="pill">You</span> This is your public page. Apps appear here when "Show on my public page" is on. <a href="/dev/apps">Manage apps</a></div>` : ""}
           <div class="dev-hero">
             ${avatar(data.developer.displayName, null, "lg")}
-            <div><h1>${data.developer.displayName}</h1><p class="muted" style="margin:2px 0 0">Builds apps for friends and family.</p></div>
+            <div><h1>${data.developer.displayName}</h1><p class="muted" style="margin:2px 0 0">Shares applications built from recipes and components.</p></div>
           </div>
           <div class="card">
             ${data.apps.length === 0 ? html`<p class="muted center" style="padding:20px 0">Nothing listed yet.</p>` : data.apps.map((a) => html`
-              <div class="app-tile">${appIcon(a.name, a.iconUrl, "md")}<div><b>${a.name}</b><span>${a.tagline || "Shared privately"}</span></div><span class="pill">by invitation</span></div>
+              <div class="app-tile">${appIcon(a.name, a.iconUrl, "md")}<div><b>${a.name}</b><span>${a.tagline || "Delivered through ourapps"}</span></div><span class="pill">by invitation</span></div>
             `)}
           </div>
           <p class="small faint mt">These apps are shared privately. Ask ${data.developer.displayName} for a link if you want one.</p>
@@ -294,7 +306,7 @@ export function renderInstall(root: HTMLElement, data: LinkPage, opts: InstallOp
           ${appIcon(name, icon0, "xl")}
           <div>
             <h1>${name}</h1>
-            <p class="tagline">${app.tagline || "Made for friends and family"}</p>
+            <p class="tagline">${app.tagline || "Delivered through ourapps"}</p>
             <div class="dev">${data.developer.displayName}</div>
             <div class="cta" id="cta">${ctaArea(data, d, name)}${televisionSetupLink(data.release, d.platform === "ios", blocked)}</div>
           </div>

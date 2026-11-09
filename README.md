@@ -1,7 +1,10 @@
-# ourapps - a private installer for apps you build for friends
+# ourapps - Delivering Our Applications, built from Our Recipes, using Our Agentically-Engineered Components
 
-Nobody browses here. A developer sends a friend a link or a QR code; the friend taps it and
-the app lands on their home screen. No App Store, no Google Play, no accounts for friends.
+A developer picks a recipe from the public library, or composes an application from catalogue
+components and may publish the recipe. An agent builds the application, and the developer sends a
+friend a link or a QR code; the friend taps it and the app lands on their home screen. Share links
+are private and apps are not listed or searchable. No App Store, no Google Play, no accounts for
+friends. The recipe library and component catalogue are public and described below.
 
 - iPhone and iPad: Apple's TestFlight. The friend gets Apple's free TestFlight app, opens the
   invitation on the install page and taps Install. ourapps signs each build, the workflow uploads
@@ -11,13 +14,34 @@ the app lands on their home screen. No App Store, no Google Play, no accounts fo
   source" and Play Protect prompts.
 - Web apps: an "add to home screen" walkthrough when the app lists a web version.
 
+## Recipe library and component catalogue
+
+- `/recipes` and `/components` list, filter (category, device, tag) and search published recipes
+  and components. A recipe page shows its description, diagram, questions (with the condition that asks each), components with the condition that includes each and their
+  suitability and guardians, jobs, targets, tested answer sets and versions. Every public page has
+  a plain-text and a JSON variant (`/recipes/<name>.txt`, `.json`) and the API is under
+  `/api/recipes` and `/api/components`.
+- Developers publish with `POST /api/dev/recipes` and `POST /api/dev/components` (signed in, or a
+  `manage` key). The database stores the entry and a pointer to the publisher's GitHub release;
+  the package stays in the release and is handed out through a signed one-hour link.
+- A developer can deprecate their own entry (`POST /api/dev/{recipes,components}/:name/deprecate`,
+  optional `replacement`, reversed by `undeprecate`). Deleting an account does not delete entries:
+  they lose their owner and are marked orphaned. Deprecated and orphaned entries stay listed and
+  downloadable (an orphaned bundle needs a public release). Every response and page for them, and
+  for anything that uses them, carries a `deprecations` array and a banner; lists filter with
+  `deprecated=exclude|include|only`, and `GET /api/recipes/:name/:version/deprecations` resolves
+  the whole tree.
+- What a recipe or component repository implements: `CONTRACT.md`. Storage and routes:
+  `.opencode/knowledge/recipes.md`.
+
 ## Two faces
 
 - Friends see an App Store style page at `/l/<id>`: icon, tagline, facts strip, screenshots,
   about, what's new, privacy, information, share. Blank fields get generated placeholders so a
   bare listing still looks finished. The page detects iPhone, Android, desktop and in-app
   browsers and shows the right install steps.
-- Developers see a console at `/dev`: overview with a setup checklist and stats, apps, share
+- Developers see a console at `/dev`: overview with a setup checklist and stats, apps, links to the
+  recipe library and component catalogue, share
   links with QR codes, a TestFlight card per iPhone app, settings, an A to Z guide, and an agents page with API keys
   and prompts. Signed-in developers see an owner bar on their own install pages.
 
@@ -34,7 +58,8 @@ TestFlight, share). `llms.txt` points agents at both documents.
 The guide's Security section (`/dev/guide#security`) explains how credentials, account access
 and app files are protected; nothing is recorded about friends. Developers accept the terms and data
 statement (`/terms`, version in `shared/src/terms.ts`) at first sign-in and after any change;
-the accepted version is shown in the profile, which also offers account deletion.
+the accepted version is shown in the profile, which also offers account deletion (recipes and
+components stay, orphaned).
 
 Credentials are encrypted field by field (AES-256-GCM, key derived per developer from a Worker
 secret, authenticated data binding each field to its owner); API keys, build tokens and session
@@ -48,7 +73,7 @@ steps: `SECURITY.md`.
 |------------|-----------------------------------------------------------------|
 | `worker/`  | Cloudflare Worker: sign-in, dashboard API, TestFlight, build hooks, artefact proxy |
 | `site/`    | Vite + TypeScript site served by the worker                      |
-| `shared/`  | my-app.json validation and the terms version                     |
+| `shared/`  | my-app.json validation, recipe and component validation, the terms version |
 | `site/public/agents.md` | API reference for agents, served at /agents.md            |
 | `site/src/freeTiers.ts` | Free-service catalogue: guide section, /small, /free-tiers.md |
 | `CONTRACT.md` | what an app repository must implement                         |
@@ -74,7 +99,7 @@ App Store Connect key (saving it sets up iPhone signing: ourapps creates the dis
 certificate; each app's App ID is made when the app is set up for TestFlight), the TestFlight review contact, adding each iPhone app once in App Store
 Connect, the Android keystore, creating an API key for the agent, and sending links to people. Everything else (registering the app, the release workflow, releases,
 share links, checks) is done by a coding agent with the prompts on `/dev/agents`. The guide's
-TL;DR at `/dev/guide#tldr` is the definitive list.
+short list at `/dev/guide#tldr` is the definitive list.
 
 ## Add an app
 
@@ -105,7 +130,8 @@ right steps. In-app browsers (Instagram, Facebook, Gmail) cannot install; the pa
 the friend to open it in Safari or Chrome.
 
 Your public page `/<your-slug>` lists only apps you switch on, details only, no install
-links, and is marked noindex.
+links, and is marked noindex. The names `recipes`, `components` and `sitemap.xml` are not
+available as page names.
 
 ## Limits you must know
 
@@ -148,7 +174,7 @@ npm run build -w site && npx wrangler deploy
 `PUBLIC_ORIGIN` in `wrangler.jsonc` is the deployed host (`https://ourapps.app`); sign-in callbacks
 and links are built from it.
 
-Source: https://github.com/george-mcintyre/ourapps. The source is public for reading and
+Source: https://github.com/ourapps-ae/ourapps. The source is public for reading and
 review; it is not open source. All rights reserved, see `LICENSE`. Outside contributions are not
 accepted (`CONTRIBUTING.md`); report security problems privately (`SECURITY.md`).
 

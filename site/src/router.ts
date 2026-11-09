@@ -1,4 +1,5 @@
 // Path matching for the pages the site has.
+import { isCatalogueSlug } from "@my/store-shared";
 
 export type Route =
   | { page: "landing" }
@@ -16,6 +17,10 @@ export type Route =
   | { page: "terms" }
   | { page: "reference" }
   | { page: "small" }
+  | { page: "recipes" }
+  | { page: "recipe"; slug: string }
+  | { page: "components" }
+  | { page: "component"; slug: string }
   | { page: "example" }
   | { page: "example-app" }
   | { page: "not-found" };
@@ -46,6 +51,12 @@ export function matchRoute(pathname: string): Route {
   if (parts.length === 1 && parts[0] === "terms") return { page: "terms" };
   if (parts.length === 1 && parts[0] === "reference") return { page: "reference" };
   if (parts.length === 1 && parts[0] === "small") return { page: "small" };
+  if (parts[0] === "recipes" || parts[0] === "components") {
+    const kind = parts[0] === "recipes" ? "recipe" : "component";
+    if (parts.length === 1) return { page: parts[0] };
+    if (parts.length === 2 && isCatalogueSlug(parts[1])) return kind === "recipe" ? { page: "recipe", slug: parts[1] } : { page: "component", slug: parts[1] };
+    return { page: "not-found" };
+  }
   if (parts[0] === "example") {
     if (parts.length === 1) return { page: "example" };
     if (parts.length === 2 && parts[1] === "poker-night") return { page: "example-app" };

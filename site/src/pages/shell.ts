@@ -10,6 +10,8 @@ import { termsPending } from "./terms.js";
 const NAV: { href: string; label: string; icon: string; match: (p: string) => boolean }[] = [
   { href: "/dev", label: "Overview", icon: "home", match: (p) => p === "/dev" },
   { href: "/dev/apps", label: "Apps", icon: "apps", match: (p) => p.startsWith("/dev/apps") },
+  { href: "/recipes", label: "Recipes", icon: "devices", match: (p) => p.startsWith("/recipes") },
+  { href: "/components", label: "Components", icon: "globe", match: (p) => p.startsWith("/components") },
   { href: "/dev/guide", label: "Guide", icon: "book", match: (p) => p.startsWith("/dev/guide") },
   { href: "/reference", label: "Reference", icon: "info", match: (p) => p.startsWith("/reference") },
   { href: "/dev/agents", label: "Agents and API", icon: "bot", match: (p) => p.startsWith("/dev/agents") },
@@ -36,9 +38,9 @@ export async function requireMe(root: HTMLElement): Promise<Me | null> {
       <div class="card pad-l center" style="max-width:520px;margin:40px auto">
         ${icon("logo", "icon-20")}
         <h1 style="margin:8px 0 6px">Developer console</h1>
-        <p class="muted">Sign in with GitHub to add apps, create share links and put iPhone apps on TestFlight. Only your public profile is read.</p>
+        <p class="muted">Sign in with GitHub to add apps, publish recipes and components, create share links and put iPhone apps on TestFlight. Only your public profile is read.</p>
         <a class="btn lg mt" href="/api/auth/github">${icon("github")} Sign in with GitHub</a>
-        <p class="small faint mt">New here? The <a href="/dev/guide">guide</a> walks through everything from first sign-in to the first friend installing.</p>
+        <p class="small faint mt">New here? The <a href="/dev/guide">guide</a> walks through recipes, components and delivery, from the first sign-in to the first friend installing.</p>
       </div>
     `),
   );

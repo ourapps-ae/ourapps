@@ -7,6 +7,7 @@ import { buildTargets, buildSigning, buildTestflight, buildUploadFileOperations,
 import { tickTestflight } from "./testflight.js";
 import * as dev from "./routes/dev.js";
 import { devPage, linkLatest, linkPage, linkQr, serveArtefact } from "./routes/public.js";
+import * as catalogue from "./routes/catalogue.js";
 import { serveWebApp, webAppLinkId } from "./webapp.js";
 
 // Sent on every response so browsers and scanners see a locked-down site.
@@ -56,6 +57,9 @@ async function route(request: Request, env: Env, deps: Deps): Promise<Response> 
 
   if (parts[0] === "dl" && parts.length === 2 && m === "GET") return serveArtefact(env, deps, parts[1]);
   if (parts[0] !== "api") {
+    if (m === "GET" && parts.length === 1 && parts[0] === "sitemap.xml") return catalogue.sitemap(env);
+    const variant = m === "GET" ? catalogue.pageVariant(env, parts, url) : null;
+    if (variant) return variant;
     const verification = env.GOOGLE_SITE_VERIFICATION;
     if (verification && parts.length === 1 && parts[0] === verification && m === "GET") {
       return new Response(`google-site-verification: ${verification}`, { headers: { "Content-Type": "text/html" } });
@@ -81,6 +85,17 @@ async function route(request: Request, env: Env, deps: Deps): Promise<Response> 
     if (p[1] === "links" && p.length === 4 && p[3] === "latest" && m === "GET") return linkLatest(env, deps, p[2]);
   }
 
+  if ((p[0] === "recipes" || p[0] === "components") && m === "GET") {
+    const recipes = p[0] === "recipes";
+    if (p.length === 1) return recipes ? catalogue.listRecipes(env, url) : catalogue.listComponents(env, url);
+    if (p.length === 2 && p[1] === "search") return recipes ? catalogue.searchRecipes(env, url) : catalogue.searchComponents(env, url);
+    if (p.length === 2) return recipes ? catalogue.recipeDetail(env, p[1], "latest") : catalogue.componentDetail(env, p[1], "latest");
+    if (p.length === 3) return recipes ? catalogue.recipeDetail(env, p[1], p[2]) : catalogue.componentDetail(env, p[1], p[2]);
+    if (p.length === 4 && p[3] === "bundle") return recipes ? catalogue.recipeBundle(env, deps, p[1], p[2]) : catalogue.componentBundle(env, deps, p[1], p[2]);
+    if (p.length === 4 && p[3] === "diagram.svg" && recipes) return catalogue.recipeDiagram(env, p[1], p[2]);
+    if (p.length === 4 && p[3] === "deprecations") return catalogue.deprecations(env, recipes ? "recipe" : "component", p[1], p[2]);
+  }
+
   if (p[0] === "build" && p.length === 3 && p[2] === "targets" && m === "GET") return buildTargets(request, env, p[1]);
   if (p[0] === "build" && p.length === 5 && p[3] === "testflight" && p[4] === "distribution" && m === "GET") return buildDistributionStatus(request, env, deps, p[1], p[2]);
   if (p[0] === "build" && p.length === 3 && p[2] === "signing" && (m === "GET" || m === "HEAD")) return buildSigning(request, env, p[1]);
@@ -95,7 +110,7 @@ async function route(request: Request, env: Env, deps: Deps): Promise<Response> 
     if (p[1] === "me" && m === "GET") return dev.me(env, me);
     if (p[1] === "terms" && m === "POST") return dev.acceptTerms(request, env, deps, me);
     requireTerms(me, TERMS_VERSION);
-    if (p[1] === "me" && m === "DELETE") return dev.deleteAccount(request, env, me);
+    if (p[1] === "me" && m === "DELETE") return dev.deleteAccount(request, env, deps, me);
     if (p[1] === "me" && m === "PUT") return dev.updateMe(request, env, me);
     if (p[1] === "secrets" && m === "PUT") return dev.updateSecrets(request, env, deps, me);
     if (p[1] === "signing" && p.length === 2 && m === "POST") return dev.setUpSigning(request, env, deps, me);
@@ -117,6 +132,13 @@ async function route(request: Request, env: Env, deps: Deps): Promise<Response> 
       if (p.length === 5 && p[3] === "testflight" && m === "GET") return dev.testflightStatus(env, me, p[2], p[4], deps);
       if (p.length === 5 && p[3] === "testflight" && m === "POST") return dev.setUpAppTestflight(request, env, deps, me, p[2], p[4]);
       if (p.length === 6 && p[3] === "testflight" && p[5] === "build" && m === "POST") return dev.requestAppBuild(env, deps, me, p[2], p[4]);
+    }
+    if (p[1] === "recipes" || p[1] === "components") {
+      const recipes = p[1] === "recipes";
+      if (p.length === 2 && m === "GET") return catalogue.listMine(env, me, recipes ? "recipe" : "component");
+      if (p.length === 2 && m === "POST") return recipes ? catalogue.publishRecipe(request, env, deps, me) : catalogue.publishComponent(request, env, deps, me);
+      if (p.length === 4 && m === "POST" && (p[3] === "deprecate" || p[3] === "undeprecate")) return catalogue.setDeprecation(request, env, deps, me, recipes ? "recipe" : "component", p[2], p[3] === "deprecate");
+      if ((p.length === 3 || p.length === 4) && m === "DELETE") return catalogue.unlist(request, env, deps, me, recipes ? "recipe" : "component", p[2], p[3] ?? null);
     }
     if (p[1] === "links" && p.length === 4 && p[3] === "revoke" && m === "POST") return dev.revokeLink(env, deps, me, p[2], false);
     if (p[1] === "links" && p.length === 3 && m === "DELETE") return dev.revokeLink(env, deps, me, p[2], true);

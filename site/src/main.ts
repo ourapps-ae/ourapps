@@ -1,5 +1,6 @@
 import { agents, appForm, appLinks, appsPage, dashboard, settings } from "./pages/dev.js";
 import { exampleApp, examplePage } from "./pages/example.js";
+import { componentPage, componentsPage, recipePage, recipesPage } from "./pages/library.js";
 import { guide } from "./pages/guide.js";
 import { referencePage } from "./pages/reference.js";
 import { smallPage } from "./pages/small.js";
@@ -29,6 +30,10 @@ async function render(): Promise<void> {
     case "terms": await termsPage(root); break;
     case "reference": await referencePage(root); break;
     case "small": await smallPage(root); break;
+    case "recipes": await recipesPage(root); break;
+    case "recipe": await recipePage(root, route.slug); break;
+    case "components": await componentsPage(root); break;
+    case "component": await componentPage(root, route.slug); break;
     case "example": await examplePage(root); break;
     case "example-app": await exampleApp(root); break;
     default: notFound(root);
@@ -42,7 +47,7 @@ document.addEventListener("click", (e) => {
   const a = (e.target as HTMLElement).closest("a");
   if (!a || a.target || a.hasAttribute("download") || e.metaKey || e.ctrlKey) return;
   const url = new URL(a.href, location.href);
-  if (url.origin !== location.origin || url.pathname.startsWith("/api/") || url.pathname.startsWith("/dl/") || /\.(md|txt|svg)$/.test(url.pathname)) return;
+  if (url.origin !== location.origin || url.pathname.startsWith("/api/") || url.pathname.startsWith("/dl/") || /\.(md|txt|svg|json|xml)$/.test(url.pathname)) return;
   e.preventDefault();
   if (url.pathname === location.pathname && url.hash) {
     history.replaceState(null, "", url.pathname + url.search + url.hash);

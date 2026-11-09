@@ -1,4 +1,4 @@
-// The developer guide: everything from first sign-in to the first friend installing.
+// The developer guide: recipes and components, then delivery from first sign-in to the first friend installing.
 import { CATEGORIES, CHECKED, PRINCIPLES, servicePrompt, type Service } from "../freeTiers.js";
 import { escapeHtml, html, raw, type Raw } from "../html.js";
 import { callout, icon, wireCopy } from "../ui.js";
@@ -13,8 +13,183 @@ const kbd = (text: string) => html`<span class="kbd">${text}</span>`;
 function sections(origin: string, slug: string): Section[] {
   return [
     {
+      id: "how-it-works",
+      title: "How ourapps works",
+      body: html`
+        <p>ourapps delivers applications that are built from recipes, using components. A <b>component</b> is a reviewed, reusable part of an application, such as a card deck or a seating plan. It states what it provides, what it needs, who it suits and how its data moves. A <b>recipe</b> is a list of components, the questions that choose between them, and how they connect. A coding agent assembles the application from a recipe and your answers. The <a href="/recipes">recipe library</a> and the <a href="/components">component catalogue</a> are public; delivery to your friends is private.</p>
+        <h3>Two routes to an application</h3>
+        <div class="grid-2">
+          <div class="card flat"><h3>a. Compose from components</h3><p>Browse the <a href="/components">component catalogue</a>, search by the interfaces you need, check each part's suitability and deprecation warnings, and have your agent connect the parts into an application. Publish the recipe you composed if you want others to build from it. <a href="#compose">Compose from components</a>, <a href="#publish">Publish a recipe or component</a>.</p></div>
+          <div class="card flat"><h3>b. Pick a recipe</h3><p>Browse the <a href="/recipes">recipe library</a>, read the questions a recipe asks, and answer them. Your agent assembles the application from the recipe's components for the devices you chose. <a href="#find-recipe">Find a recipe</a>.</p></div>
+        </div>
+        <h3>Then the same delivery</h3>
+        <ol class="steps">
+          <li><b>Your agent builds the application</b> in your own GitHub repository. ourapps keeps the library and the catalogue; the building is done in your repository.</li>
+          <li><b>You add the app</b> in this console and the repository publishes releases (<a href="#add-app">step 3</a>, <a href="#release">step 4</a>).</li>
+          <li><b>You create a share link</b> and send it (<a href="#share">step 5</a>). Friends open it and install the version for their device; iPhone and iPad go through TestFlight (<a href="#testflight">step 6</a>).</li>
+        </ol>
+        <p class="small muted">Use <a href="#tldr">the short list</a> for what only you can do, and <a href="#deprecation">Deprecation</a> for what to do when a recipe or component carries a warning.</p>
+      `,
+    },
+    {
+      id: "find-recipe",
+      title: "Find a recipe",
+      sub: [
+        { id: "find-recipe-browse", title: "Browse and search" },
+        { id: "find-recipe-read", title: "Read a recipe" },
+        { id: "find-recipe-agent", title: "Text, JSON and the agent API" },
+      ],
+      body: html`
+        <h3 id="find-recipe-browse">Browse and search</h3>
+        <p>Open <a href="/recipes">/recipes</a>. Filter by category and by device, hide or show only deprecated recipes, or type in the search box. Search matches whole words and the starts of words in a recipe's name, title, summary, tags and description, so "multiplay" finds a recipe tagged "multiplayer". No sign-in is needed.</p>
+        <h3 id="find-recipe-read">Read a recipe</h3>
+        <p>A recipe page shows its description and design diagram, the questions it asks (with the condition that asks each one and its default), the components it uses (with the condition that includes each one, their suitability and guardians), the load bands and jobs that choose between components, the devices it targets, the answer sets that were tested, and every version. The <b>Build it</b> box gives the command your agent runs and a link to download the recipe bundle; the link works for one hour.</p>
+        <p>To use a recipe, answer its questions, or hand the page to your agent and let it ask you. A recipe never asks for a secret value, only for a reference to one.</p>
+        <h3 id="find-recipe-agent">Text, JSON and the agent API</h3>
+        <p>Every public page has the same address ending in <code>.txt</code> (plain text) or <code>.json</code> (JSON, the plain data format agents read): <code>/recipes.txt</code>, <code>/recipes/poker-night.txt</code>, <code>/recipes/poker-night.json?version=0.1.0</code>. Lists take the same query parameters as the API, and <code>?q=</code> searches. <a href="/sitemap.xml">/sitemap.xml</a> lists the public pages.</p>
+        <pre><code>GET /api/recipes?category=&amp;target=&amp;tag=&amp;deprecated=&amp;limit=&amp;offset=
+GET /api/recipes/search?q=card+game&amp;deprecated=exclude
+GET /api/recipes/poker-night/latest
+GET /api/recipes/poker-night/0.1.0/bundle
+GET /api/recipes/poker-night/0.1.0/deprecations</code></pre>
+        <p>None of these needs a key. The bundle route answers with a signed download link valid for one hour, so fetch it right before downloading. Every field is in <a href="/agents.md">agents.md</a>.</p>
+      `,
+    },
+    {
+      id: "compose",
+      title: "Compose from components",
+      sub: [
+        { id: "compose-search", title: "Search by interface" },
+        { id: "compose-suitability", title: "Check suitability" },
+        { id: "compose-warnings", title: "Deprecation warnings" },
+      ],
+      body: html`
+        <p>Open <a href="/components">/components</a>. Every component is a reviewed part with a contract. Filter by category and device, search by name, title, summary, tags and description, and read a part's page for its versions and the recipes that use it.</p>
+        <h3 id="compose-search">Search by interface</h3>
+        <p>A component <b>provides</b> interfaces and <b>requires</b> others. An interface has an id (<code>card-deck</code>) and a type (<code>ae/card-deck</code>). Two parts fit together when one provides a type the other requires. On a component page, the type in the Provides and Requires tables links to the components that need or offer it. In the API use <code>provides</code> and <code>requires</code>:</p>
+        <pre><code>GET /api/components?provides=ae/card-deck
+GET /api/components?requires=ae/card-deck&amp;target=web
+GET /api/components/search?q=seating&amp;deprecated=exclude</code></pre>
+        <p>A requirement marked <b>optional</b> may stay unconnected in a recipe.</p>
+        <h3 id="compose-suitability">Check suitability</h3>
+        <p>Each component page lists the jobs the part can do and its suitability profiles: the load it carries, its cost, the regions it runs in, compliance notes and the provider. Choose the profile that fits how many people use the application and how often. The page also says how the part's data moves: the stores it keeps, the formats it exports, whether it must stop while data moves, and how many days data is kept after removal. Guardians are the parties whose signatures a part can carry; you choose which ones to trust.</p>
+        <h3 id="compose-warnings">Deprecation warnings</h3>
+        <p>A flagged component shows a <b>Deprecated</b> pill and a banner, and so does every component or recipe built on it. Read the banner before you choose the part. <a href="#deprecation">What an agent does with a warning</a>.</p>
+        <h3>Publish your composition</h3>
+        <p>Once your agent has connected the parts into an application, you can publish the result as a recipe so that others pick it from the library. <a href="#publish">Publish a recipe or component</a>.</p>
+      `,
+    },
+    {
+      id: "publish",
+      title: "Publish a recipe or component",
+      sub: [
+        { id: "publish-routes", title: "Routes" },
+        { id: "publish-recipe-format", title: "The recipe.json format" },
+        { id: "publish-digest", title: "The release asset digest check" },
+        { id: "publish-deprecate", title: "Deprecate and undeprecate" },
+      ],
+      body: html`
+        <p>A recipe or component is published from its own GitHub repository. ourapps keeps a catalogue entry (name, version, descriptions, declarations, digests) and a pointer to the repository's release. The package itself stays in your release. Publishing needs no approval and has no queue.</p>
+        <p><b>You need:</b> to be signed in (or to hold a key with the manage scope), a GitHub token saved under <a href="/dev/settings#credentials">Settings</a> that can push to the repository, and a GitHub release whose tag holds the package as an asset. A name is <code>scope/name</code> in lowercase letters, digits and single hyphens, and the scope must equal the repository owner. A name belongs to the first developer and repository that published it.</p>
+        <h3 id="publish-routes">Routes</h3>
+        <pre><code>POST   /api/dev/components               the component entry
+POST   /api/dev/recipes                  the recipe entry
+GET    /api/dev/components               your components, with versions and status
+GET    /api/dev/recipes                  your recipes
+DELETE /api/dev/components/&lt;name&gt;[/&lt;version&gt;]   unlist one version, or every version
+DELETE /api/dev/recipes/&lt;name&gt;[/&lt;version&gt;]
+POST   /api/dev/components/&lt;name&gt;/deprecate
+POST   /api/dev/components/&lt;name&gt;/undeprecate
+POST   /api/dev/recipes/&lt;name&gt;/deprecate
+POST   /api/dev/recipes/&lt;name&gt;/undeprecate</code></pre>
+        <p>Success is 201 <code>published</code>, or 200 <code>unchanged</code> when you send the same version with the same digest again. Errors: 400 the entry is invalid (the message lists what is wrong), 403 your GitHub account cannot push to the repository, 409 the digest differs from the one recorded for that version, the name belongs to someone else, or you have no GitHub token saved, 422 GitHub cannot see the repository, release or asset, or the asset's digest differs, 502 GitHub could not be reached. Entries that contain secret values (private key blocks, GitHub tokens, ourapps API keys, AWS key identifiers) are refused; use references. Limits: 50 recipes and 200 components per developer, 200 versions per name, 200,000 characters in a recipe.json.</p>
+        <p>The component entry is <code>{ format: 1, name, version, digest, description, category, tags, targets: { client, server }, guardians, provides, requires, dependencies, suitability, migration, source: { repository, tag }, bundle: { asset, digest } }</code>. <code>provides</code> and <code>requires</code> are lists of <code>{ id, type, version }</code> (a requirement may add <code>optional: true</code>). <code>dependencies</code> lists the exact <code>{ name, version }</code> of other components this one builds on; it is how a deprecation reaches the components and recipes above it. <code>suitability</code> and <code>migration</code> come from the package's <code>suitability.json</code> and <code>migration.json</code>.</p>
+        <p>The recipe entry is:</p>
+        <pre><code>{
+  "format": 1,
+  "recipe": { ...the recipe.json below... },
+  "digest": "sha256:&lt;64 lowercase hex characters&gt;",
+  "source": { "repository": "acme/poker-night-recipe", "tag": "v0.1.0" },
+  "bundle": { "asset": "poker-night-0.1.0.aepm", "digest": "sha256:&lt;64 lowercase hex characters&gt;" },
+  "page": { "description": "Poker Night deals a hand for every friend at the table.", "diagram": null, "screenshots": [] }
+}</code></pre>
+        <p><code>page.description</code> is text, <code>page.diagram</code> is a diagram as SVG text without scripts or outside references (or null), and <code>page.screenshots</code> are https addresses.</p>
+
+        <h3 id="publish-recipe-format">The recipe.json format</h3>
+        <pre><code>{
+  "format": 1,
+  "name": "acme/poker-night",
+  "version": "0.1.0",
+  "title": "Poker Night",
+  "summary": "A card game for a table of friends, with house rules.",
+  "category": "games",
+  "tags": ["cards", "multiplayer"],
+  "targets": { "client": ["web", "ios", "android"], "server": [] },
+  "components": [
+    { "id": "deck", "name": "acme/card-deck", "version": "0.1.0", "configuration": {}, "includedWhen": null },
+    { "id": "tour", "name": "acme/guided-tour", "version": "0.1.0", "configuration": {}, "includedWhen": { "question": "lessons", "truthy": true } }
+  ],
+  "questions": [
+    { "id": "chips", "ask": "Starting chips?", "type": "integer", "default": 5000, "min": 100, "max": 1000000,
+      "effects": [{ "sets": { "application.startingChips": "$answer" } }] },
+    { "id": "lessons", "ask": "Lessons for new players?", "type": "boolean", "default": true, "effects": [] }
+  ],
+  "connections": [],
+  "tests": { "defaultAnswers": {}, "answerSets": [] },
+  "page": { "description": "page/description.md", "diagram": "page/diagram.svg", "screenshots": [] },
+  "instructions": "INSTRUCTIONS.md"
+}</code></pre>
+        <ul class="bullets">
+          <li><b>Components:</b> each is <code>scope/name</code> with an exact version and an instance <code>id</code>. It is included when <code>includedWhen</code> is null or true. The instance id <code>application</code> is the recipe's own component; no component is named <code>application</code>.</li>
+          <li><b>Questions:</b> <code>{ id, ask, askAgent, askWhen, type, options, default, min, max, effects }</code>. The type is <code>set</code>, <code>choice</code>, <code>boolean</code>, <code>integer</code> (with <code>min</code> and <code>max</code>), <code>text</code>, <code>secretRef</code> or <code>account</code>. A question with <code>askWhen</code> needs a <code>default</code>, which it takes when the condition is false. A <code>secretRef</code> question carries no value and no default.</li>
+          <li><b>Conditions</b> (<code>askWhen</code>, <code>includedWhen</code>): <code>{ question, equals }</code>, <code>{ question, in }</code>, <code>{ question, contains }</code>, <code>{ question, truthy }</code>, <code>{ all: [...] }</code>, <code>{ any: [...] }</code> and <code>{ not: condition }</code>.</li>
+          <li><b>Effects:</b> <code>{ sets: { "&lt;componentId&gt;.&lt;settingId&gt;": value } }</code>. A value is a literal, <code>"$answer"</code>, <code>{ map }</code>, <code>{ fromScale }</code>, <code>{ template }</code> or <code>{ ref }</code>. Two questions may not set one target to different values unless their <code>askWhen</code> conditions cannot both hold.</li>
+          <li><b>Jobs and scale (optional):</b> a job chooses between candidate components by suitability profile; <code>scale</code> is a choice question whose options are load bands.</li>
+          <li><b>Connections:</b> each joins two <code>{ instance, port }</code> endpoints.</li>
+          <li><b>Tests:</b> the default answers and named answer sets the recipe was tested with. <b>Page and instructions:</b> paths inside the package.</li>
+        </ul>
+        <p>The full rules are in <a href="/contract.md">contract.md</a>, and the publish check enforces them.</p>
+
+        <h3 id="publish-digest">The release asset digest check</h3>
+        <p>Every entry names a <code>bundle</code>: the release asset and its <code>sha256:</code> digest. When you publish, ourapps uses your saved GitHub token to check that the token can push to the repository and that the release for <code>source.tag</code> holds that asset. When GitHub reports a digest for the asset, it must equal <code>bundle.digest</code>. The version is then bound to its digest: the same version with the same digest changes nothing, and the same version with a different digest is refused. Change the package and you publish a new version. When someone downloads the bundle, ourapps reads the release again and refuses a file whose digest differs from the one recorded.</p>
+        <h3 id="publish-deprecate">Deprecate and undeprecate</h3>
+        <p><code>POST /api/dev/components/&lt;name&gt;/deprecate</code> (or <code>recipes</code>) flags every version of one of your names, with an optional <code>{ "replacement": "scope/name" }</code> naming a published entry of the same kind. <code>undeprecate</code> clears the flag. Both can be repeated and apply only to your own names. <code>DELETE</code> unlists versions instead: they disappear from every public page, keep their digests, and return when you publish the same version and digest again.</p>
+      `,
+    },
+    {
+      id: "deprecation",
+      title: "Deprecation and what an agent does with a warning",
+      sub: [
+        { id: "deprecation-states", title: "Active, deprecated and orphaned" },
+        { id: "deprecation-where", title: "Where a warning appears" },
+        { id: "deprecation-agent", title: "What an agent does" },
+      ],
+      body: html`
+        <h3 id="deprecation-states">Active, deprecated and orphaned</h3>
+        <ul class="bullets">
+          <li><b>Active:</b> nothing is flagged. A recipe that uses a flagged component is active, with a non-empty <code>deprecations</code> list.</li>
+          <li><b>Deprecated:</b> the publisher flagged the name for every version, with an optional replacement. The publisher can undo it.</li>
+          <li><b>Orphaned:</b> the publisher deleted their account. The entry stays listed and has no publisher and no maintainer; nobody can change it or publish to its name. Its bundle downloads only while its GitHub release is public; otherwise the bundle answer says <code>bundle-unavailable</code>.</li>
+        </ul>
+        <h3 id="deprecation-where">Where a warning appears</h3>
+        <p>A <b>Deprecated</b> or <b>Uses deprecated parts</b> pill on lists, a banner on the entry's page, a <code>deprecations</code> list in every JSON response and bundle answer, and lines starting <code>DEPRECATION WARNING:</code> in every <code>.txt</code> page. Each element is <code>{ name, version, status, reason, since, replacement?, via }</code>; <code>via</code> names what pulls the flagged part in. To resolve a whole version at once:</p>
+        <pre><code>GET /api/recipes/&lt;name&gt;/&lt;version&gt;/deprecations
+-> { name, version, status, affected, checked, deprecations }</code></pre>
+        <p><code>affected</code> is true when the list is not empty, and <code>checked</code> counts the distinct components examined, including ones included only for some answers. Lists and search take <code>deprecated=exclude</code>, <code>include</code> (the default) or <code>only</code>, which filters on the entry's own flag only.</p>
+        <h3 id="deprecation-agent">What an agent does</h3>
+        <ol class="steps">
+          <li><b>Reads the warning before it builds or updates.</b> It checks <code>deprecations</code> on the recipe version and on every component it is about to use, and tells you what it found.</li>
+          <li><b>Looks for the replacement.</b> When a warning names one, the agent reads that entry and compares its provided and required interfaces with the part it replaces.</li>
+          <li><b>Otherwise searches</b> for other components that provide the same interface type, or for a similar recipe, with <code>deprecated=exclude</code>.</li>
+          <li><b>Treats an orphaned part as unmaintained.</b> Nobody will fix it. Prefer a replacement; when the bundle is unavailable, the agent cannot fetch it.</li>
+          <li><b>Leaves the choice to you.</b> An application already built keeps running. You decide whether to rebuild with a replacement or to never update.</li>
+        </ol>
+        <p class="small muted">Filtering with <code>deprecated=exclude</code> hides flagged entries from lists. It does not make a flagged part you already use safe, so the agent reads <code>deprecations</code> in every case.</p>
+      `,
+    },
+    {
       id: "tldr",
-      title: "TL;DR: what only you can do",
+      title: "The short list: what only you can do",
       body: html`
         ${callout("info", html`<p><b>Most of this guide is for your information, not your to-do list.</b> The prompts on <a href="/dev/agents">Agents and API</a> and the documents at <a href="/agents.md">agents.md</a> and <a href="/contract.md">contract.md</a> tell a coding agent everything below. Give an agent an API key and those prompts and it registers the app, sets up the repository, publishes releases, creates share links and checks TestFlight. The steps that remain are the ones that need your identity, your money or your judgement.</p>`)}
         <h3>You, once per account</h3>
@@ -45,6 +220,7 @@ function sections(origin: string, slug: string): Section[] {
           <li>Storing <code>STORE_BUILD_TOKEN</code> and <code>STORE_APP_ID</code> as repository secrets.</li>
           <li>Cutting releases, checking <code>/release</code> status and fixing what it reports.</li>
           <li>Creating, labelling, revoking share links; checking TestFlight (prompt 2).</li>
+          <li>Searching recipes and components, reading their deprecation warnings, and publishing or deprecating your own entries (<a href="#publish">Publish a recipe or component</a>), once the GitHub token is saved.</li>
         </ul>
         <p class="small muted">Rule of thumb: if it needs a password, a payment, a signing key, or a decision about a person, it is yours. If it is typing, reading a file, or calling this API, it is the agent's.</p>
         <p class="small muted">Wondering whether your kind of app fits (Unity, Flutter, server-rendered sites, games with a server)? The <a href="/reference">technical reference</a> lists the supported types, where every part runs and the exact limits.</p>
@@ -52,16 +228,16 @@ function sections(origin: string, slug: string): Section[] {
     },
     {
       id: "overview",
-      title: "What ourapps does",
+      title: "Delivery: how your application reaches people",
       body: html`
-        <p>ourapps shares apps you build with people you know, on phones, tablets, computers, Apple TV and the web. You add an app in this console, create a share link, and send it. Your friend opens the link and gets the install choices for their device.</p>
+        <p>Once an application is built, ourapps delivers it to the people you choose, on phones, tablets, computers, Apple TV and the web. You add the app in this console, create a share link, and send it. Your friend opens the link and gets the install choices for their device. The steps below apply to every application, whether it came from a recipe, from components or from your own code.</p>
         <div class="grid-2">
           <div class="card flat"><h3>${icon("android", "icon-20")} Android</h3><p>The page offers a direct download of your signed APK and walks the friend through the one-time "allow from this source" prompt. Nothing else is needed.</p></div>
           <div class="card flat"><h3>${icon("phone", "icon-20")} iPhone and iPad</h3><p>Friends install through Apple's free TestFlight app from an invitation on the install page, with nothing to change on their phone. ourapps signs each build, uploads it to TestFlight and sends it to your friends; Apple reviews the first build of each version, and ourapps asks for a fresh build before the 90-day expiry.</p></div>
           <div class="card flat"><h3>${icon("globe", "icon-20")} Web apps</h3><p>Your repository deploys the built site to your own free Cloudflare account, which serves plain files without a request limit. The install page opens it, and the app offers a one-tap add to the home screen. Details in the <a href="/reference#web">reference</a>.</p></div>
           <div class="card flat"><h3>Mac and Windows</h3><p>Publish .dmg or .exe packages with their architecture, minimum system, signing and Mac notarization status. The page offers named package choices alongside the web version. A Mac browser does not identify its chip reliably.</p></div>
           <div class="card flat"><h3>Mac and Apple TV TestFlight</h3><p>The app page has separate setup buttons for each platform. Save the app's Apple bundle identifier, add the platform to its existing App Store Connect record, then check with Apple. Mac setup uses your browser session and provisions the installer signing key on the server. A matching ready build and open invitation are required; declaring a platform in my-app.json does not open its invitation.</p></div>
-          <div class="card flat"><h3>${icon("lock", "icon-20")} Private by design</h3><p>No search, no listing, no index. Install pages live at random addresses, the app files are served through links that expire after an hour, and a share link can be revoked at any time.</p></div>
+          <div class="card flat"><h3>${icon("lock", "icon-20")} Private share links</h3><p>Install pages live at random addresses and are not listed or searchable. App files are served through links that expire after an hour, and a share link can be revoked at any time. The recipe library and component catalogue are public.</p></div>
         </div>
         <p>The whole thing runs on free tiers. The only paid item is Apple's developer membership, which you need for iPhone apps anyway.</p>
         ${diagram("architecture.png", "How a typical app is hosted and installed through ourapps")}
@@ -153,6 +329,7 @@ base64 -i release.keystore | pbcopy   # paste as the secret ANDROID_KEYSTORE_BAS
       title: "3. Add your app (agent can do this)",
       body: html`
         ${callout("info", html`<p><b>For your information.</b> With an API key, prompt 2 on <a href="/dev/agents">Agents and API</a> lets an agent do this whole section: it creates the app, stores the build token in the repository, and reports the app id. Read on only if you prefer the form.</p>`)}
+        <p>An application that came from a recipe is added the same way as any other.</p>
         <p>Go to <a href="/dev/apps/new">Apps, Add an app</a>. Every field except the name and repository is optional, and blank fields get sensible placeholders, so you can add the app now and polish the listing later. What each field does:</p>
         <table class="table">
           <tr><th>Field</th><th>Shows up as</th><th>Tip</th></tr>
@@ -435,7 +612,7 @@ suspend fun checkForUpdate(context: Context) {
         { id: "security-you", title: "What is yours to do" },
       ],
       body: html`
-        <p>Security is the reason this service exists in the shape it does: a private installer holds the keys to your Apple developer account and your repositories. This section says exactly what is held, how it is protected, and where the limits are. The same statements, in contractual form, are in the <a href="/terms">terms and data statement</a> you accepted at sign-up.</p>
+        <p>ourapps holds credentials for your Apple developer account and your repositories, so it is built to keep them safe. This section says exactly what is held, how it is protected, and where the limits are. The same statements, in contractual form, are in the <a href="/terms">terms and data statement</a> you accepted at sign-up.</p>
 
         <h3 id="security-credentials">Your credentials</h3>
         <table class="table">
@@ -484,7 +661,7 @@ suspend fun checkForUpdate(context: Context) {
           <li>Keep build tokens and the Cloudflare token in repository secrets only. A build token lets its holder fetch your iPhone signing key; a Cloudflare token can replace any Worker on its account.</li>
           <li>Check Settings, Security now and then. Anything you do not recognise: sign out everywhere, revoke keys, and replace the GitHub token and Apple key at their sources.</li>
         </ul>
-        <p class="small muted">Full technical statement, including the rotation procedure and what is not covered: <a href="https://github.com/george-mcintyre/ourapps/blob/main/SECURITY.md" target="_blank" rel="noopener">SECURITY.md</a> in the source repository. Found a security problem? <a href="https://github.com/george-mcintyre/ourapps/security/advisories/new" target="_blank" rel="noopener">Report it privately</a>.</p>
+        <p class="small muted">Full technical statement, including the rotation procedure and what is not covered: <a href="https://github.com/ourapps-ae/ourapps/blob/main/SECURITY.md" target="_blank" rel="noopener">SECURITY.md</a> in the source repository. Found a security problem? <a href="https://github.com/ourapps-ae/ourapps/security/advisories/new" target="_blank" rel="noopener">Report it privately</a>.</p>
       `,
     },
     {
@@ -592,11 +769,11 @@ export async function guide(root: HTMLElement): Promise<void> {
         </nav>
         <article>
           ${list.map((s) => html`<section id="${s.id}"><h2>${s.title}</h2>${s.body}</section>`)}
-          <p class="small faint">Something missing or wrong? The source is public: <a href="https://github.com/george-mcintyre/ourapps/issues" target="_blank" rel="noopener">open an issue on github.com/george-mcintyre/ourapps</a>. Security problems: <a href="https://github.com/george-mcintyre/ourapps/security/advisories/new" target="_blank" rel="noopener">report them privately</a>, never in a public issue.</p>
+          <p class="small faint">Something missing or wrong? The source is public: <a href="https://github.com/ourapps-ae/ourapps/issues" target="_blank" rel="noopener">open an issue on github.com/ourapps-ae/ourapps</a>. Security problems: <a href="https://github.com/ourapps-ae/ourapps/security/advisories/new" target="_blank" rel="noopener">report them privately</a>, never in a public issue.</p>
         </article>
       </div>
     `,
-    { sub: "From first sign-in to the first friend installing, in order." },
+    { sub: "How an application is built from recipes and components, then delivered to the people you share it with." },
   );
   const tocLinks = [...root.querySelectorAll<HTMLAnchorElement>("[data-toc]")];
   const observer = new IntersectionObserver(

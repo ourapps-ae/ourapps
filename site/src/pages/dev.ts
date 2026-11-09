@@ -90,12 +90,12 @@ export async function dashboard(root: HTMLElement): Promise<void> {
             </div>
             <div class="card">
               <h2>Learn and automate</h2>
-              <p class="small muted">The <a href="/dev/guide#tldr">guide's TL;DR</a> lists the few things only you can do (sign in, tokens and keys, adding each iPhone app in App Store Connect). Everything else an agent does with the API key and prompts on the <a href="/dev/agents">agents page</a>.</p>
+              <p class="small muted">Start from a <a href="/recipes">recipe</a> or compose from <a href="/components">components</a>; <a href="/dev/guide#how-it-works">how ourapps works</a> explains both routes. The <a href="/dev/guide#tldr">guide's short list</a> lists the few things only you can do (sign in, tokens and keys, adding each iPhone app in App Store Connect). Everything else an agent does with the API key and prompts on the <a href="/dev/agents">agents page</a>.</p>
             </div>
           </div>
         </div>
       `,
-      { sub: "Your private app store for friends and family." },
+      { sub: "Your applications, built from recipes and components, delivered by share link." },
     );
   } catch (err) {
     failed(root, me, err);
@@ -1156,7 +1156,7 @@ export async function settings(root: HTMLElement, note = "", signingNote?: { res
           <p class="small muted mt">Sign-in only reads your public GitHub profile. Repository access comes from the token you save below, which you control and can revoke on GitHub at any time.</p>
           <hr />
           <h3>Delete account</h3>
-          <p class="small muted">Removes your profile, credentials, API keys, apps, share links and signing key at once. The certificate, the App Store profiles and the apps in App Store Connect stay on your Apple account until you remove them there; TestFlight builds keep working until they expire.</p>
+          <p class="small muted">Removes your profile, credentials, API keys, apps, share links and signing key at once. Your recipes and components stay in the library and catalogue without your name, marked orphaned; unlist them first to hide them. The certificate, the App Store profiles and the apps in App Store Connect stay on your Apple account until you remove them there; TestFlight builds keep working until they expire.</p>
           <div class="row wrap"><input type="text" id="confirm-login" placeholder="Type ${me.developer.githubLogin} to confirm" style="flex:1;min-width:200px" /><button class="btn danger" id="delete-account" disabled>${icon("trash")} Delete my account</button></div>
           <div id="delete-error" class="mt-s"></div>
         </div>
@@ -1352,7 +1352,7 @@ export async function agents(root: HTMLElement): Promise<void> {
     me,
     "Agents and API",
     html`
-      ${callout("info", html`<p><b>Everything the console does is an API, and the prompts below explain it all to an agent.</b> What stays with you: signing in, creating the GitHub token, the Apple key and, for web apps, the Cloudflare token, creating an API key here, adding each iPhone app once in App Store Connect, and sending links to people. The <a href="/dev/guide#tldr">TL;DR in the guide</a> lists exactly those. Full reference: <a href="/agents.md">ourapps.app/agents.md</a>; repository contract: <a href="/contract.md">ourapps.app/contract.md</a>.</p>`)}
+      ${callout("info", html`<p><b>Everything the console does is an API, and the prompts below explain it all to an agent.</b> What stays with you: signing in, creating the GitHub token, the Apple key and, for web apps, the Cloudflare token, creating an API key here, adding each iPhone app once in App Store Connect, and sending links to people. The <a href="/dev/guide#tldr">short list in the guide</a> names exactly those. Full reference: <a href="/agents.md">ourapps.app/agents.md</a>; repository contract: <a href="/contract.md">ourapps.app/contract.md</a>.</p>`)}
 
       <div class="grid-2 mt">
         <div class="card">
@@ -1389,7 +1389,7 @@ export async function agents(root: HTMLElement): Promise<void> {
           <p class="small muted"><code>AppTargets</code> contains six booleans: <code>ios</code>, <code>android</code>, <code>web</code>, <code>macos</code>, <code>windows</code> and <code>tvos</code>.</p>
           <pre class="mt-s"><code>curl -H "Authorization: Bearer $OURAPPS_API_KEY" \\
   ${location.origin}/api/dev/apps</code></pre>
-          <p class="small muted mt-s">Source code and issues: <a href="${SOURCE_URL}" target="_blank" rel="noopener">github.com/george-mcintyre/ourapps</a>.</p>
+          <p class="small muted mt-s">Source code and issues: <a href="${SOURCE_URL}" target="_blank" rel="noopener">github.com/ourapps-ae/ourapps</a>.</p>
         </div>
       </div>
 

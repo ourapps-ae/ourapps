@@ -66,7 +66,7 @@ export async function examplePage(root: HTMLElement): Promise<void> {
           <div style="padding:24px 0 8px">
             <span class="pill accent">Worked example</span>
             <h1 style="font-size:40px;margin-top:12px">Poker Night</h1>
-            <p class="lead muted" style="font-size:19px">An app for eight people, built in an evening with a coding agent, installed from one link. Imaginary, but every detail is something ourapps does.</p>
+            <p class="lead muted" style="font-size:19px">An app for eight people, built in an evening by a coding agent from a recipe or from components, installed from one link. Imaginary, but every detail is something ourapps does.</p>
             <div class="ctas row wrap"><a class="btn" href="/example/poker-night">See the page your friends get ${icon("arrow")}</a>${me ? html`<a class="btn secondary" href="/dev">Open your console</a>` : html`<a class="btn secondary" href="/api/auth/github">${icon("github")} Build yours</a>`}</div>
           </div>
 
@@ -105,8 +105,12 @@ export async function examplePage(root: HTMLElement): Promise<void> {
           <h2>How it got built: an agent and an evening</h2>
           <p>Describe the table to a coding agent (Claude Code, Codex, Cursor, opencode): who sits where, the three blind structures, the four rules, the slang. It writes the app. Paste the ourapps prompt from the console and it writes the release workflow too, including the TestFlight upload. You spend the evening on the house rules and the help text, which is the part only you can do.</p>
 
+          <h2>The app can come from a recipe</h2>
+          <p>A <a href="/recipes">recipe</a> for a card game asks a few questions: which devices, how many chips to start with, whether new players get lessons. It names the <a href="/components">components</a> it is made from, such as a card deck, a seating plan and a guided tour, and an agent assembles the app from them. Dana could pick that recipe from the library and answer the questions for her table, or compose the same app from catalogue components and publish the recipe for other tables. A part that carries a deprecation warning shows it on its page and in every response, so the agent reads it before building. The <a href="/dev/guide#how-it-works">guide</a> explains both routes.</p>
+
           <h2>How ourapps helps</h2>
           <ol class="steps">
+            <li><b>Start from a recipe or from components.</b> Pick a recipe and answer its questions, or compose the app from the component catalogue. An agent builds it in your GitHub repository.</li>
             <li><b>Add the app.</b> Name, icon, a few lines, the GitHub repository. Blank fields get placeholders, so the page looks finished from day one.</li>
             <li><b>Create a share link.</b> One for the table, labelled "Thursday". It has a QR code for the fridge.</li>
             <li><b>Friends tap.</b> Android downloads and installs. iPhones get Apple's free TestFlight app, open the invitation on the page, and tap Install.</li>

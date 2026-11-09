@@ -130,11 +130,11 @@ export async function acceptTerms(request: Request, env: Env, deps: Deps, dev: A
 }
 
 // DELETE /api/dev/me - dashboard only; the body must name the GitHub login to confirm.
-export async function deleteAccount(request: Request, env: Env, dev: AuthedDeveloper): Promise<Response> {
+export async function deleteAccount(request: Request, env: Env, deps: Deps, dev: AuthedDeveloper): Promise<Response> {
   requireSession(dev);
   const body = await readJson<{ confirm?: string }>(request);
   if (body.confirm !== dev.githubLogin) throw new HttpError(400, "type your GitHub login to confirm");
-  await Db.from(env).deleteDeveloper(dev.id);
+  await Db.from(env).deleteDeveloper(dev.id, deps.now().toISOString());
   return new Response(JSON.stringify({ ok: true }), {
     status: 200,
     headers: { "Content-Type": "application/json", "Set-Cookie": clearSessionCookie(env) },

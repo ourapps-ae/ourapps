@@ -5,4 +5,9 @@ Allow: /example/
 Allow: /terms
 Allow: /reference
 Allow: /small
+Allow: /recipes
+Allow: /components
+Allow: /sitemap.xml
 Disallow: /
+
+Sitemap: https://ourapps.app/sitemap.xml
