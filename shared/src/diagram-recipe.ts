@@ -4,7 +4,8 @@
 // from top to bottom, and the gaps between rows form horizontal channels. Every line runs in channels only: out of
 // the provider's right side, along channels, into the consumer's side. Each line gets its own track in each channel
 // it uses, so lines never overlap and never cross a card.
-import { describeCondition, type Condition, type Port } from "./catalogue.js";
+import type { Port } from "./catalogue.js";
+import { describeCondition, type Condition } from "./conditions.js";
 import { COLOURS, Canvas, LINE_COLOURS, MUTED, ZTITLE, measure, pillWidth, rowY, wrap, type CardBox, type Kind, type Zone } from "./diagram-kit.js";
 
 export interface DiagramPart {
@@ -257,7 +258,7 @@ function model(input: RecipeDiagramInput) {
     const z = categories.indexOf(c);
     const head = [p.name, `version ${p.version}`];
     if (!p.entry) head.push("not in the catalogue");
-    if (p.includedWhen) head.push(...wrap(`when ${describeCondition(p.includedWhen, answerWords)}`, 34));
+    if (p.includedWhen) head.push(...wrap(`when ${describeCondition(p.includedWhen, answerWords) ?? p.includedWhen}`, 34));
     const n = makeNode(p.id, p.id, head, styleOf.get(c)!, p.includedWhen !== null, z);
     nodes.set(p.id, n);
     zones[z]!.nodes.push(n);

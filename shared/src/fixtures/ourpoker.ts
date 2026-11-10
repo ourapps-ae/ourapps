@@ -1,6 +1,7 @@
 // The OurPoker recipe and the catalogue entries of its 39 components, as https://ourapps.app served them on 2026-11-10.
 // Trimmed to the fields the diagrams read. Test data only.
-import type { Condition, Port, Targets } from "../catalogue.js";
+import type { Port, Targets } from "../catalogue.js";
+import type { Condition } from "../conditions.js";
 
 export interface FixtureComponent { name: string; version: string; category: string | null; targets: Targets; provides: Port[]; requires: Port[]; profiles: { id: string; settings: Record<string, string | number | boolean> }[] }
 
@@ -13,49 +14,25 @@ export const OURPOKER_RECIPE: { name: string; version: string; title: string; co
    "id": "web-host",
    "name": "ourapps-ae/web-host",
    "version": "0.3.0",
-   "includedWhen": {
-    "question": "targets",
-    "contains": "web"
-   }
+   "includedWhen": "'web' in targets"
   },
   {
    "id": "apple-host",
    "name": "ourapps-ae/apple-host",
    "version": "0.4.0",
-   "includedWhen": {
-    "any": [
-     {
-      "question": "targets",
-      "contains": "ios"
-     },
-     {
-      "question": "targets",
-      "contains": "macos"
-     },
-     {
-      "question": "targets",
-      "contains": "tvos"
-     }
-    ]
-   }
+   "includedWhen": "'ios' in targets || 'macos' in targets || 'tvos' in targets"
   },
   {
    "id": "android-host",
    "name": "ourapps-ae/android-host",
    "version": "0.3.0",
-   "includedWhen": {
-    "question": "targets",
-    "contains": "android"
-   }
+   "includedWhen": "'android' in targets"
   },
   {
    "id": "windows-desktop",
    "name": "ourapps-ae/windows-desktop",
    "version": "0.4.0",
-   "includedWhen": {
-    "question": "targets",
-    "contains": "windows"
-   }
+   "includedWhen": "'windows' in targets"
   },
   {
    "id": "server-host",
@@ -73,10 +50,7 @@ export const OURPOKER_RECIPE: { name: string; version: string; title: string; co
    "id": "store-update",
    "name": "ourapps-ae/store-update",
    "version": "0.4.0",
-   "includedWhen": {
-    "question": "updates",
-    "equals": true
-   }
+   "includedWhen": "updates"
   },
   {
    "id": "realtime-rooms",
@@ -124,10 +98,7 @@ export const OURPOKER_RECIPE: { name: string; version: string; title: string; co
    "id": "video-calls",
    "name": "ourapps-ae/video-calls",
    "version": "0.4.0",
-   "includedWhen": {
-    "question": "video",
-    "equals": true
-   }
+   "includedWhen": "video"
   },
   {
    "id": "preferences",
@@ -169,12 +140,7 @@ export const OURPOKER_RECIPE: { name: string; version: string; title: string; co
    "id": "computer-players",
    "name": "ourapps-ae/computer-players",
    "version": "0.4.0",
-   "includedWhen": {
-    "not": {
-     "question": "computerPlayers",
-     "equals": "none"
-    }
-   }
+   "includedWhen": "computerPlayers != 'none'"
   },
   {
    "id": "chip-ledger",
@@ -228,12 +194,7 @@ export const OURPOKER_RECIPE: { name: string; version: string; title: string; co
    "id": "poker-strategy",
    "name": "ourapps-ae/poker-strategy",
    "version": "0.3.0",
-   "includedWhen": {
-    "not": {
-     "question": "computerPlayers",
-     "equals": "none"
-    }
-   }
+   "includedWhen": "computerPlayers != 'none'"
   },
   {
    "id": "theme",
@@ -275,10 +236,7 @@ export const OURPOKER_RECIPE: { name: string; version: string; title: string; co
    "id": "guided-tour",
    "name": "ourapps-ae/guided-tour",
    "version": "0.3.0",
-   "includedWhen": {
-    "question": "lessons",
-    "equals": true
-   }
+   "includedWhen": "lessons"
   },
   {
    "id": "translations",

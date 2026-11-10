@@ -62,7 +62,7 @@ describe("recipe component diagram", () => {
 
   it("marks conditional components with a dashed border and the condition in words", () => {
     expect(svg).toContain("when targets includes web");
-    expect(svg).toContain("when not (computerPlayers is none)");
+    expect(svg).toContain("when computerPlayers is not none");
     expect(svg.match(/stroke-dasharray="5 3"\/>/g)!.length).toBe(OURPOKER_RECIPE.components.filter((c) => c.includedWhen).length);
   });
 
