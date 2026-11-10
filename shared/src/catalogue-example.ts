@@ -44,7 +44,7 @@ export function exampleRecipeEntry(): RecipeEntry {
     },
     digest: EXAMPLE_DIGEST,
     source: { repository: "acme/poker-night-recipe", tag: "v0.1.0" },
-    bundle: { asset: "poker-night-0.1.0.aepm", digest: EXAMPLE_BUNDLE_DIGEST },
+    bundle: { asset: "poker-night-0.1.0.tar", digest: EXAMPLE_BUNDLE_DIGEST },
     page: {
       description: "Poker Night deals a hand for every member at the table.\n\nChoose your devices, your starting chips and whether new players get lessons.",
       diagram: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40"><rect x="2" y="2" width="50" height="36" rx="6" fill="#ddd"/><text x="10" y="25">deck</text><rect x="68" y="2" width="50" height="36" rx="6" fill="#ddd"/><text x="76" y="25">seats</text></svg>',
@@ -75,6 +75,6 @@ export function exampleComponentEntry(): ComponentEntry {
     },
     migration: null,
     source: { repository: "acme/card-deck", tag: "v0.1.0" },
-    bundle: { asset: "card-deck-0.1.0.aepm", digest: EXAMPLE_BUNDLE_DIGEST },
+    bundle: { asset: "card-deck-0.1.0.tar", digest: EXAMPLE_BUNDLE_DIGEST },
   };
 }

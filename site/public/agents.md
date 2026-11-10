@@ -228,6 +228,14 @@ Give the developer the `url`; one link per person or group is the convention so 
 
 Recipes (applications assembled from questions) and components (reviewed parts) are published by developers and read by anyone. The service keeps each entry and a pointer to the publisher's GitHub release (repository, tag, asset name, digests). It never stores the package. What a recipe or component repository implements is in contract.md.
 
+### What a downloaded package is
+
+A component package is the source code itself, not a link to code. It is one archive file (`.tar`, made by `aepm pack`) holding: the working implementation for each device or server it supports (ordinary source files); its contract (the interfaces it provides and requires, as data, with documentation and instructions for an agent); its tests and the tool versions they need; and `component.json`, which lists every file with its fingerprint and where it goes in the application. It does not include the components it requires (separate downloads), the person's settings or any secret.
+
+A recipe package is source code and a form: one archive file holding `recipe.json` (the questions, the components named by exact version, the settings that connect them, the choice of providers by size, the tested answer sets), the recipe's own application-specific component (screens, artwork, sounds, translated text, rules, end-to-end tests), and `INSTRUCTIONS.md`. The components it names are not inside; each is a separate download.
+
+The archive is a release file on the publisher's public GitHub repository; ourapps keeps the catalogue entry and a pointer to the release, and does not hold or run the code. `digest` and `bundle.digest` are the sha256 fingerprint of the archive; check it before opening the archive. Installing with aepm copies the listed files into the application and runs none of the package's code.
+
 ### Using a recipe or component (instructions for agents)
 
 1. Find: search with `GET /api/recipes/search?q=` or `GET /api/components/search?q=` (no key). Read an entry as plain text at `/recipes/<name>.txt` or `/components/<name>.txt`, or as JSON at `GET /api/recipes/<name>/latest`. Check `deprecations`; tell the developer before building on a flagged entry.

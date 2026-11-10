@@ -27,10 +27,10 @@ function release(repo: string, tag: string, asset: string, id: number, overrides
 
 function githubFor(extra: Record<string, (call: Call) => Response | Promise<Response>> = {}) {
   const stub = fakeFetch({
-    ...release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.aepm", 11),
-    ...release("acme/poker-night-recipe", "v0.1.0", "poker-night-0.1.0.aepm", 21),
-    ...release("acme/seating", "v0.1.0", "seating-0.1.0.aepm", 31),
-    ...release("acme/random-pool", "v0.1.0", "random-pool-0.1.0.aepm", 41),
+    ...release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.tar", 11),
+    ...release("acme/poker-night-recipe", "v0.1.0", "poker-night-0.1.0.tar", 21),
+    ...release("acme/seating", "v0.1.0", "seating-0.1.0.tar", 31),
+    ...release("acme/random-pool", "v0.1.0", "random-pool-0.1.0.tar", 41),
     ...extra,
   });
   calls = stub.calls;
@@ -72,7 +72,7 @@ function nextComponent(version: string, digest: string, patch: (e: Mutable) => v
     e.version = version;
     e.digest = digest;
     e.source.tag = `v${version}`;
-    e.bundle.asset = `card-deck-${version}.aepm`;
+    e.bundle.asset = `card-deck-${version}.tar`;
     patch(e);
   });
 }
@@ -99,7 +99,7 @@ describe("publishing a component", () => {
     expect(repoCall?.headers.get("Authorization")).toBe(`Bearer ${GH_TOKEN}`);
     expect(calls.some((c) => c.url.endsWith("/repos/acme/card-deck/releases/tags/v0.1.0"))).toBe(true);
     const row = await env.DB.prepare("SELECT * FROM component_versions").first<Record<string, unknown>>();
-    expect(row).toMatchObject({ digest: digest("a"), source_repo: "acme/card-deck", source_tag: "v0.1.0", bundle_asset: "card-deck-0.1.0.aepm", bundle_digest: EXAMPLE_BUNDLE_DIGEST });
+    expect(row).toMatchObject({ digest: digest("a"), source_repo: "acme/card-deck", source_tag: "v0.1.0", bundle_asset: "card-deck-0.1.0.tar", bundle_digest: EXAMPLE_BUNDLE_DIGEST });
     const audit = await env.DB.prepare("SELECT event, detail FROM audit_log WHERE event = 'component-published'").first();
     expect(audit).toMatchObject({ detail: "acme/card-deck 0.1.0" });
   });
@@ -127,9 +127,9 @@ describe("publishing a component", () => {
   });
 
   it("keeps older versions and moves latest with the newest", async () => {
-    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.aepm", 11));
+    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.tar", 11));
     await publishCard();
-    githubFor({ ...release("acme/card-deck", "v0.10.0", "card-deck-0.10.0.aepm", 12), ...release("acme/card-deck", "v0.2.0", "card-deck-0.2.0.aepm", 13) });
+    githubFor({ ...release("acme/card-deck", "v0.10.0", "card-deck-0.10.0.tar", 12), ...release("acme/card-deck", "v0.2.0", "card-deck-0.2.0.tar", 13) });
     expect((await post("/api/dev/components", nextComponent("0.10.0", digest("d")))).status).toBe(201);
     expect((await post("/api/dev/components", nextComponent("0.2.0", digest("e")))).status).toBe(201);
     const view = (await (await get("/api/components/card-deck")).json()) as ComponentVersionView;
@@ -151,7 +151,7 @@ describe("publishing a component", () => {
 
   it("keeps one repository per name and the scope equal to its owner", async () => {
     await publishCard();
-    githubFor(release("acme/other", "v0.2.0", "card-deck-0.2.0.aepm", 40));
+    githubFor(release("acme/other", "v0.2.0", "card-deck-0.2.0.tar", 40));
     const moved = await post("/api/dev/components", nextComponent("0.2.0", digest("e"), (e) => (e.source.repository = "acme/other")));
     expect(moved.status).toBe(409);
     const wrongScope = await post("/api/dev/components", component((e) => (e.name = "mallory/card-deck")));
@@ -182,19 +182,19 @@ describe("publishing a component", () => {
     expect(((await none.json()) as { error: string }).error).toContain("GitHub token");
     await saveToken();
 
-    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.aepm", 11, { push: false }));
+    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.tar", 11, { push: false }));
     expect((await post("/api/dev/components", component())).status).toBe(403);
-    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.aepm", 11, { status: 404 }));
+    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.tar", 11, { status: 404 }));
     expect((await post("/api/dev/components", component())).status).toBe(422);
-    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.aepm", 11, { status: 500 }));
+    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.tar", 11, { status: 500 }));
     expect((await post("/api/dev/components", component())).status).toBe(502);
-    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.aepm", 11, { releaseStatus: 404 }));
+    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.tar", 11, { releaseStatus: 404 }));
     const noRelease = await post("/api/dev/components", component());
     expect(noRelease.status).toBe(422);
     expect(((await noRelease.json()) as { error: string }).error).toContain("no published release");
-    githubFor(release("acme/card-deck", "v0.1.0", "other.aepm", 11));
+    githubFor(release("acme/card-deck", "v0.1.0", "other.tar", 11));
     expect(((await (await post("/api/dev/components", component())).json()) as { error: string }).error).toContain("no asset named");
-    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.aepm", 11, { digest: digest("f") }));
+    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.tar", 11, { digest: digest("f") }));
     const mismatch = await post("/api/dev/components", component());
     expect(mismatch.status).toBe(422);
     expect(((await mismatch.json()) as { error: string }).error).toContain("not sha256");
@@ -202,7 +202,7 @@ describe("publishing a component", () => {
   });
 
   it("accepts a release whose asset carries no digest", async () => {
-    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.aepm", 11, { digest: null }));
+    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.tar", 11, { digest: null }));
     expect((await post("/api/dev/components", component())).status).toBe(201);
   });
 
@@ -242,7 +242,7 @@ describe("publishing a recipe", () => {
   it("stores the recipe, its components and its page material", async () => {
     await publishRecipe();
     const version = await env.DB.prepare("SELECT * FROM recipe_versions").first<Record<string, unknown>>();
-    expect(version).toMatchObject({ title: "Poker Night", category: "games", source_repo: "acme/poker-night-recipe", source_tag: "v0.1.0", bundle_asset: "poker-night-0.1.0.aepm" });
+    expect(version).toMatchObject({ title: "Poker Night", category: "games", source_repo: "acme/poker-night-recipe", source_tag: "v0.1.0", bundle_asset: "poker-night-0.1.0.tar" });
     expect(JSON.parse(version!.recipe as string).questions).toHaveLength(7);
     const components = await env.DB.prepare("SELECT instance_id, component_name FROM recipe_components ORDER BY instance_id").all();
     expect(components.results).toEqual([
@@ -285,7 +285,7 @@ describe("reading recipes", () => {
   });
 
   it("lists with categories and filters by category, target and tag", async () => {
-    githubFor({ ...release("acme/poker-night-recipe", "v0.1.0", "poker-night-0.1.0.aepm", 21), ...release("acme/garden-recipe", "v1.0.0", "garden-1.0.0.aepm", 22) });
+    githubFor({ ...release("acme/poker-night-recipe", "v0.1.0", "poker-night-0.1.0.tar", 21), ...release("acme/garden-recipe", "v1.0.0", "garden-1.0.0.tar", 22) });
     await publishRecipe((e) => {
       e.recipe.name = "acme/garden-planner";
       e.recipe.title = "Garden Planner";
@@ -301,7 +301,7 @@ describe("reading recipes", () => {
       e.recipe.connections = [];
       e.recipe.tests = { defaultAnswers: {}, answerSets: [] };
       e.source = { repository: "acme/garden-recipe", tag: "v1.0.0" };
-      e.bundle.asset = "garden-1.0.0.aepm";
+      e.bundle.asset = "garden-1.0.0.tar";
       e.digest = digest("1");
     });
     const all = (await (await get("/api/recipes")).json()) as RecipeList;
@@ -355,7 +355,7 @@ describe("reading recipes", () => {
     expect(v.components).toHaveLength(5);
     expect(v.tests.answerSets[0].id).toBe("web-only");
     expect(v.versions).toEqual([{ version: "0.1.0", digest: digest("a"), publishedAt: deps.now().toISOString() }]);
-    expect(v.bundle).toEqual({ asset: "poker-night-0.1.0.aepm", digest: EXAMPLE_BUNDLE_DIGEST, url: `${BASE}/api/recipes/poker-night/0.1.0/bundle` });
+    expect(v.bundle).toEqual({ asset: "poker-night-0.1.0.tar", digest: EXAMPLE_BUNDLE_DIGEST, url: `${BASE}/api/recipes/poker-night/0.1.0/bundle` });
     expect(v.description).toContain("Poker Night deals a hand");
     expect(v.diagram).toBe(`${BASE}/api/recipes/poker-night/0.1.0/diagram.svg`);
   });
@@ -370,8 +370,8 @@ describe("reading recipes", () => {
     expect(res.headers.get("Content-Type")).toBe("image/svg+xml");
     expect(res.headers.get("Content-Security-Policy")).toContain("sandbox");
     expect(await res.text()).toContain("<svg");
-    githubFor(release("acme/poker-night-recipe", "v0.2.0", "poker-night-0.2.0.aepm", 23));
-    await publishRecipe((e) => ((e.recipe.version = "0.2.0"), (e.digest = digest("2")), (e.source.tag = "v0.2.0"), (e.bundle.asset = "poker-night-0.2.0.aepm"), (e.page.diagram = null)));
+    githubFor(release("acme/poker-night-recipe", "v0.2.0", "poker-night-0.2.0.tar", 23));
+    await publishRecipe((e) => ((e.recipe.version = "0.2.0"), (e.digest = digest("2")), (e.source.tag = "v0.2.0"), (e.bundle.asset = "poker-night-0.2.0.tar"), (e.page.diagram = null)));
     expect((await get("/api/recipes/poker-night/0.2.0/diagram.svg")).status).toBe(404);
   });
 });
@@ -415,8 +415,8 @@ describe("search", () => {
   });
 
   it("searches the newest listed version", async () => {
-    githubFor(release("acme/poker-night-recipe", "v0.2.0", "poker-night-0.2.0.aepm", 23));
-    await publishRecipe((e) => ((e.recipe.version = "0.2.0"), (e.recipe.title = "Showdown"), (e.digest = digest("2")), (e.source.tag = "v0.2.0"), (e.bundle.asset = "poker-night-0.2.0.aepm")));
+    githubFor(release("acme/poker-night-recipe", "v0.2.0", "poker-night-0.2.0.tar", 23));
+    await publishRecipe((e) => ((e.recipe.version = "0.2.0"), (e.recipe.title = "Showdown"), (e.digest = digest("2")), (e.source.tag = "v0.2.0"), (e.bundle.asset = "poker-night-0.2.0.tar")));
     const find = async (q: string) => ((await (await get(`/api/recipes/search?q=${q}`)).json()) as RecipeSearch).recipes.map((r) => `${r.title} ${r.version}`);
     expect(await find("showdown")).toEqual(["Showdown 0.2.0"]);
     expect(await find("poker")).toEqual(["Showdown 0.2.0"]);
@@ -429,7 +429,7 @@ describe("search", () => {
 describe("components", () => {
   it("lists and filters by interface, category, target and tag", async () => {
     await publishCard();
-    githubFor(release("acme/seating", "v0.1.0", "seating-0.1.0.aepm", 31));
+    githubFor(release("acme/seating", "v0.1.0", "seating-0.1.0.tar", 31));
     expect(
       (
         await post("/api/dev/components", component((e) => {
@@ -441,7 +441,7 @@ describe("components", () => {
           e.provides = [{ id: "seating", type: "ae/seating", version: "1.0.0" }];
           e.requires = [{ id: "guest-identity", type: "ae/guest-identity", version: "1.0.0" }];
           e.source = { repository: "acme/seating", tag: "v0.1.0" };
-          e.bundle.asset = "seating-0.1.0.aepm";
+          e.bundle.asset = "seating-0.1.0.tar";
         }))
       ).status,
     ).toBe(201);
@@ -489,7 +489,7 @@ describe("components", () => {
       description: "A shuffled deck of 52 cards that deals and burns cards.",
       guardians: ["Example Guardian Ltd"],
       source: { repository: "acme/card-deck", tag: "v0.1.0" },
-      bundle: { asset: "card-deck-0.1.0.aepm", digest: EXAMPLE_BUNDLE_DIGEST },
+      bundle: { asset: "card-deck-0.1.0.tar", digest: EXAMPLE_BUNDLE_DIGEST },
       migration: { formats: ["ndjson"], retentionDays: 30 },
       usedBy: [],
     });
@@ -501,7 +501,7 @@ describe("components", () => {
 describe("unlisting", () => {
   beforeEach(async () => {
     await publishCard();
-    githubFor({ ...release("acme/card-deck", "v0.2.0", "card-deck-0.2.0.aepm", 12) });
+    githubFor({ ...release("acme/card-deck", "v0.2.0", "card-deck-0.2.0.tar", 12) });
     expect((await post("/api/dev/components", nextComponent("0.2.0", digest("e")))).status).toBe(201);
   });
 
@@ -528,7 +528,7 @@ describe("unlisting", () => {
 
   it("keeps the digest bound after unlisting, and lists the version again on republish", async () => {
     await del("/api/dev/components/card-deck/0.2.0");
-    githubFor({ ...release("acme/card-deck", "v0.2.0", "card-deck-0.2.0.aepm", 12) });
+    githubFor({ ...release("acme/card-deck", "v0.2.0", "card-deck-0.2.0.tar", 12) });
     expect((await post("/api/dev/components", nextComponent("0.2.0", digest("9")))).status).toBe(409);
     const again = await post("/api/dev/components", nextComponent("0.2.0", digest("e")));
     expect(again.status).toBe(201);
@@ -557,7 +557,7 @@ describe("bundle links", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("Cache-Control")).toBe("no-store");
     const link = (await res.json()) as BundleLink;
-    expect(link).toMatchObject({ name: "acme/poker-night", version: "0.1.0", digest: digest("a"), asset: "poker-night-0.1.0.aepm", assetDigest: EXAMPLE_BUNDLE_DIGEST });
+    expect(link).toMatchObject({ name: "acme/poker-night", version: "0.1.0", digest: digest("a"), asset: "poker-night-0.1.0.tar", assetDigest: EXAMPLE_BUNDLE_DIGEST });
     expect(link.status).toBe("available");
     expect(link.deprecations).toEqual([]);
     expect(link.url).toMatch(new RegExp(`^${BASE}/dl/`));
@@ -570,7 +570,7 @@ describe("bundle links", () => {
     expect(file.status).toBe(200);
     expect(await file.text()).toBe("BUNDLEBYTES");
     expect(file.headers.get("Content-Type")).toBe("application/octet-stream");
-    expect(file.headers.get("Content-Disposition")).toBe('attachment; filename="poker-night-0.1.0.aepm"');
+    expect(file.headers.get("Content-Disposition")).toBe('attachment; filename="poker-night-0.1.0.tar"');
     expect(calls[0].headers.get("Authorization")).toBe(`Bearer ${GH_TOKEN}`);
   });
 
@@ -581,11 +581,11 @@ describe("bundle links", () => {
   });
 
   it("refuses to link a bundle that no longer matches the recorded digest or is gone", async () => {
-    githubFor(release("acme/poker-night-recipe", "v0.1.0", "poker-night-0.1.0.aepm", 21, { digest: digest("f") }));
+    githubFor(release("acme/poker-night-recipe", "v0.1.0", "poker-night-0.1.0.tar", 21, { digest: digest("f") }));
     expect((await get("/api/recipes/poker-night/0.1.0/bundle")).status).toBe(502);
-    githubFor(release("acme/poker-night-recipe", "v0.1.0", "other.aepm", 21));
+    githubFor(release("acme/poker-night-recipe", "v0.1.0", "other.tar", 21));
     expect((await get("/api/recipes/poker-night/0.1.0/bundle")).status).toBe(502);
-    githubFor(release("acme/poker-night-recipe", "v0.1.0", "poker-night-0.1.0.aepm", 21, { releaseStatus: 404 }));
+    githubFor(release("acme/poker-night-recipe", "v0.1.0", "poker-night-0.1.0.tar", 21, { releaseStatus: 404 }));
     const res = await get("/api/recipes/poker-night/0.1.0/bundle");
     expect(res.status).toBe(502);
     expect(await res.text()).not.toContain("acme");
@@ -594,7 +594,7 @@ describe("bundle links", () => {
 
   it("serves component bundles the same way", async () => {
     const link = (await (await get("/api/components/card-deck/0.1.0/bundle")).json()) as BundleLink;
-    expect(link.asset).toBe("card-deck-0.1.0.aepm");
+    expect(link.asset).toBe("card-deck-0.1.0.tar");
     expect(await (await handle(new Request(link.url!), env, deps)).text()).toBe("BUNDLEBYTES");
   });
 });
@@ -688,7 +688,7 @@ const POOL = (patch: (e: Mutable) => void = () => {}) =>
     e.provides = [{ id: "random-source", type: "ae/random-source", version: "1.0.0" }];
     e.requires = [];
     e.source = { repository: "acme/random-pool", tag: "v0.1.0" };
-    e.bundle.asset = "random-pool-0.1.0.aepm";
+    e.bundle.asset = "random-pool-0.1.0.tar";
     patch(e);
   });
 
@@ -765,7 +765,7 @@ describe("developer deprecation", () => {
   });
 
   it("works the same for recipes, with a recipe as the replacement", async () => {
-    githubFor({ ...release("acme/poker-night-recipe", "v0.1.0", "poker-night-0.1.0.aepm", 21) });
+    githubFor({ ...release("acme/poker-night-recipe", "v0.1.0", "poker-night-0.1.0.tar", 21) });
     await publishRecipe();
     const res = await post("/api/dev/recipes/poker-night/deprecate", { replacement: "acme/poker-night" });
     expect(res.status).toBe(400);
@@ -852,8 +852,8 @@ describe("deprecation reaches what uses a flagged component", () => {
 
   it("covers every version of a flagged name, and clears with undeprecate", async () => {
     await post("/api/dev/components/random-pool/deprecate", {});
-    githubFor({ ...release("acme/random-pool", "v0.2.0", "random-pool-0.2.0.aepm", 42) });
-    expect((await post("/api/dev/components", POOL((e) => ((e.version = "0.2.0"), (e.digest = digest("2")), (e.source.tag = "v0.2.0"), (e.bundle.asset = "random-pool-0.2.0.aepm"))))).status).toBe(201);
+    githubFor({ ...release("acme/random-pool", "v0.2.0", "random-pool-0.2.0.tar", 42) });
+    expect((await post("/api/dev/components", POOL((e) => ((e.version = "0.2.0"), (e.digest = digest("2")), (e.source.tag = "v0.2.0"), (e.bundle.asset = "random-pool-0.2.0.tar"))))).status).toBe(201);
     expect(((await (await get("/api/components/random-pool/0.2.0")).json()) as ComponentVersionView).status).toBe("deprecated");
     await post("/api/dev/components/random-pool/undeprecate", {});
     expect(((await (await get("/api/recipes/poker-night/0.1.0/deprecations")).json()) as DeprecationReport).deprecations).toEqual([]);
@@ -935,13 +935,13 @@ describe("account deletion keeps the catalogue and orphans it", () => {
     const res = await get("/api/recipes/poker-night/0.1.0/bundle");
     expect(res.status).toBe(200);
     const link = (await res.json()) as BundleLink;
-    expect(link).toMatchObject({ status: "available", name: "acme/poker-night", asset: "poker-night-0.1.0.aepm", assetDigest: EXAMPLE_BUNDLE_DIGEST });
+    expect(link).toMatchObject({ status: "available", name: "acme/poker-night", asset: "poker-night-0.1.0.tar", assetDigest: EXAMPLE_BUNDLE_DIGEST });
     expect(link.url).toMatch(new RegExp(`^${BASE}/dl/`));
     expect(link.expiresAt).not.toBeNull();
     const file = await handle(new Request(link.url!), env, deps);
     expect(file.status).toBe(200);
     expect(await file.text()).toBe("BUNDLEBYTES");
-    expect(file.headers.get("Content-Disposition")).toBe('attachment; filename="poker-night-0.1.0.aepm"');
+    expect(file.headers.get("Content-Disposition")).toBe('attachment; filename="poker-night-0.1.0.tar"');
     expect(calls.length).toBeGreaterThan(1);
     for (const c of calls) expect(c.headers.get("Authorization"), c.url).toBeNull();
     expect(calls.at(-1)!.headers.get("Accept")).toBe("application/octet-stream");
@@ -950,17 +950,17 @@ describe("account deletion keeps the catalogue and orphans it", () => {
 
   it("marks bundle-unavailable when the release is private or gone", async () => {
     await deleteAccount();
-    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.aepm", 11, { releaseStatus: 404 }));
+    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.tar", 11, { releaseStatus: 404 }));
     const res = await get("/api/components/card-deck/0.1.0/bundle");
     expect(res.status).toBe(200);
     const link = (await res.json()) as BundleLink;
-    expect(link).toMatchObject({ status: "bundle-unavailable", url: null, expiresAt: null, name: "acme/card-deck", asset: "card-deck-0.1.0.aepm" });
+    expect(link).toMatchObject({ status: "bundle-unavailable", url: null, expiresAt: null, name: "acme/card-deck", asset: "card-deck-0.1.0.tar" });
     expect(link.deprecations.length).toBeGreaterThan(0);
-    githubFor(release("acme/card-deck", "v0.1.0", "other.aepm", 11));
+    githubFor(release("acme/card-deck", "v0.1.0", "other.tar", 11));
     expect(((await (await get("/api/components/card-deck/0.1.0/bundle")).json()) as BundleLink).status).toBe("bundle-unavailable");
-    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.aepm", 11, { releaseStatus: 500 }));
+    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.tar", 11, { releaseStatus: 500 }));
     expect((await get("/api/components/card-deck/0.1.0/bundle")).status).toBe(502);
-    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.aepm", 11, { digest: digest("f") }));
+    githubFor(release("acme/card-deck", "v0.1.0", "card-deck-0.1.0.tar", 11, { digest: digest("f") }));
     expect((await get("/api/components/card-deck/0.1.0/bundle")).status).toBe(502);
   });
 

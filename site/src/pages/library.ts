@@ -1,5 +1,5 @@
 // The recipe library and the component catalogue: browse, search, and read one entry.
-import { describeCondition, type BundleLink, type ComponentList, type ComponentSearch, type ComponentSummary, type ComponentVersionView, type Deprecation, type EntryStatus, type Profile, type RecipeList, type RecipeSearch, type RecipeSummary, type RecipeVersionView } from "@my/store-shared";
+import { COMPONENT_PACKAGE, RECIPE_PACKAGE, describeCondition, type BundleLink, type PackageSummary, type ComponentList, type ComponentSearch, type ComponentSummary, type ComponentVersionView, type Deprecation, type EntryStatus, type Profile, type RecipeList, type RecipeSearch, type RecipeSummary, type RecipeVersionView } from "@my/store-shared";
 import { ApiError, api, whoAmI } from "../api.js";
 import { html, mount, raw, type Raw } from "../html.js";
 import { renderMarkdown } from "../markdown.js";
@@ -287,6 +287,22 @@ function wireBundle(root: HTMLElement, url: string): void {
   };
 }
 
+// What a download is, at a glance: the same words appear in the plain-text pages and the documents.
+export function packageCard(summary: PackageSummary, v: { bundle: { asset: string }; digest: string; source: { repository: string; tag: string } }): Raw {
+  return html`
+          <div class="card mt" id="what-you-download">
+            <h2>What you download</h2>
+            <p><b>${summary.headline}</b></p>
+            <table class="table small mt-s">
+              <tr><td>File</td><td><code>${v.bundle.asset}</code>, an archive of files, from <a href="${releaseUrl(v.source.repository, v.source.tag)}" target="_blank" rel="noopener">the ${v.source.tag} release of ${v.source.repository}</a></td></tr>
+              ${summary.parts.map(([label, text]) => html`<tr><td>${label}</td><td>${text}</td></tr>`)}
+            </table>
+            <p class="small muted mt-s">${summary.where}</p>
+            <p class="small muted">${summary.check} Digest <code>${v.digest}</code></p>
+          </div>
+  `;
+}
+
 export function recipeBody(v: RecipeVersionView, requested: string): Raw {
   return html`
         <article style="max-width:900px;margin:0 auto">
@@ -302,11 +318,13 @@ export function recipeBody(v: RecipeVersionView, requested: string): Raw {
           <div class="row wrap" style="gap:8px">${targetPills(v.targets)}${tagPills(v.tags, "recipes")}</div>
           <p class="small muted mt-s">${publisherText(v.publisher)}. Source <a href="${releaseUrl(v.source.repository, v.source.tag)}" target="_blank" rel="noopener">${v.source.repository} ${v.source.tag}</a>.</p>
 
+          ${packageCard(RECIPE_PACKAGE, v)}
+
           <div class="card mt">
             <h2>Build it</h2>
             <p class="muted">Give your coding agent this line. It asks the questions below, shows you the components it will install, and installs them with aepm. One-command assembly (<code>aepm create</code>) is coming soon. <a href="/dev/agents#recipes-and-components">Tools and instructions for agents</a>.</p>
             ${copyRow(`Build an application from the ${v.title} recipe: https://ourapps.app/recipes/${v.slug}.txt`)}
-            <div class="row wrap mt-s"><button class="btn secondary sm" id="bundle-link" type="button">${icon("external")} Download the recipe bundle</button><span class="small faint">The link is valid for one hour. Digest ${v.bundle.digest.slice(0, 19)}</span></div>
+            <div class="row wrap mt-s"><button class="btn secondary sm" id="bundle-link" type="button">${icon("external")} Download the archive</button><span class="small faint">The link is valid for one hour. Digest ${v.bundle.digest.slice(0, 19)}</span></div>
           </div>
 
           <div class="card mt">
@@ -401,11 +419,12 @@ export function componentBody(v: ComponentVersionView, requested: string): Raw {
           <div class="row wrap" style="gap:8px">${targetPills(v.targets)}${tagPills(v.tags, "components")}</div>
           <p class="small muted mt-s">${publisherText(v.publisher)}. Source <a href="${releaseUrl(v.source.repository, v.source.tag)}" target="_blank" rel="noopener">${v.source.repository} ${v.source.tag}</a>.</p>
 
+          ${packageCard(COMPONENT_PACKAGE, v)}
+
           <div class="card mt">
             <h2>Reviewed by</h2>
             <p>${v.guardians.length === 0 ? "No guardian is recorded for this version." : v.guardians.join(", ")}</p>
-            <p class="small muted">Digest <code>${v.digest}</code></p>
-            <div class="row wrap"><button class="btn secondary sm" id="bundle-link" type="button">${icon("external")} Download the package</button><span class="small faint">The link is valid for one hour.</span></div>
+            <div class="row wrap"><button class="btn secondary sm" id="bundle-link" type="button">${icon("external")} Download the archive</button><span class="small faint">The link is valid for one hour.</span></div>
           </div>
 
           <div class="grid-2 mt">

@@ -405,11 +405,11 @@ redirect there, so home screen icons made from them open the app.
 
 ## Recipe and component repositories
 
-A recipe or a component is published from its own GitHub repository. ourapps keeps a catalogue entry (name, version, digests, descriptions, declarations) and a pointer to the repository's release; the package itself stays in the release.
+A recipe or a component is published from its own GitHub repository. ourapps keeps a catalogue entry (name, version, digests, descriptions, declarations) and a pointer to the repository's release; the package itself stays in the release. The package is the source code: one archive file (`.tar`, made by `aepm pack`) holding the implementation, the contract, the tests and a manifest that lists every file with its fingerprint; a recipe's archive holds `recipe.json` and the recipe's own application code and text, and names its components by exact version without including them.
 
 ### A component repository implements
 
-- A GitHub release for each version, tagged for it (for example `v0.1.0`), with the package as a release asset (for example `card-deck-0.1.0.aepm`).
+- A GitHub release for each version, tagged for it (for example `v0.1.0`), with the package as a release asset (for example `card-deck-0.1.0.tar`).
 - In the package: `component.json` with identity `<scope>/<name>`, its provided and required interfaces, and `suitability.json` (who the component suits: jobs, profiles with load, cost, regions, compliance). A component that keeps data also has `migration.json` with a portable export format.
 - Its scope equals the owner of the repository (`acme/card-deck` is published from a repository owned by `acme`).
 - `dependencies` in `component.json` (exact `{ name, version }` of components its code imports) are sent in the catalogue entry, so a deprecation of one of them reaches this component and the recipes that use it.
