@@ -1,6 +1,6 @@
 # ourapps - recipe library, component catalogue and link-only delivery
 
-"Delivering Our Applications, built from Our Recipes, using Our Agentically-Engineered Components." is the tagline (constant `TAGLINE` in `site/src/pages/public.ts`; also in README, `site/index.html`, `llms.txt`, `agents.md`). Our Recipes and Our Components are the shared libraries at `/recipes` and `/components`. The story every page and document tells: a developer starts from a recipe or composes from components (optionally publishing the recipe), an agent builds the application, and a private share link delivers it. The guide (`site/src/pages/guide.ts`) opens with the sections `how-it-works`, `find-recipe`, `compose`, `publish` and `deprecation`, then the delivery steps.
+"Delivering Our Applications, built from Our Recipes, using Our Agentically-Engineered Components." is the tagline (constant `TAGLINE` in `site/src/pages/public.ts`; also in README, `site/index.html`, `llms.txt`, `agents.md`). Our Recipes and Our Components are the shared libraries at `/recipes` and `/components`. Audience: a small business, a club or society, a household, a shop or practice (a clinic, a restaurant, a sports club, a neighbourhood shop, a family), whose people are staff, members, customers and family; the landing hero opens with "Our apps for our businesses, our club, our home, our shop". Benefits stated up front on the landing page, the guide intro and the README: fast, low cost (free plans below ten people, a provider tier chosen from one size answer above), maintainable and safe, yours (own accounts, own data), delivered to every device through one link. The story every page and document tells: a developer starts from a recipe or composes from components (optionally publishing the recipe), an agent builds the application, and a private share link delivers it. Say "the people you share with", "your people", "staff, members, customers, family"; `site/src/library.test.ts` bans "friends and family". The Apple beta group keeps its stored name `Friends (ourapps)` (`BETA_GROUP`) because apps look it up by name. The guide (`site/src/pages/guide.ts`) opens with the sections `how-it-works`, `find-recipe`, `compose`, `publish` and `deprecation`, then the delivery steps.
 
 Repo: github.com/ourapps-ae/ourapps (folder `ourapps/`; renamed from `app-game-store` on
 2026-10-18, GitHub forwards the old URL). Confirm with `git remote -v`. Cloudflare resources keep
@@ -10,7 +10,7 @@ privacy comes from unlisted share links, not from the code being hidden. Product
 
 ## What it is
 
-Developers sign in with GitHub, publish recipes and components to a public library and catalogue (`recipes.md`), add apps and create share links. A friend taps `/l/<id>`
+Developers sign in with GitHub, publish recipes and components to a public library and catalogue (`recipes.md`), add apps and create share links. The people a link is shared with tap `/l/<id>`
 and ends up with the app on their home screen. The store reads each app's `my-app.json`
 (schema 1, owned by `@my:orchestrator`, see `../../.opencode/knowledge/app-manifest.md`)
 from the latest GitHub Release and serves artefacts through signed one-hour links.
@@ -28,7 +28,7 @@ from the latest GitHub Release and serves artefacts through signed one-hour link
 
 - Every page, document and public file carries "Copyright Level N Ltd 2026" (site footers via
   `storeFrame` and `shell`, plus README, CONTRACT.md, agents.md). Keep it when adding pages.
-- Public example content uses the invented "Poker Night" app, never a real app name.
+- Public example content uses the invented "Poker Night" app (a club league night), never a real app name.
 - George's physical iPhones and iPads install and update through TestFlight only; Developer Mode is off. Do not install local builds on them. Simulator builds are separate.
 - User-facing text (site, guide, reference, agents.md, CONTRACT.md, README, SECURITY, messages) states only what is: no history, no "still", "older", "now", "no longer offered", no announced changes, no warnings about roads not taken. Changelogs and the example app's invented release notes are the exception. Owner's standing rule.
 

@@ -27,7 +27,7 @@ function architectureSvg(): Raw {
       <marker id="ah-run" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" ${s("fill:var(--ok)")} /></marker>
     </defs>
 
-    ${label(60, 34, "FRIENDS' DEVICES")}
+    ${label(60, 34, "PEOPLE'S DEVICES")}
     ${card(60, 50, 190, 64, "iPhone or iPad", "native app (.ipa)")}
     ${card(60, 134, 190, 64, "Android phone", "native app (.apk)")}
     ${card(60, 218, 190, 64, "Any browser", "web app, on the home screen")}
@@ -37,7 +37,7 @@ function architectureSvg(): Raw {
     <text x="340" y="86" ${s("fill:var(--accent);font-size:11.5px;font-weight:600")}>distribution only</text>
     ${card(336, 100, 258, 52, "Install page", "/l/&lt;link&gt;: listing, steps, QR")}
     ${card(336, 162, 258, 52, "Signed downloads", "/dl/&#8230;: streams .apk and images")}
-    ${card(336, 224, 258, 52, "TestFlight", "uploads, friends' group, fresh builds")}
+    ${card(336, 224, 258, 52, "TestFlight", "uploads, testers' group, fresh builds")}
     ${card(336, 286, 258, 52, "iPhone signing", "certificate, App Store profile")}
     <text x="465" y="372" text-anchor="middle" ${s("fill:var(--text-2);font-size:11.5px;font-style:italic")}>no app code, API or database runs here</text>
 
@@ -188,10 +188,10 @@ const TOPOLOGIES: Topology[] = [
     id: "topo-iphone",
     title: "iPhone install through TestFlight, step by step",
     file: "testflight-sequence.png",
-    summary: "From a tagged release to the app on a friend's iPhone: signing from ourapps, the upload through ourapps, Apple's processing and beta review, the invitation link, TestFlight's Install.",
+    summary: "From a tagged release to the app on a person's iPhone: signing from ourapps, the upload through ourapps, Apple's processing and beta review, the invitation link, TestFlight's Install.",
     parts: [
-      ["Friend", "TestFlight app, Open the invitation, Accept, Install"],
-      ["ourapps", "signing, upload, friends' group, beta review, fresh build before expiry"],
+      ["Person", "TestFlight app, Open the invitation, Accept, Install"],
+      ["ourapps", "signing, upload, testers' group, beta review, fresh build before expiry"],
       ["You", "add the app once in App Store Connect; push a tag"],
     ],
   },
@@ -222,7 +222,7 @@ function body(): Raw {
           <p>Authenticated new setup, repair, build requests, signing GET/HEAD including aliases, build-number reservation, new upload, upload-operation retrieval and commit return 409 <code>{error:"Target is disabled."}</code> for disabled targets. Status/history and processing/review of already uploaded builds continue. Selection retains setup, source manifests, credentials and artifacts. Re-enabling sends no build or setup; normal scheduled expiry renewal resumes while enabled. Issued signing material, upload operations and download links, existing Apple invitations and hosted addresses remain usable.</p>
           <table class="table">
             <tr><th>Kind</th><th>Examples</th><th>How it reaches people</th><th>Status</th></tr>
-            <tr><td>Native iPhone and iPad</td><td>Swift, SwiftUI, UIKit, Objective-C</td><td>App Store-signed .ipa on TestFlight; friends install with Apple's TestFlight app</td><td><span class="pill ok">supported</span> 10,000 people per app; Apple's beta review</td></tr>
+            <tr><td>Native iPhone and iPad</td><td>Swift, SwiftUI, UIKit, Objective-C</td><td>App Store-signed .ipa on TestFlight; people install with Apple's TestFlight app</td><td><span class="pill ok">supported</span> 10,000 people per app; Apple's beta review</td></tr>
             <tr><td>Native Android</td><td>Kotlin, Java, Jetpack Compose</td><td>Signed universal .apk, direct download</td><td><span class="pill ok">supported</span> no device limit</td></tr>
             <tr><td>Mac and Windows</td><td>Native or wrapped desktop apps</td><td>Mac .dmg and Windows .exe downloads with named architecture choices</td><td><span class="pill ok">supported</span> system security policy applies</td></tr>
             <tr><td>Mac and Apple TV TestFlight</td><td>macOS and tvOS builds</td><td>Separate platform setup, builds and ready invitations</td><td><span class="pill ok">supported</span> Apple's beta review</td></tr>
@@ -237,7 +237,7 @@ function body(): Raw {
             <li>Running server code, APIs or databases on ourapps. It distributes apps; it does not host their logic.</li>
             <li>Native Linux, Apple Watch and Vision Pro install flows.</li>
             <li>Android App Bundles (.aab) as they are: phones cannot install them. Convert to a universal .apk (<a href="#android">how</a>).</li>
-            <li>iPhone apps that skip Apple's beta review: every iPhone build reaches friends through TestFlight.</li>
+            <li>iPhone apps that skip Apple's beta review: every iPhone build reaches people through TestFlight.</li>
             <li>Features that need App Store distribution, such as real in-app purchases.</li>
           </ul>
         </section>
@@ -291,13 +291,13 @@ function body(): Raw {
 
         <section id="ios">
           <h2>Native iPhone and iPad</h2>
-          <p>Through Apple's TestFlight: friends install with Apple's free TestFlight app from a public invitation link. Nothing on the phone changes. ourapps does the Apple side.</p>
+          <p>Through Apple's TestFlight: people install with Apple's free TestFlight app from a public invitation link. Nothing on the phone changes. ourapps does the Apple side.</p>
           <ol class="steps">
             <li><b>Signing setup, once.</b> Your browser makes an RSA key and a certificate request; with your App Store Connect key ourapps gets an Apple Distribution certificate (<code>POST /v1/certificates</code>) and stores the key encrypted.</li>
             <li><b>TestFlight setup, once per app.</b> You add the app in App Store Connect (Apple has no API for that); the TestFlight card on the app's page lists every field of Apple's New App form. ourapps finds it by bundle ID, makes an App Store profile, an external beta group with a public link (<code>/v1/betaGroups</code>), and fills in the beta review contact and description.</li>
             <li><b>Build.</b> Your workflow fetches certificate, key and the App Store profile from <code>/api/build/&lt;app&gt;/signing</code> with the app's build token and exports for <code>app-store-connect</code>.</li>
             <li><b>Upload.</b> The workflow asks ourapps to reserve an upload (<code>/v1/buildUploads</code>), sends the bytes straight to Apple's upload addresses, and tells ourapps the MD5. No Apple key in the repository.</li>
-            <li><b>Distribute.</b> Every ten minutes ourapps checks Apple; once the build is processed it answers export compliance (no non-exempt encryption) where the build has no answer, adds it to the friends' group, sets What to Test from your release notes, submits it for beta review (the first build of each version) and, once approved, makes it available to the group.</li>
+            <li><b>Distribute.</b> Every ten minutes ourapps checks Apple; once the build is processed it answers export compliance (no non-exempt encryption) where the build has no answer, adds it to the testers' group, sets What to Test from your release notes, submits it for beta review (the first build of each version) and, once approved, makes it available to the group.</li>
             <li><b>Open.</b> ourapps reads the public invitation page; the install page offers the invitation only while that page accepts testers.</li>
             <li><b>Keep it alive.</b> Builds last 90 days; two weeks before expiry ourapps sends <code>my-store-release</code> to the repository for a fresh build.</li>
           </ol>
@@ -358,7 +358,7 @@ unzip app.apks universal.apk</code></pre></li>
           </table>
           <h3>What a per-link origin means for web.zip apps</h3>
           <ul class="bullets">
-            <li><b>Storage is per link.</b> localStorage, IndexedDB, service workers and permissions belong to <code>&lt;link&gt;.ourapps.app</code>. A friend who receives two links has two separate copies of local data, and revoking a link strands the data on that origin. Keep anything that must survive on your backend.</li>
+            <li><b>Storage is per link.</b> localStorage, IndexedDB, service workers and permissions belong to <code>&lt;link&gt;.ourapps.app</code>. A person who receives two links has two separate copies of local data, and revoking a link strands the data on that origin. Keep anything that must survive on your backend.</li>
             <li><b>Calling your API.</b> Allow the link origins in CORS, for example by matching <code>^https://[0-9a-f]{16,64}\\.ourapps\\.app$</code>. Authenticate with tokens in an <code>Authorization</code> header, not cookies: your API is on another site, and browsers block third-party cookies.</li>
             <li><b>Isolation.</b> The console's cookies are host-only and <code>__Host-</code> prefixed, so a bundle can neither read nor plant them, and the console refuses writes from other origins.</li>
           </ul>

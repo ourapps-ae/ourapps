@@ -31,6 +31,7 @@ export const PRINCIPLES: string[] = [
   "Limits are usually per account, not per app. Two apps on one Cloudflare or LiveKit account share one allowance.",
   "Watch for pausing and deletion: several free databases pause after a week or archive after ten days without use, which suits a weekly game night but not a monthly one.",
   "Read the use clause: some free plans are non-commercial or personal only (Vercel Hobby, Tailscale Personal, Protomaps hosted tiles), and free AI tiers often use your prompts for training.",
+  "A business, club or practice is commercial use. Pick plans whose terms allow it, and move to the provider's paid tier when the free limits or terms stop fitting; a recipe's size answer chooses the tier.",
   "Keep secrets on the server: API keys go into Worker secrets or environment variables, never into the app bundle. Hand the app short-lived tokens instead.",
 ];
 
@@ -38,7 +39,7 @@ export const CATEGORIES: Category[] = [
   {
     id: "ft-realtime",
     title: "Realtime and multiplayer",
-    why: "Live game moves, shared lists, chat and presence. Hosting this for the public costs real money; for a table of friends it fits comfortably in free plans if the server only wakes when something happens.",
+    why: "Live game moves, shared lists, chat and presence. Hosting this for the public costs real money; for a small organisation it fits comfortably in free plans if the server only wakes when something happens.",
     practices: [
       "One Durable Object per room or table (`getByName(roomId)`), never one global object.",
       "Accept sockets with `ctx.acceptWebSocket()` (the Hibernation API), never `accept()`: hibernating sockets cost nothing while idle, while `accept()` bills the whole time a socket is open. One object kept awake all day uses about 85% of the free daily duration.",
@@ -73,7 +74,7 @@ export const CATEGORIES: Category[] = [
           "Deploy with `npx wrangler deploy`; store secrets with `npx wrangler secret put NAME`.",
         ],
         env: ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID (for deploys from CI)"],
-        fits: "Turn-based and realtime games, shared lists, chat and presence for small groups. Skull and McInPoker run on it.",
+        fits: "Turn-based and realtime games, shared lists, chat and presence for small groups. Game tables and shared lists for a club run on it.",
         sources: [
           "https://developers.cloudflare.com/durable-objects/platform/pricing/",
           "https://developers.cloudflare.com/durable-objects/best-practices/websockets/",
@@ -176,7 +177,7 @@ export const CATEGORIES: Category[] = [
   {
     id: "ft-video",
     title: "Video and voice calls",
-    why: "Video is the most expensive thing a public app can add. A few friends on a call fit inside the monthly free minutes of a hosted video service, which also handles the hard parts (relays for difficult networks, many phones at once).",
+    why: "Video is the most expensive thing a public app can add. A few people on a call fit inside the monthly free minutes of a hosted video service, which also handles the hard parts (relays for difficult networks, many phones at once).",
     practices: [
       "Count participant minutes, not calls: 4 people for 60 minutes is 240 minutes.",
       "Send low resolution from phones (a small tile per player does not need HD) and offer audio only.",
@@ -202,11 +203,11 @@ export const CATEGORIES: Category[] = [
         ],
         setup: [
           "Create a project at cloud.livekit.io; store `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` as server secrets.",
-          "Server: sign a join token per user and room (official server SDK, or an HS256 JWT signed with WebCrypto in a Worker, as Skull does).",
+          "Server: sign a join token per user and room (official server SDK, or an HS256 JWT signed with WebCrypto in a Worker).",
           "Clients: `livekit-client` (web), LiveKit Swift and Android SDKs; `room.connect(url, token)`.",
         ],
         env: ["LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"],
-        fits: "Video or voice for 2 to 10 people per room. Skull and McInPoker use it.",
+        fits: "Video or voice for 2 to 10 people per room. A video room for a team meeting or a table game uses it.",
         sources: ["https://livekit.io/pricing", "https://docs.livekit.io/deploy/admin/quotas-and-limits/"],
       },
       {
@@ -270,7 +271,7 @@ export const CATEGORIES: Category[] = [
           "Load `https://8x8.vc/external_api.js`; `new JitsiMeetExternalAPI(\"8x8.vc\", { roomName, jwt, parentNode })`.",
         ],
         env: ["JAAS_APP_ID", "JAAS_KEY_ID", "JAAS_PRIVATE_KEY"],
-        fits: "A family video room for up to 25 devices.",
+        fits: "A household or team video room for up to 25 devices.",
         sources: ["https://developer.8x8.com/jaas/docs/faq", "https://jitsi.org/blog/changes-coming/"],
       },
       {
@@ -507,7 +508,7 @@ export const CATEGORIES: Category[] = [
         plan: "Zero Trust Free",
         free: ["Puts an email-based login in front of any hostname; up to 500 Access applications."],
         catches: ["The free seat count is unverified (commonly 50); turn on seat expiration."],
-        setup: ["Zero Trust dashboard, Access, Applications: add the hostname and an allow policy listing family email addresses."],
+        setup: ["Zero Trust dashboard, Access, Applications: add the hostname and an allow policy listing the email addresses of the people allowed in."],
         fits: "Locking an admin page or a web app to named people.",
         sources: ["https://developers.cloudflare.com/cloudflare-one/account-limits/"],
       },
@@ -545,7 +546,7 @@ export const CATEGORIES: Category[] = [
         free: ["No server cost; offline."],
         catches: ["Only recent flagship phones (Pixel 9 and later, Galaxy S25 and later and others); foreground only; per-app quotas."],
         setup: ["Add the ML Kit GenAI dependency; check feature status; call the Prompt or Summarization client."],
-        fits: "On-device text features for friends with recent Android phones.",
+        fits: "On-device text features for people with recent Android phones.",
         sources: ["https://developers.google.com/ml-kit/genai"],
       },
       {

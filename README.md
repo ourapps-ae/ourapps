@@ -1,14 +1,26 @@
 # ourapps - Delivering Our Applications, built from Our Recipes, using Our Agentically-Engineered Components
 
-A developer picks a recipe from the public library, or composes an application from catalogue
-components and may publish the recipe. An agent builds the application, and the developer sends a
-friend a link or a QR code; the friend taps it and the app lands on their home screen. Share links
-are private and apps are not listed or searchable. No App Store, no Google Play, no accounts for
-friends. The recipe library and component catalogue are public and described below.
+Our apps for our businesses, our club, our home, our shop. A small business, a club or society, a
+household, a shop or practice picks a recipe from the public library, or composes an application
+from catalogue components and may publish the recipe. An agent builds the application, and the
+developer sends a link or a QR code; staff, members, customers or family tap it and the app lands
+on their device. Share links are private and apps are not listed or searchable. No App Store, no
+Google Play, no accounts for the people you share with. The recipe library and component catalogue
+are public and described below.
 
-- iPhone and iPad: Apple's TestFlight. The friend gets Apple's free TestFlight app, opens the
+- Fast: an application from a recipe in minutes rather than days of building.
+- Low cost: little AI spending; a clinic of fewer than ten people can run on free plans, and a
+  larger business pays only for the provider tier it needs, chosen from one answer about size.
+- Maintainable and safe: reviewed components, small updates you approve, security tests built in,
+  a record of what is inside, and data you can move.
+- Yours: your accounts and your data; your application's servers and databases run on your own
+  accounts, with no lock-in.
+- Delivered to staff, members and customers on phones, tablets, computers and televisions through
+  one link.
+
+- iPhone and iPad: Apple's TestFlight. The person gets Apple's free TestFlight app, opens the
   invitation on the install page and taps Install. ourapps signs each build, the workflow uploads
-  it through ourapps, and ourapps sends it to the friends' group and asks for a fresh build before
+  it through ourapps, and ourapps sends it to the testers' group and asks for a fresh build before
   the 90-day expiry.
 - Android: a direct APK download with a one-time walkthrough of the "allow from this
   source" and Play Protect prompts.
@@ -36,7 +48,7 @@ friends. The recipe library and component catalogue are public and described bel
 
 ## Two faces
 
-- Friends see an App Store style page at `/l/<id>`: icon, tagline, facts strip, screenshots,
+- The people you share with see an App Store style page at `/l/<id>`: icon, tagline, facts strip, screenshots,
   about, what's new, privacy, information, share. Blank fields get generated placeholders so a
   bare listing still looks finished. The page detects iPhone, Android, desktop and in-app
   browsers and shows the right install steps.
@@ -56,7 +68,7 @@ TestFlight, share). `llms.txt` points agents at both documents.
 ## Security and terms
 
 The guide's Security section (`/dev/guide#security`) explains how credentials, account access
-and app files are protected; nothing is recorded about friends. Developers accept the terms and data
+and app files are protected; nothing is recorded about the people you share with. Developers accept the terms and data
 statement (`/terms`, version in `shared/src/terms.ts`) at first sign-in and after any change;
 the accepted version is shown in the profile, which also offers account deletion (recipes and
 components stay, orphaned).
@@ -115,7 +127,7 @@ short list at `/dev/guide#tldr` is the definitive list.
    follow the TestFlight card on the app's page; its one manual step is adding the app in App
    Store Connect, and it lists every field to fill in.
 4. Make the repository follow `CONTRACT.md`: publish releases with `my-app.json` and
-   `CHANGELOG.md` (its sections become the revision history friends see), fetch signing from
+   `CHANGELOG.md` (its sections become the revision history your people see), fetch signing from
    `/api/build/<app>/signing`, upload the iPhone build through ourapps, run on `my-store-release`.
 5. Create a share link for the app and send it, or show the QR code.
 
@@ -127,7 +139,7 @@ the Apple key and the GitHub token.
 Each share link is `/l/<random id>`. Give it a label (who it is for), an optional expiry,
 and revoke it any time. The install page detects iPhone, Android or desktop and shows the
 right steps. In-app browsers (Instagram, Facebook, Gmail) cannot install; the page tells
-the friend to open it in Safari or Chrome.
+the person to open it in Safari or Chrome.
 
 Your public page `/<your-slug>` lists only apps you switch on, details only, no install
 links, and is marked noindex. The names `recipes`, `components` and `sitemap.xml` are not
@@ -137,7 +149,7 @@ available as page names.
 
 - TestFlight: up to 10,000 people per app; Apple's beta review checks the first build of each
   version; builds last 90 days and ourapps asks the repository for a fresh one before then.
-- Android does not auto-update. Friends tap Update; an app can offer it by polling
+- Android does not auto-update. People tap Update; an app can offer it by polling
   `/api/public/links/<id>/latest` (see the guide, "Auto-update").
 - Install links for the APK are signed and last one hour; the install
   page makes fresh ones every time it loads.

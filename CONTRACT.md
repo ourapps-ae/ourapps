@@ -1,6 +1,6 @@
 # Contract for repositories
 
-What a repository must publish so ourapps can deliver its application to friends on phones, computers and Apple TV, or in a browser, and what a recipe or component repository must publish to join the public library and catalogue.
+What a repository must publish so ourapps can deliver its application to staff, members, customers and family on phones, computers and Apple TV, or in a browser, and what a recipe or component repository must publish to join the public library and catalogue.
 The tagline is: Delivering Our Applications, built from Our Recipes, using Our Agentically-Engineered Components.
 ourapps never looks at your source; for an app it reads one release asset and talks to one workflow.
 Served at https://ourapps.app/contract.md; the API reference for agents is at
@@ -163,11 +163,11 @@ On a phone or tablet the page shows the matching version; on a computer it shows
 
 ## 2. iPhone and iPad through TestFlight
 
-Friends install iPhone and iPad apps through Apple's TestFlight app from a public invitation
+People install iPhone and iPad apps through Apple's TestFlight app from a public invitation
 link, with nothing to change in Settings. ourapps holds the signing material, uploads go through
-ourapps, and ourapps puts each processed build in the friends' group and sends it for Apple's beta
+ourapps, and ourapps puts each processed build in the testers' group and sends it for Apple's beta
 review (the first build of each version). A TestFlight build lasts 90 days; ourapps asks the
-repository for a fresh build before then (step 5), so friends keep the app indefinitely.
+repository for a fresh build before then (step 5), so people keep the app indefinitely.
 
 Once per app the developer adds it in App Store Connect; Apple offers no API for this. The
 TestFlight card on the app's page in ourapps lists every field of Apple's New App form, notices
@@ -176,7 +176,7 @@ the repository `my-store-release` (step 5) for the first build.
 
 The public link lets anyone with it join; nobody is invited one by one. Apple's page for the link
 refuses testers until a build in the group has passed beta review, so the install page offers
-the invitation only once ourapps has read that page and found it open; until then friends on
+the invitation only once ourapps has read that page and found it open; until then people on
 iPhone see "coming soon", with the web version when there is one.
 
 A universal app needs nothing extra: build one `.ipa` with `TARGETED_DEVICE_FAMILY` set to `1,2`.
@@ -258,9 +258,9 @@ jq -n --arg f "$(jq -r .uploadFileId upload.json)" --arg m "$MD5" '{uploadFileId
     --data-binary @- "$API/commit"
 ```
 
-`whatsNew` is the version's release notes; TestFlight shows them to friends. ourapps checks
+`whatsNew` is the version's release notes; TestFlight shows them to people. ourapps checks
 Apple every ten minutes: once the build is processed, it answers export compliance where the
-build has no answer, adds the build to the friends' group, sends it for beta review, makes it available to the group
+build has no answer, adds the build to the testers' group, sends it for beta review, makes it available to the group
 when Apple approves it (App Store Connect's "Notify Testers"), and reads the invitation page. The
 app's page in ourapps shows each step and what it waits for.
 
@@ -360,7 +360,7 @@ In the build output:
   `apple-touch-icon` tags, so the app runs from the home screen.
 - A copy of https://ourapps.app/web/install-banner.js, fetched at build time and loaded with
   `<script src="install-banner.js" defer></script>`: the "add to home screen" banner the install
-  page tells friends to expect. Copy it; do not link to ourapps.
+  page tells people to expect. Copy it; do not link to ourapps.
 - `_headers` at the root: `X-Robots-Tag: noindex` for `/*`, and for threaded Unity or Godot
   builds `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`.
 - No pre-compressed files. Cloudflare compresses `.html`, `.js`, `.css` and `.wasm` itself and
