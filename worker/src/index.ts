@@ -93,6 +93,8 @@ async function route(request: Request, env: Env, deps: Deps): Promise<Response> 
     if (p.length === 3) return recipes ? catalogue.recipeDetail(env, p[1], p[2]) : catalogue.componentDetail(env, p[1], p[2]);
     if (p.length === 4 && p[3] === "bundle") return recipes ? catalogue.recipeBundle(env, deps, p[1], p[2]) : catalogue.componentBundle(env, deps, p[1], p[2]);
     if (p.length === 4 && p[3] === "diagram.svg" && recipes) return catalogue.recipeDiagram(env, p[1], p[2]);
+    if (p.length === 4 && p[3] === "components.svg" && recipes) return catalogue.recipeComponentsDiagram(env, p[1], p[2]);
+    if (p.length === 4 && p[3] === "connections.svg" && !recipes) return catalogue.componentConnectionsDiagram(env, p[1], p[2]);
     if (p.length === 4 && p[3] === "deprecations") return catalogue.deprecations(env, recipes ? "recipe" : "component", p[1], p[2]);
   }
 

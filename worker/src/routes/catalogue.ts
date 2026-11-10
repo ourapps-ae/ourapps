@@ -2,6 +2,9 @@
 // D1 holds pointers and page material; the packages stay in the publisher's GitHub releases.
 import {
   DEPRECATED_FILTERS,
+  NEIGHBOURS_SHOWN,
+  componentConnectionsSvg,
+  recipeComponentsSvg,
   isCatalogueName,
   isCatalogueSlug,
   isVersion,
@@ -227,11 +230,42 @@ async function componentDetailView(env: Env, name: string, version: string): Pro
   return componentView(env, d, found.entry, found.row);
 }
 
+const SVG_HEADERS = { "Content-Type": "image/svg+xml", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox" };
+
 // GET /api/recipes/:name/:version/diagram.svg
 export async function recipeDiagram(env: Env, name: string, version: string): Promise<Response> {
   const found = await db(env).recipeVersion(slugOf(name), versionOf(version));
   if (!found?.row.diagram) throw new HttpError(404, "no diagram");
-  return new Response(found.row.diagram, { headers: { "Content-Type": "image/svg+xml", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox", "Cache-Control": "no-store" } });
+  return new Response(found.row.diagram, { headers: { ...SVG_HEADERS, "Cache-Control": "no-store" } });
+}
+
+// GET /api/recipes/:name/:version/components.svg: the recipe's components by category and the connections between them.
+export async function recipeComponentsDiagram(env: Env, name: string, version: string): Promise<Response> {
+  const d = db(env);
+  const found = await d.recipeVersion(slugOf(name), versionOf(version));
+  if (!found) throw new HttpError(404, "no such recipe version");
+  const r = found.row;
+  const listed = await d.catalogueFor(r.recipe.components.map((c) => ({ name: c.name, version: c.version })));
+  const svg = recipeComponentsSvg({ name: r.name, version: r.version, title: r.title, components: r.recipe.components, connections: r.recipe.connections, catalogue: listed });
+  return new Response(svg, { headers: { ...SVG_HEADERS, "Cache-Control": "public, max-age=300" } });
+}
+
+// GET /api/components/:name/:version/connections.svg: what the component requires and provides, and the catalogue
+// components on the other side of each interface, found with the same queries as ?provides= and ?requires=.
+export async function componentConnectionsDiagram(env: Env, name: string, version: string): Promise<Response> {
+  const d = db(env);
+  const found = await d.componentVersion(slugOf(name), versionOf(version));
+  if (!found) throw new HttpError(404, "no such component version");
+  const r = found.row;
+  const lookup = async (direction: "provides" | "requires", type: string) => {
+    const { rows, total } = await d.listComponents({ [direction]: type, deprecated: "include", limit: NEIGHBOURS_SHOWN + 1, offset: 0 });
+    const others = rows.filter((x) => x.name !== r.name);
+    return { components: others.map((x) => ({ name: x.name, version: x.version, category: x.category })), total: total - (rows.length - others.length) };
+  };
+  const pairs = async (ports: { type: string }[], direction: "provides" | "requires") => Object.fromEntries(await Promise.all([...new Set(ports.map((p) => p.type))].map(async (t) => [t, await lookup(direction, t)] as const)));
+  const [providers, consumers] = await Promise.all([pairs(r.requires, "provides"), pairs(r.provides, "requires")]);
+  const svg = componentConnectionsSvg({ name: r.name, version: r.version, category: r.category, targets: r.targets, provides: r.provides, requires: r.requires, profiles: r.suitability?.profiles ?? [], providers, consumers });
+  return new Response(svg, { headers: { ...SVG_HEADERS, "Cache-Control": "public, max-age=300" } });
 }
 
 // The release asset behind a version, checked against the recorded digest. The publisher's token is used while the

@@ -2,6 +2,7 @@
 import { COMPONENT_PACKAGE, RECIPE_PACKAGE, describeCondition, type BundleLink, type PackageSummary, type ComponentList, type ComponentSearch, type ComponentSummary, type ComponentVersionView, type Deprecation, type EntryStatus, type Profile, type RecipeList, type RecipeSearch, type RecipeSummary, type RecipeVersionView } from "@my/store-shared";
 import { ApiError, api, whoAmI } from "../api.js";
 import { html, mount, raw, type Raw } from "../html.js";
+import { svgFigure } from "../figures.js";
 import { renderMarkdown } from "../markdown.js";
 import { CLIENT_TARGET_LABEL, answerText, costLabel, deprecationAdvice, deprecationSentence, includedWhenText, loadText, queryString, readQuery, releaseUrl, statusLabel, targetLabel, versionFromSearch, withFilter, type LibraryQuery } from "../library.js";
 import { navigate } from "../nav.js";
@@ -330,8 +331,14 @@ export function recipeBody(v: RecipeVersionView, requested: string): Raw {
           <div class="card mt">
             <h2>About</h2>
             <div class="markdown">${raw(renderMarkdown(v.description))}</div>
-            ${v.diagram ? html`<h3 class="mt">Design diagram</h3><a href="${v.diagram}" target="_blank" rel="noopener"><img src="${v.diagram}" alt="Design diagram of ${v.title}: its components and how they connect" style="max-width:100%;background:#fff;border-radius:12px;border:1px solid var(--line)" /></a>` : ""}
             ${v.screenshots.length > 0 ? html`<h3 class="mt">Screenshots</h3><div class="row wrap" style="gap:10px;align-items:flex-start">${v.screenshots.map((s) => html`<img src="${s}" alt="" loading="lazy" style="max-height:320px;border-radius:12px;border:1px solid var(--line)" />`)}</div>` : ""}
+          </div>
+
+          <div class="card mt" id="how-components-connect">
+            <h2>How its components connect</h2>
+            <p class="muted small">Drawn by ourapps from the recipe and the catalogue: each component in a zone by category, each line an interface from the component that provides it to the one that requires it.</p>
+            ${svgFigure(`/api/recipes/${v.slug}/${v.version}/components.svg`, `Diagram of the ${v.components.length} components of ${v.title}, grouped by category, with ${v.connections.length} lines from each component that provides an interface to each component that requires it.`)}
+            ${v.diagram ? html`<h3 class="mt">Publisher's diagram</h3>${svgFigure(v.diagram, `The publisher's design diagram of ${v.title}`)}` : ""}
           </div>
 
           <div class="card mt">
@@ -430,6 +437,12 @@ export function componentBody(v: ComponentVersionView, requested: string): Raw {
           <div class="grid-2 mt">
             <div class="card"><h2>Provides</h2>${ports(v.provides, "provides")}</div>
             <div class="card"><h2>Requires</h2>${ports(v.requires, "requires")}</div>
+          </div>
+
+          <div class="card mt" id="what-it-connects-to">
+            <h2>What it connects to</h2>
+            <p class="muted small">Left: the catalogue components that provide what it requires. Right: the catalogue components that require what it provides.</p>
+            ${svgFigure(`/api/components/${v.slug}/${v.version}/connections.svg`, `Diagram of ${v.name} ${v.version}: on the left the ${v.requires.length} interfaces it requires and the catalogue components that provide them, on the right the ${v.provides.length} interfaces it provides and the catalogue components that require them.`)}
           </div>
 
           ${v.dependencies.length > 0 ? html`<div class="card mt"><h2>Builds on</h2><ul class="bullets">${v.dependencies.map((d) => html`<li><a href="/components/${d.name.split("/")[1]}">${d.name}</a> ${d.version}</li>`)}</ul></div>` : none}

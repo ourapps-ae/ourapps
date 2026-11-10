@@ -1,6 +1,7 @@
 // The developer guide: recipes and components, then delivery from first sign-in to the first person installing.
 import { CATEGORIES, CHECKED, PRINCIPLES, servicePrompt, type Service } from "../freeTiers.js";
 import { escapeHtml, html, raw, type Raw } from "../html.js";
+import { cookingFigure } from "../figures.js";
 import { callout, icon, wireCopy } from "../ui.js";
 import { diagram, wireFigures } from "./reference.js";
 import { mountShell, requireMe } from "./shell.js";
@@ -17,6 +18,9 @@ function sections(origin: string, slug: string): Section[] {
       title: "How ourapps works",
       body: html`
         <p>ourapps delivers applications for your business, your club, your home or your shop: a clinic's appointment board, a club's league night, a shop's order screen, a household's chores planner, a restaurant's table display. They are built from recipes, using components. A <b>component</b> is a reviewed, reusable part of an application, such as a card deck or a seating plan. It states what it provides, what it needs, who it suits and how its data moves. A <b>recipe</b> is a list of components, the questions that choose between them, and how they connect. A coding agent assembles the application from a recipe and your answers. The <a href="/recipes">recipe library</a> and the <a href="/components">component catalogue</a> are public; delivery to your people is private.</p>
+        <h3>How a recipe is cooked</h3>
+        <p>You and your agent answer the recipe's questions. The recipe and your answers make a design: conditions decide which components are included, the answer about size chooses a provider for each job, settings are applied and every connection is checked. aepm then resolves exact versions, downloads each archive from its publisher's GitHub release, checks its digest and signatures, lets you review, installs by copying files without running their code, and verifies the result with the components' tests. The application runs on your own accounts and reaches your people through a share link. Each update is proposed, approved by you and applied with recovery.</p>
+        ${cookingFigure()}
         <h3>What you get</h3>
         <ul class="bullets">
           <li><b>Fast.</b> An application from a recipe in minutes, rather than days of building.</li>

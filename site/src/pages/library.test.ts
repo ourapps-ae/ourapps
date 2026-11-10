@@ -82,6 +82,11 @@ describe("recipe page", () => {
     expect(html).not.toContain("aepm create poker-night");
     expect(html).toContain("Poker Night deals a hand");
     expect(html).toContain('src="https://ourapps.app/api/recipes/poker-night/0.1.0/diagram.svg"');
+    expect(html).toContain("Publisher's diagram");
+    expect(html).toContain("How its components connect");
+    expect(html).toContain('href="/api/recipes/poker-night/0.1.0/components.svg" target="_blank"');
+    expect(html).toContain('src="/api/recipes/poker-night/0.1.0/components.svg"');
+    expect(html.indexOf("components.svg")).toBeLessThan(html.indexOf("diagram.svg"));
     expect(html).toContain("Questions it asks (7)");
     expect(html).toContain("Starting chips?");
     expect(html).toContain("a reference, never a value");
@@ -112,7 +117,8 @@ describe("recipe page", () => {
     expect(html).not.toContain("<img src=x");
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");
-    expect(html).not.toContain("Design diagram");
+    expect(html).not.toContain("Publisher's diagram");
+    expect(html).toContain("components.svg");
     expect(html).toContain("This recipe asks no questions.");
     expect(html).not.toContain("Choosing by suitability");
   });
@@ -135,6 +141,9 @@ describe("component page", () => {
   it("shows interfaces, suitability, guardians, migration, recipes that use it and versions", () => {
     const html = componentBody(componentView(), "latest").html;
     expect(html).toContain("acme/card-deck");
+    expect(html).toContain("What it connects to");
+    expect(html).toContain('href="/api/components/card-deck/0.1.0/connections.svg" target="_blank"');
+    expect(html).toContain('src="/api/components/card-deck/0.1.0/connections.svg"');
     expect(html).toContain("Example Guardian Ltd");
     expect(html).toContain("ae/card-deck");
     expect(html).toContain('href="/components?requires=ae%2Fcard-deck"');
