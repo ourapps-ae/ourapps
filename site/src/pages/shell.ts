@@ -47,7 +47,7 @@ export async function requireMe(root: HTMLElement): Promise<Me | null> {
   return null;
 }
 
-export function shell(me: Me, title: string, body: Raw, opts: { sub?: string; actions?: Raw; crumbs?: Raw } = {}): Raw {
+export function shell(me: Me, title: string, body: Raw, opts: { sub?: string; actions?: Raw; crumbs?: Raw; bare?: boolean } = {}): Raw {
   const path = location.pathname;
   const links = NAV.map((n) => html`<a class="nav ${n.match(path) ? "active" : ""}" href="${n.href}">${icon(n.icon)} ${n.label}</a>`);
   return html`
@@ -66,7 +66,7 @@ export function shell(me: Me, title: string, body: Raw, opts: { sub?: string; ac
         </div>
         <main class="content fade-in">
           ${opts.crumbs ? html`<div class="crumbs">${opts.crumbs}</div>` : ""}
-          <div class="page-head"><div><h1>${title}</h1>${opts.sub ? html`<p>${opts.sub}</p>` : ""}</div>${opts.actions ?? ""}</div>
+          ${opts.bare ? "" : html`<div class="page-head"><div><h1>${title}</h1>${opts.sub ? html`<p>${opts.sub}</p>` : ""}</div>${opts.actions ?? ""}</div>`}
           ${body}
           <footer class="console-footer">${COPYRIGHT} · <a href="/terms">Terms and data statement</a> · <a href="/dev/guide#security">Security</a> · <a href="${SOURCE_URL}" target="_blank" rel="noopener">Source</a></footer>
         </main>

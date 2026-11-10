@@ -7,7 +7,7 @@ import { signingRequest } from "../signing.js";
 import { buildStatusCard, watchBuildStatus } from "../buildStatus.js";
 import { retainedTargetRelease, targetEnabled, targetSections, wireTargets } from "../targets.js";
 import { appIcon, callout, copyRow, copyText, emptyState, errorBox, fmtDate, icon, pill, statePill, toast, wireCopy, wireImages } from "../ui.js";
-import { AGENT_REPO_PROMPT, AGENT_STORE_PROMPT } from "./prompts.js";
+import { AGENT_RECIPE_PROMPT, AGENT_REPO_PROMPT, AGENT_STORE_PROMPT } from "./prompts.js";
 import { SOURCE_URL } from "./public.js";
 import { failed, mountShell, requireMe } from "./shell.js";
 
@@ -1346,6 +1346,7 @@ export async function agents(root: HTMLElement): Promise<void> {
   const first = apps[0];
   const repoPrompt = repoPromptFor(first);
   const storePrompt = AGENT_STORE_PROMPT();
+  const recipePrompt = AGENT_RECIPE_PROMPT();
 
   mountShell(
     root,
@@ -1393,11 +1394,31 @@ export async function agents(root: HTMLElement): Promise<void> {
         </div>
       </div>
 
+      <div class="section-title" id="recipes-and-components"><h2>Using recipes and components</h2></div>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Where an agent finds them</h3>
+          <table class="table small mt-s">
+            <tr><td><code>GET /api/recipes/search?q=</code></td><td>search recipes (no key)</td></tr>
+            <tr><td><code>GET /api/components/search?q=</code></td><td>search components; filter by <code>provides</code> and <code>requires</code></td></tr>
+            <tr><td><code>/recipes/:name.txt</code>, <code>/components/:name.txt</code></td><td>the whole entry as plain text: questions, components, settings, suitability</td></tr>
+            <tr><td><code>GET /api/recipes/:name/latest</code></td><td>the same as JSON; <code>.../:version/bundle</code> gives a one-hour download link</td></tr>
+            <tr><td><code>https://github.com/ourapps-ae/:name</code></td><td>each package's public source and releases</td></tr>
+          </table>
+          <p class="small muted mt-s">Every response lists deprecations. The agent tells you before building on a deprecated or orphaned entry. Details: <a href="/agents.md#recipe-library-and-component-catalogue">agents.md</a>.</p>
+        </div>
+        <div class="card">
+          <h3>Tools</h3>
+          <p class="small muted"><b>aepm</b> packs, resolves, reviews, installs, verifies and updates packages, and draws the design diagram. It runs no package code during installation. Get it from <a href="https://github.com/ourapps-ae/aepm" target="_blank" rel="noopener">github.com/ourapps-ae/aepm</a>. It needs Python 3.12, Node.js and Graphviz; run <code>python3 -m aepm --help</code> from the checkout.</p>
+          <p class="small muted"><b>Coming soon, not yet available:</b> <code>aepm create</code> (assemble a recipe from your answers in one command), and the component scaffolder and checker. Until then an agent reads the recipe, asks the questions, and installs the chosen components with aepm.</p>
+        </div>
+      </div>
+
       <div class="section-title"><h2>Prompts for your agents</h2></div>
       ${apps.length > 0
         ? html`<div class="field prompt-app"><label for="prompt-app">Project</label><select id="prompt-app">${apps.map((a) => html`<option value="${a.id}">${a.name}</option>`)}<option value="">A new app (placeholders)</option></select></div>`
         : ""}
-      <p class="muted small">Copy, fill in the angle brackets if any remain, and paste into your coding agent. The first one works inside the app repository; the second one drives this console through the API.</p>
+      <p class="muted small">Copy, fill in the angle brackets if any remain, and paste into your coding agent. The first works inside the app repository, the second drives this console through the API, the third builds an application from a recipe.</p>
       <div class="card">
         <h3>1. Set up the app repository <span class="faint small" id="prompt-for">${filledFor(first)}</span></h3>
         <p class="small muted">Give this to an agent running inside the repository (Claude Code, Codex, Cursor, opencode). It creates the release workflow and my-app.json the contract asks for.</p>
@@ -1407,6 +1428,11 @@ export async function agents(root: HTMLElement): Promise<void> {
         <h3>2. Manage the console through the API</h3>
         <p class="small muted">Give this to an agent that has your API key in the environment variable <code>OURAPPS_API_KEY</code>. It can register apps, check releases, set up TestFlight and hand you share links.</p>
         <div class="prompt-box"><button class="btn sm secondary" data-copy="${storePrompt}">${icon("copy")} Copy</button><pre>${storePrompt}</pre></div>
+      </div>
+      <div class="card">
+        <h3>3. Build an application from a recipe</h3>
+        <p class="small muted">Give this to any coding agent. It finds a recipe and its components, asks you the recipe's questions, shows you what it will install, and installs with aepm. It needs no API key.</p>
+        <div class="prompt-box"><button class="btn sm secondary" data-copy="${recipePrompt}">${icon("copy")} Copy</button><pre>${recipePrompt}</pre></div>
       </div>
     `,
     { sub: "Let a coding agent do the repository work and drive this console for you." },

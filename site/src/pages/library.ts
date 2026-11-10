@@ -7,6 +7,8 @@ import { navigate } from "../nav.js";
 import { setTheme } from "../theme.js";
 import { callout, copyRow, emptyState, errorBox, fmtDate, icon, toast, wireCopy } from "../ui.js";
 import { notFound, storeFrame } from "./public.js";
+import { mountShell } from "./shell.js";
+import { termsPending } from "./terms.js";
 
 type Kind = "recipes" | "components";
 
@@ -149,23 +151,31 @@ function wireSearch(root: HTMLElement, kind: Kind, query: LibraryQuery): void {
   });
 }
 
-function listFrame(kind: Kind, query: LibraryQuery, filters: Raw, body: Raw, me: Awaited<ReturnType<typeof whoAmI>>): Raw {
+// Signed-in developers see the library inside the console frame (sidebar kept); everyone else gets the public store frame.
+function showInFrame(root: HTMLElement, me: Awaited<ReturnType<typeof whoAmI>>, title: string, body: Raw, opts: { sub?: string; bare?: boolean } = {}, publicBody: Raw = body): void {
+  if (me && !termsPending(me)) mountShell(root, me, title, body, opts);
+  else mount(root, storeFrame(publicBody, { me, footnote: FOOTNOTE }));
+}
+
+function listFrame(root: HTMLElement, kind: Kind, query: LibraryQuery, filters: Raw, body: Raw, me: Awaited<ReturnType<typeof whoAmI>>): void {
   const recipes = kind === "recipes";
-  return storeFrame(
-    html`
-      <section style="padding:26px 0 6px">
-        <span class="pill accent">${recipes ? "Recipe library" : "Component catalogue"}</span>
-        <h1 style="margin-top:10px">${recipes ? "Recipes: applications you can build from questions" : "Components: the reviewed parts recipes are made from"}</h1>
-        <p class="lead muted">${recipes ? "A recipe asks a few questions, then an agent assembles the application from reviewed components for the devices you choose. Browse by category and device, or search by what an application does." : "Each component is a reviewed part with a contract: the interfaces it provides and requires, who it suits, and how its data moves. Recipes name the components they use."}</p>
+  const title = recipes ? "Recipes: applications you can build from questions" : "Components: the reviewed parts recipes are made from";
+  const lead = recipes ? "A recipe asks a few questions, then an agent assembles the application from reviewed components for the devices you choose. Browse by category and device, or search by what an application does." : "Each component is a reviewed part with a contract: the interfaces it provides and requires, who it suits, and how its data moves. Recipes name the components they use.";
+  const controls = html`
         ${searchBox(kind, query)}
         ${filters}
         ${activeFilters(kind, query)}
-        <p class="mt-s">${variants(`/${kind}`)} ${recipes ? html`<a class="small" href="/components">Components</a>` : html`<a class="small" href="/recipes">Recipes</a>`}</p>
+        <p class="mt-s">${variants(`/${kind}`)} ${recipes ? html`<a class="small" href="/components">Components</a>` : html`<a class="small" href="/recipes">Recipes</a>`}</p>`;
+  const publicBody = html`
+      <section style="padding:26px 0 6px">
+        <span class="pill accent">${recipes ? "Recipe library" : "Component catalogue"}</span>
+        <h1 style="margin-top:10px">${title}</h1>
+        <p class="lead muted">${lead}</p>
+        ${controls}
       </section>
       ${body}
-    `,
-    { me, footnote: FOOTNOTE },
-  );
+    `;
+  showInFrame(root, me, recipes ? "Recipes" : "Components", html`<section style="padding:0 0 6px">${controls}</section>${body}`, { sub: lead }, publicBody);
 }
 
 export async function recipesPage(root: HTMLElement): Promise<void> {
@@ -185,10 +195,10 @@ export async function recipesPage(root: HTMLElement): Promise<void> {
     const body = shown.length === 0
       ? emptyState("apps", searching ? "No recipes match" : "No recipes yet", searching ? "Try fewer words, or browse by category and device." : "Recipes appear here when developers publish them. An example looks like Poker Night, a card game for a club's league night.")
       : html`<div class="grid-2">${shown.map(recipeCard)}</div>${found ? "" : pager("recipes", query, list.total, shown.length)}`;
-    mount(root, listFrame("recipes", query, filters, body, me));
+    listFrame(root, "recipes", query, filters, body, me);
     wireSearch(root, "recipes", query);
   } catch (err) {
-    mount(root, listFrame("recipes", query, none, errorBox(err), me));
+    listFrame(root, "recipes", query, none, errorBox(err), me);
     wireSearch(root, "recipes", query);
   }
 }
@@ -225,10 +235,10 @@ export async function componentsPage(root: HTMLElement): Promise<void> {
     const body = shown.length === 0
       ? emptyState("apps", searching ? "No components match" : "No components yet", searching ? "Try fewer words, or browse by category and device." : "Components appear here when developers publish them.")
       : html`<div class="grid-2">${shown.map(componentCard)}</div>${found ? "" : pager("components", query, list.total, shown.length)}`;
-    mount(root, listFrame("components", query, filters, body, me));
+    listFrame(root, "components", query, filters, body, me);
     wireSearch(root, "components", query);
   } catch (err) {
-    mount(root, listFrame("components", query, none, errorBox(err), me));
+    listFrame(root, "components", query, none, errorBox(err), me);
     wireSearch(root, "components", query);
   }
 }
@@ -293,8 +303,8 @@ export function recipeBody(v: RecipeVersionView, requested: string): Raw {
 
           <div class="card mt">
             <h2>Build it</h2>
-            <p class="muted">An agent runs the recipe with aepm. It asks the questions below, checks the answers, assembles the components and runs their tests.</p>
-            ${copyRow(`aepm create ${v.slug}`)}
+            <p class="muted">Give your coding agent this line. It asks the questions below, shows you the components it will install, and installs them with aepm. One-command assembly (<code>aepm create</code>) is coming soon. <a href="/dev/agents#recipes-and-components">Tools and instructions for agents</a>.</p>
+            ${copyRow(`Build an application from the ${v.title} recipe: https://ourapps.app/recipes/${v.slug}.txt`)}
             <div class="row wrap mt-s"><button class="btn secondary sm" id="bundle-link" type="button">${icon("external")} Download the recipe bundle</button><span class="small faint">The link is valid for one hour. Digest ${v.bundle.digest.slice(0, 19)}</span></div>
           </div>
 
@@ -368,7 +378,7 @@ export async function recipePage(root: HTMLElement, slug: string): Promise<void>
     return notFound(root, err instanceof ApiError && err.status === 404 ? "No such recipe or version." : String(err));
   }
   setTheme("store", `${v.title}: a recipe on ourapps`, true);
-  mount(root, storeFrame(recipeBody(v, requested), { me, footnote: FOOTNOTE }));
+  showInFrame(root, me, v.title, recipeBody(v, requested), { bare: true });
   wireCopy(root);
   wireBundle(root, v.bundle.url);
 }
@@ -443,6 +453,6 @@ export async function componentPage(root: HTMLElement, slug: string): Promise<vo
     return notFound(root, err instanceof ApiError && err.status === 404 ? "No such component or version." : String(err));
   }
   setTheme("store", `${v.name}: a component on ourapps`, true);
-  mount(root, storeFrame(componentBody(v, requested), { me, footnote: FOOTNOTE }));
+  showInFrame(root, me, v.name, componentBody(v, requested), { bare: true });
   wireBundle(root, v.bundle.url);
 }
