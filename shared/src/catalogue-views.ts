@@ -174,9 +174,9 @@ export interface PackageSummary {
 }
 
 export const COMPONENT_PACKAGE: PackageSummary = {
-  headline: "The component itself: reviewed source code in one archive file, not a link to code elsewhere.",
+  headline: "The component itself: its source code in one archive file, not a link to code elsewhere.",
   parts: [
-    ["Code", "The working implementation for each device or server it supports (the pills above), as ordinary source files in those platforms' languages."],
+    ["Code", "The working implementation for each device or server it supports, as ordinary source files in those platforms' languages."],
     ["Contract", "The interfaces it provides and requires, written as data, with its documentation and instructions for an agent."],
     ["Tests", "The tests that prove it works, and the versions of the tools they need."],
     ["Manifest", "component.json lists every file with its fingerprint and the place it takes in your application, so nothing is copied that is not listed."],
