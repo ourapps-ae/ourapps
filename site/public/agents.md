@@ -228,6 +228,13 @@ Give the developer the `url`; one link per person or group is the convention so 
 
 Recipes (applications assembled from questions) and components (reviewed parts) are published by developers and read by anyone. The service keeps each entry and a pointer to the publisher's GitHub release (repository, tag, asset name, digests). It never stores the package. What a recipe or component repository implements is in contract.md.
 
+### Using a recipe or component (instructions for agents)
+
+1. Find: search with `GET /api/recipes/search?q=` or `GET /api/components/search?q=` (no key). Read an entry as plain text at `/recipes/<name>.txt` or `/components/<name>.txt`, or as JSON at `GET /api/recipes/<name>/latest`. Check `deprecations`; tell the developer before building on a flagged entry.
+2. Download: `GET /api/{recipes,components}/<name>/<version>/bundle` returns a link valid for one hour and the digest. Verify the digest before opening the package. Each package's public source is `https://github.com/ourapps-ae/<name>`.
+3. Tools: `aepm` (pack, inspect, resolve, review, install, verify, export, propose-update, approve, apply, recover) is at `https://github.com/ourapps-ae/aepm`; it needs Python 3.12, Node.js and Graphviz, and runs no package code during installation. Not yet available, coming soon: `aepm create` (assemble a recipe in one command), and the component scaffolder and checker. Never claim these exist.
+4. Build: ask the person only the recipe questions their description leaves open; never invent a secret, account name or address. Read `INSTRUCTIONS.md` in the recipe bundle for which answers include which components and set which settings. Show the person the component and settings list before installing. Install with aepm, review each package, and report what was built, what was not, and what the person must do (accounts, tokens, store setup).
+
 ### Reading (no authentication, JSON)
 
 ```

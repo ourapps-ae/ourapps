@@ -127,7 +127,7 @@ export function recipeText(v: RecipeVersionView, origin: string): string {
     `Digest: ${v.digest}`,
     `Bundle: ${v.bundle.asset} ${v.bundle.digest}`,
     `Bundle download: GET ${v.bundle.url} returns a link valid for one hour${v.status === "orphaned" ? "; with no publisher the link exists only while the release is public, otherwise the status is bundle-unavailable" : ""}`,
-    `Run: aepm create ${v.slug}`,
+    `Build: an agent reads this page, asks the questions, and installs the components with aepm (https://github.com/ourapps-ae/aepm); one-command assembly (aepm create) is coming soon`,
     `Page: ${origin}/recipes/${v.slug}; JSON: ${origin}/api/recipes/${v.slug}/${v.version}`,
     v.diagram ? `Diagram: ${origin}/api/recipes/${v.slug}/${v.version}/diagram.svg` : "Diagram: none",
     "",

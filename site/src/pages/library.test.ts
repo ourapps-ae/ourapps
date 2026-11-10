@@ -77,7 +77,9 @@ describe("recipe page", () => {
   it("shows description, diagram, questions, components with suitability and guardians, targets, answer sets and versions", () => {
     const html = recipeBody(recipeView(), "latest").html;
     expect(html).toContain("Poker Night");
-    expect(html).toContain("aepm create poker-night");
+    expect(html).toContain("Build an application from the Poker Night recipe");
+    expect(html).toContain("coming soon");
+    expect(html).not.toContain("aepm create poker-night");
     expect(html).toContain("Poker Night deals a hand");
     expect(html).toContain('src="https://ourapps.app/api/recipes/poker-night/0.1.0/diagram.svg"');
     expect(html).toContain("Questions it asks (7)");

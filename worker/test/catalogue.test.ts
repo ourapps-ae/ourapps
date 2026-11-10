@@ -616,7 +616,8 @@ describe("page variants", () => {
 
     const page = await (await get("/recipes/poker-night.txt")).text();
     expect(page).toContain("Poker Night (acme/poker-night) 0.1.0");
-    expect(page).toContain("Run: aepm create poker-night");
+    expect(page).toContain("Build: an agent reads this page");
+    expect(page).toContain("aepm create) is coming soon");
     expect(page).toContain("- chips (integer): Starting chips?");
     expect(page).toContain("- deck: acme/card-deck 0.1.0");
     expect(page).toContain("- apple: acme/apple-host 0.1.0 (only when (targets includes ios) or (targets includes macos))");
