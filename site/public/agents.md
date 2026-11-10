@@ -1,6 +1,6 @@
 # ourapps.app for agents
 
-ourapps.app: Delivering Our Applications, built from Our Recipes, using Our Agentically-Engineered Components. Developers find a recipe in the public recipe library, or compose an application from components in the public component catalogue, and may publish what they make (section "Recipe library and component catalogue"). They register the resulting app, create private share links, and friends install from those links. This document is the complete reference for driving it programmatically. Everything the web console does is available through this API.
+ourapps.app: Delivering Our Applications, built from Our Recipes, using Our Agentically-Engineered Components. Developers find a recipe in the public recipe library, or compose an application from components in the public component catalogue, and may publish what they make (section "Recipe library and component catalogue"). They register the resulting app, create private share links, and the people it is for (staff, members, customers, family) install from those links. The audience is a small business, a club or society, a household, or a shop or practice: software that fits how they work, on their own accounts, delivered to the devices they already use. This document is the complete reference for driving it programmatically. Everything the web console does is available through this API.
 
 Base URL: `https://ourapps.app`. All request and response bodies are JSON. Errors are `{"error": "message"}` with a 4xx or 5xx status.
 
@@ -67,14 +67,14 @@ Apple records are separate for `ios`, `macos` and `tvos`, including signing, upl
 
 Full detail: https://ourapps.app/reference.
 
-- Native iPhone and iPad through TestFlight (an App Store-signed .ipa that the workflow uploads through ourapps; friends install with Apple's TestFlight app from an invitation link), native Android (signed universal .apk; no .aab), and anything that compiles to those (Flutter, React Native, .NET MAUI, Capacitor, Kotlin Multiplatform, Unity and Godot mobile).
+- Native iPhone and iPad through TestFlight (an App Store-signed .ipa that the workflow uploads through ourapps; people install with Apple's TestFlight app from an invitation link), native Android (signed universal .apk; no .aab), and anything that compiles to those (Flutter, React Native, .NET MAUI, Capacitor, Kotlin Multiplatform, Unity and Godot mobile).
 - Static web apps and web games: the release workflow deploys the build to the developer's own free Cloudflare account (`npx wrangler deploy`, files only, with repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`) and writes the address into `install.pwa`; contract.md "Web apps" has the exact files and steps. ourapps links to it and never proxies it. A release asset named `web.zip` is served by ourapps on `https://<linkId>.ourapps.app/` and counts against ourapps' shared allowance, so deploy web apps to the developer's Cloudflare account.
 - Web apps needing a server: host them yourself and put their URL in `install.pwa`.
 - Backends, APIs and databases are never hosted by ourapps; apps call them directly. Allow the web app's address in CORS and authenticate with tokens, not cookies.
 
 ## Free services for the app's backend
 
-https://ourapps.app/free-tiers.md lists services whose free plans fit apps with a few dozen users (realtime servers, video calls, databases, sign-in, AI, notifications, email, maps, analytics, builds, hosting), each with limits, catches, setup steps and secret names. Re-check the linked source before relying on a number. A developer's personal AI subscription (Claude, ChatGPT, Gemini, Copilot) must never be used to serve the app's users.
+https://ourapps.app/free-tiers.md lists services whose free plans fit apps for small organisations (a few dozen users; a larger one chooses a paid provider tier) (realtime servers, video calls, databases, sign-in, AI, notifications, email, maps, analytics, builds, hosting), each with limits, catches, setup steps and secret names. Re-check the linked source before relying on a number. A developer's personal AI subscription (Claude, ChatGPT, Gemini, Copilot) must never be used to serve the app's users.
 
 ## What the developer must do themselves
 
@@ -92,7 +92,7 @@ Tell the developer plainly when a task is theirs; do not try to work around it:
 
 - App: a listing plus a GitHub repository. Has an opaque `id` (used by the repository as `STORE_APP_ID`) and a build token (used by the repository as `STORE_BUILD_TOKEN`; returned once on creation).
 - Release: the latest GitHub Release of the repository. The console reads the asset named `my-app.json` and follows the URLs inside it. Never cached.
-- Share link: `/l/<linkId>`, random, revocable, optional expiry. Friends open this.
+- Share link: `/l/<linkId>`, random, revocable, optional expiry. The people it is shared with open this.
 
 ## Apps
 
@@ -202,7 +202,7 @@ The same data the install page renders, so you can confirm icon, screenshots and
 
 ## Release notes
 
-Friends see the revision history on the install page, so every release needs notes written for them. The mechanism: keep `CHANGELOG.md` at the repository root in Keep a Changelog form (`## [1.2.0] - 2026-10-17` sections, newest first, an `[Unreleased]` section allowed); the release workflow uploads `CHANGELOG.md` as a release asset and uses the version's section as the release body, failing when the section is missing. Draft the entry from the commits in plain words (what changed for the people using the app, not file names), then ask the developer to approve the wording. `GET /api/dev/apps/:id/release` returns `changelog: false` when the latest release did not ship the file.
+People see the revision history on the install page, so every release needs notes written for them. The mechanism: keep `CHANGELOG.md` at the repository root in Keep a Changelog form (`## [1.2.0] - 2026-10-17` sections, newest first, an `[Unreleased]` section allowed); the release workflow uploads `CHANGELOG.md` as a release asset and uses the version's section as the release body, failing when the section is missing. Draft the entry from the commits in plain words (what changed for the people using the app, not file names), then ask the developer to approve the wording. `GET /api/dev/apps/:id/release` returns `changelog: false` when the latest release did not ship the file.
 
 ## Share links
 
@@ -289,7 +289,7 @@ Recipe entry: `{ format: 1, recipe: <recipe.json>, digest, source: { repository,
 
 - Apple: TestFlight takes up to 10,000 people per app through the public link; each build lasts 90 days (while enabled, ourapps sends `my-store-release` two weeks before expiry); Apple's beta review checks the first build of each version. Universal iPhone and iPad apps need no extra fields; build one .ipa with TARGETED_DEVICE_FAMILY 1,2.
 - Android and web: no device limit.
-- Android does not auto-update; friends tap Update. TestFlight updates iPhone apps. Version numbers must increase and the Android signing key must stay the same.
+- Android does not auto-update; people tap Update. TestFlight updates iPhone apps. Version numbers must increase and the Android signing key must stay the same.
 
 ## Terms
 
@@ -358,7 +358,7 @@ Diagnose "the page shows no version":
 Put an iPhone app on TestFlight:
 
 1. `GET /api/dev/apps/:id/testflight`; while `needs` names a step, tell the developer what it is. The console's TestFlight card walks them through each one, including Apple's New App form.
-2. `POST /api/dev/apps/:id/testflight` checks with Apple and, once the app is in App Store Connect, sets up the App Store profile, the friends' beta group and its public link, and asks the repository for the first build.
+2. `POST /api/dev/apps/:id/testflight` checks with Apple and, once the app is in App Store Connect, sets up the App Store profile, the testers' beta group and its public link, and asks the repository for the first build.
 3. The repository uploads each build through ourapps (contract.md step 4). Follow `stage` with GET (or POST to check with Apple now) and tell the developer plainly what it waits for: the repository's build, Apple's processing or beta review, or the public link in App Store Connect. The install page offers the invitation once `invitation.state` is `open`.
 
 ## Prompts

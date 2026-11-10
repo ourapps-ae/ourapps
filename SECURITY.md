@@ -1,7 +1,7 @@
 # Security
 
 How ourapps protects developer credentials and tokens, what to do on rotation, and what the design
-does not cover. The public recipe library and component catalogue hold entries and release
+does not cover. Applications run on the owner's own accounts; ourapps holds the delivery credentials described here. The public recipe library and component catalogue hold entries and release
 pointers only, never packages or secret values.
 
 ## What is stored and how

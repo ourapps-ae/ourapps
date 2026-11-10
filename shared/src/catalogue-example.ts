@@ -12,7 +12,7 @@ export function exampleRecipeEntry(): RecipeEntry {
       name: "acme/poker-night",
       version: "0.1.0",
       title: "Poker Night",
-      summary: "A card game for a table of friends, with house rules.",
+      summary: "A card game for a club's league night, with house rules.",
       category: "games",
       tags: ["cards", "multiplayer"],
       targets: { client: ["web", "ios", "android", "macos"], server: ["hosting-provider"] },
@@ -46,7 +46,7 @@ export function exampleRecipeEntry(): RecipeEntry {
     source: { repository: "acme/poker-night-recipe", tag: "v0.1.0" },
     bundle: { asset: "poker-night-0.1.0.aepm", digest: EXAMPLE_BUNDLE_DIGEST },
     page: {
-      description: "Poker Night deals a hand for every friend at the table.\n\nChoose your devices, your starting chips and whether new players get lessons.",
+      description: "Poker Night deals a hand for every member at the table.\n\nChoose your devices, your starting chips and whether new players get lessons.",
       diagram: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40"><rect x="2" y="2" width="50" height="36" rx="6" fill="#ddd"/><text x="10" y="25">deck</text><rect x="68" y="2" width="50" height="36" rx="6" fill="#ddd"/><text x="76" y="25">seats</text></svg>',
       screenshots: [],
     },

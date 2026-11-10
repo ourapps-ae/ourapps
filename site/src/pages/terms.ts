@@ -16,33 +16,33 @@ export function termsBody(): Raw {
       <p class="muted">Version ${TERMS_VERSION}. Plain words on purpose. ourapps is operated by Level N Ltd.</p>
 
       <h2>1. What ourapps is</h2>
-      <p>ourapps does two things. It is a private installer: developers register apps they built, create share links, and friends install from those links; apps are not listed or searchable. It is also a public recipe library and component catalogue: developers may publish recipes (applications assembled from questions) and components (reviewed parts), and anyone can browse and search them, with a plain-text and a JSON version of every page for agents.</p>
+      <p>ourapps does two things. It delivers applications privately: developers register apps they built for their business, club, household or shop, create share links, and the people they share with (staff, members, customers, family) install from those links; apps are not listed or searchable. It is also a public recipe library and component catalogue: developers may publish recipes (applications assembled from questions) and components (reviewed parts), and anyone can browse and search them, with a plain-text and a JSON version of every page for agents.</p>
       <p>ourapps keeps the page details of a recipe or component and pointers to the publisher's own GitHub release; it does not keep the packages, and serves them through links that expire after an hour. It is not an app store: it does not review apps, recipes or components, and there is no transaction between you and the people who install or build from what you publish.</p>
 
       <h2>2. Who the terms apply to</h2>
-      <p>These terms are between Level N Ltd and you, the developer who signs in. Friends who open a share link do not sign in and hold no account; what the service records about them is in section 4.</p>
+      <p>These terms are between Level N Ltd and you, the developer who signs in. People who open a share link do not sign in and hold no account; what the service records about them is in section 4.</p>
 
       <h2>3. What we hold about you and why</h2>
       <table class="table">
         <tr><th>Data</th><th>Why we hold it</th><th>Where it goes</th></tr>
-        <tr><td>GitHub id, login, display name</td><td>To identify your account when you sign in; sign-in reads your public profile only</td><td>Display name and page address are shown to friends on install pages</td></tr>
+        <tr><td>GitHub id, login, display name</td><td>To identify your account when you sign in; sign-in reads your public profile only</td><td>Display name and page address are shown to the people you share with on install pages</td></tr>
         <tr><td>GitHub token (encrypted)</td><td>To read release assets and workflow status from your repositories and to ask them for fresh builds</td><td>Sent only to api.github.com, only for repositories you named</td></tr>
-        <tr><td>App Store Connect API key and team id (encrypted)</td><td>To create your iPhone signing certificate, App IDs and provisioning profiles, and to upload builds to TestFlight and send them to your friends, on your behalf</td><td>Sent only to api.appstoreconnect.apple.com, when you set up signing or TestFlight, when a workflow uploads a build, and when the service looks after TestFlight builds</td></tr>
+        <tr><td>App Store Connect API key and team id (encrypted)</td><td>To create your iPhone signing certificate, App IDs and provisioning profiles, and to upload builds to TestFlight and send them to the people you share with, on your behalf</td><td>Sent only to api.appstoreconnect.apple.com, when you set up signing or TestFlight, when a workflow uploads a build, and when the service looks after TestFlight builds</td></tr>
         <tr><td>Private keys of the Apple Distribution and Mac Installer Distribution certificates the service creates for you (encrypted), with the certificates</td><td>So your apps' release workflows can sign Apple apps and Mac installation packages without Apple secrets in the repositories</td><td>Given only to a release workflow that presents one of your apps' build tokens; installer signing material is returned only for Mac builds</td></tr>
         <tr><td>App listings (name, text, image addresses, repository name, bundle ID) and their TestFlight set-up</td><td>To build install pages and read releases</td><td>Shown to whoever holds a share link; details only on your public page when you switch it on</td></tr>
         <tr><td>Recipes and components you publish (name, version, description, questions, suitability and migration declarations, diagram, screenshot addresses, repository and release names, digests)</td><td>To list them in the recipe library and component catalogue, let people search them, and serve their packages from your GitHub release with your token</td><td>Public to anyone, with your display name and page address as publisher; a version stays bound to its digest after it is unlisted; after you delete your account they stay public without your name (section 7)</td></tr>
-        <tr><td>Share links</td><td>To let friends reach an install page and to let you revoke access</td><td>Known to whoever you send them to</td></tr>
+        <tr><td>Share links</td><td>To let the people you share with reach an install page and to let you revoke access</td><td>Known to whoever you send them to</td></tr>
         <tr><td>API keys (hashed), sessions (hashed), build tokens (hashed)</td><td>To let you, your agents and your repositories act on your account</td><td>Nowhere; we hold hashes only</td></tr>
         <tr><td>Audit log (event, short detail, country of the request)</td><td>So you can see what happened on your account</td><td>Shown only to you</td></tr>
       </table>
-      <p>We do not sell, share or analyse this information for any purpose other than running the service for you. No advertising, no analytics, no tracking of friends. Level N Ltd staff do not read your credentials; they are encrypted with a key that exists only in the service's secret store, and the service decrypts a field only at the moment it is needed.</p>
+      <p>We do not sell, share or analyse this information for any purpose other than running the service for you. No advertising, no analytics, no tracking of the people you share with. Level N Ltd staff do not read your credentials; they are encrypted with a key that exists only in the service's secret store, and the service decrypts a field only at the moment it is needed.</p>
 
-      <h2>4. What we hold about your friends</h2>
-      <p>Nothing. Friends who install on iPhone or iPad deal with Apple directly through TestFlight, and Android and web installs record nothing about the friend. Install pages set no cookies and carry no analytics.</p>
+      <h2>4. What we hold about the people you share with</h2>
+      <p>Nothing. People who install on iPhone or iPad deal with Apple directly through TestFlight, and Android and web installs record nothing about the person. Install pages set no cookies and carry no analytics.</p>
 
       <h2>5. Your responsibilities</h2>
       <ul class="bullets">
-        <li>You are responsible for the apps you share: what they do, what they collect, and that you have the right to the code, the images and the names in them. Write the privacy summary on each app honestly; friends rely on it.</li>
+        <li>You are responsible for the apps you share: what they do, what they collect, and that you have the right to the code, the images and the names in them. Write the privacy summary on each app honestly; the people you share with rely on it.</li>
         <li>Share links are private by obscurity. Send them to people you mean to, and revoke them when you change your mind.</li>
         <li>Apple's and Google's developer agreements apply to you, not to us. In particular, TestFlight builds go through Apple's beta review.</li>
         <li>For each TestFlight build the service answers Apple's export compliance question for you: the app uses no encryption, or only encryption exempt from export compliance requirements. Share through the service only apps for which that is true.</li>
@@ -92,7 +92,7 @@ function acceptCard(me: Me): Raw {
   return html`
     <div class="card pad-l mt" style="border-color:var(--accent)">
       <h2 style="margin-top:0">${changed ? "Accept the current terms" : "Before you start"}</h2>
-      <p class="muted">${changed ? `You accepted version ${me.developer.termsAcceptedVersion}; version ${TERMS_VERSION} is current. Please read and accept it.` : "Read these terms once; they say what we hold about you and your friends and why. The console opens as soon as you accept."}</p>
+      <p class="muted">${changed ? `You accepted version ${me.developer.termsAcceptedVersion}; version ${TERMS_VERSION} is current. Please read and accept it.` : "Read these terms once; they say what we hold about you and the people you share with, and why. The console opens as soon as you accept."}</p>
       <label class="check mt"><input type="checkbox" id="agree" /> <span>I have read the terms and the data statement and I accept them.</span></label>
       <div class="form-actions"><button class="btn lg" id="accept" disabled>Accept and continue</button><form method="post" action="/api/auth/logout" style="display:inline"><button class="btn secondary" type="submit">Sign out instead</button></form></div>
       <div id="error" class="mt-s"></div>

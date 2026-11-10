@@ -329,7 +329,7 @@ describe("reading recipes", () => {
       slug: "poker-night",
       version: "0.1.0",
       title: "Poker Night",
-      summary: "A card game for a table of friends, with house rules.",
+      summary: "A card game for a club's league night, with house rules.",
       category: "games",
       tags: ["cards", "multiplayer"],
       targets: { client: ["web", "ios", "android", "macos"], server: ["hosting-provider"] },
@@ -384,7 +384,7 @@ describe("search", () => {
 
   it("finds recipes by name, title, summary, tags and description, with prefixes", async () => {
     const find = async (q: string) => ((await (await get(`/api/recipes/search?q=${encodeURIComponent(q)}`)).json()) as RecipeSearch).recipes.map((r) => r.name);
-    for (const q of ["poker", "Poker Night", "friends", "multiplayer", "multi", "deals a hand", "lessons", "acme"]) expect(await find(q), q).toEqual(["acme/poker-night"]);
+    for (const q of ["poker", "Poker Night", "league", "multiplayer", "multi", "deals a hand", "lessons", "acme"]) expect(await find(q), q).toEqual(["acme/poker-night"]);
     expect(await find("zebra")).toEqual([]);
     expect(await find("poker zebra")).toEqual([]);
   });
@@ -611,7 +611,7 @@ describe("page variants", () => {
     expect(list.headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
     const listText = await list.text();
     expect(listText).toContain("ourapps recipe library");
-    expect(listText).toContain("- Poker Night (acme/poker-night) 0.1.0: A card game for a table of friends, with house rules.");
+    expect(listText).toContain("- Poker Night (acme/poker-night) 0.1.0: A card game for a club's league night, with house rules.");
     expect(listText).toContain("Copyright Level N Ltd 2026");
 
     const page = await (await get("/recipes/poker-night.txt")).text();

@@ -71,7 +71,7 @@ export async function setUpTestflight(env: Env, deps: Deps, dev: Developer, app:
     const name = platformProfileName(app);
     const profile = await apple.ensureStoreProfile(name, bundleRes, certificate.certificateId, profileType(app.platform ?? "ios", app.nativeMac), check);
     const group = await apple.ensureBetaGroup(store.id, app.platform && app.platform !== "ios" ? `${BETA_GROUP} ${app.platform}` : BETA_GROUP, check);
-    await apple.setBetaReviewDetails(store.id, contact, "Shared privately with friends and family through ourapps.app. No sign-in is needed to use the app.", check);
+    await apple.setBetaReviewDetails(store.id, contact, "Shared privately with the people we work with through ourapps.app. No sign-in is needed to use the app.", check);
     await apple.setBetaDescription(store.id, { description: app.description || app.tagline || app.name, feedbackEmail: contact.email }, check);
     await check();
     Object.assign(app, {

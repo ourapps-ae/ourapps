@@ -39,14 +39,14 @@ export async function landing(root: HTMLElement): Promise<void> {
       html`
         <section class="hero">
           <div>
-            <span class="pill accent">${icon("bot", "icon-16")} Applications built from recipes and components</span>
+            <span class="pill accent">${icon("bot", "icon-16")} Software for your business, club, home and shop</span>
             <h1 style="margin-top:14px">${TAGLINE}</h1>
-            <p class="lead">Pick a <a href="/recipes">recipe</a> from the library, or compose your own from <a href="/components">components</a> in the catalogue. A coding agent builds the application in an evening, for your poker table, your family, your club. Not every app belongs in an app store: ourapps shares yours with the people you know. Send a link, and your friends open it and choose the version for their device.</p>
+            <p class="lead">Our apps for our businesses, our club, our home, our shop. Pick a <a href="/recipes">recipe</a> from the library, or compose your own from <a href="/components">components</a> in the catalogue. A coding agent builds the application in minutes from reviewed parts, on your own accounts. Send one link, and your staff, members, customers or family open it on the phone, tablet, computer or television they already use.</p>
             <div class="ctas">
               ${me ? html`<a class="btn lg" href="/dev">Open your console ${icon("arrow")}</a>` : html`<a class="btn lg" href="/api/auth/github">${icon("github")} Sign in with GitHub</a>`}
               <a class="btn lg secondary" href="/example">See an example: Poker Night</a>
             </div>
-            <p class="small faint mt">Free. No ourapps accounts for friends. Install paths for iPhone, iPad, Android, Mac, Windows, Apple TV and web apps. Credentials encrypted per account, nothing sold or tracked: <a href="/dev/guide#security">how we keep it safe</a>.</p>
+            <p class="small faint mt">Free. No ourapps accounts for the people you share with. Install paths for iPhone, iPad, Android, Mac, Windows, Apple TV and web apps. Credentials encrypted per account, nothing sold or tracked: <a href="/dev/guide#security">how we keep it safe</a>.</p>
           </div>
           <a class="phone" href="/example/poker-night" aria-label="Open the Poker Night example page">
             <div class="screen">
@@ -57,12 +57,35 @@ export async function landing(root: HTMLElement): Promise<void> {
           </a>
         </section>
 
-        <section class="card pad-l" style="margin-top:4px">
+        <section class="how" id="benefits">
+          <div class="section-title"><h2>Why ourapps</h2></div>
+          <div class="grid-3">
+            <div class="card"><h3>Fast</h3><p class="muted">An application from a recipe in minutes, rather than days of building.</p></div>
+            <div class="card"><h3>Low cost</h3><p class="muted">Little AI spending. A clinic of fewer than ten people can run on free plans; a larger business pays only for the provider tier it needs, chosen from one answer about size.</p></div>
+            <div class="card"><h3>Maintainable and safe</h3><p class="muted">Reviewed components, small updates you approve, security tests built in, a record of what is inside, and data you can move.</p></div>
+            <div class="card"><h3>Yours</h3><p class="muted">Your accounts and your data. Your application's servers and databases run on your own accounts, not ours, and there is no lock-in.</p></div>
+            <div class="card"><h3>Delivered to your people</h3><p class="muted">Staff, members and customers get it on phones, tablets, computers and televisions through one link.</p></div>
+          </div>
+        </section>
+
+        <section class="how" id="who">
+          <div class="section-title"><h2>Who it is for</h2></div>
+          <p class="muted">A small business, a club or society, a household, a shop or practice: people who want software that fits how they work. Invented examples:</p>
+          <div class="grid-3">
+            <div class="card"><h3>A clinic's appointment board</h3><p class="muted">Today's appointments on the waiting-room television and on reception's tablet.</p></div>
+            <div class="card"><h3>A club's league night</h3><p class="muted">Fixtures, scores and the table for every member's phone.</p></div>
+            <div class="card"><h3>A shop's order screen</h3><p class="muted">Orders from the counter to the back room, on a screen the team already has.</p></div>
+            <div class="card"><h3>A household's chores planner</h3><p class="muted">Who does what this week, on the fridge tablet and every family phone.</p></div>
+            <div class="card"><h3>A restaurant's table display</h3><p class="muted">Which tables are free, seated or waiting for the bill, for the host and the kitchen.</p></div>
+          </div>
+        </section>
+
+        <section class="card pad-l" style="margin-top:14px">
           <div class="row wrap top" style="gap:20px">
             <div style="flex:1 1 300px">
               <span class="pill">Worked example</span>
-              <h2 style="margin-top:8px">Poker Night: an app for eight people</h2>
-              <p class="muted">Just the three options your table uses, your house rules written the way you say them, a page of help for the friend who has never played, and your own photos on the felt. Built in an evening by an agent, from a recipe or from components, and installed from one link.</p>
+              <h2 style="margin-top:8px">Poker Night: a club league night for eight people</h2>
+              <p class="muted">Just the three options the club uses, house rules written the way members say them, a page of help for the member who has never played, and the club's own photos on the felt. Built by an agent, from a recipe or from components, and installed from one link.</p>
             </div>
             <div class="stack" style="flex:0 0 auto"><a class="btn" href="/example">Read the story ${icon("arrow")}</a><a class="btn secondary" href="/example/poker-night">See the install page</a></div>
           </div>
@@ -83,8 +106,8 @@ export async function landing(root: HTMLElement): Promise<void> {
           <div class="row wrap top" style="gap:20px">
             <div style="flex:1 1 300px">
               <span class="pill accent">Why small is powerful</span>
-              <h2 style="margin-top:8px">At eight people, the expensive parts are free</h2>
-              <p class="muted">Video calls, live multiplayer, databases and AI cost a public app money every month. For a family or a group of friends they fit inside free plans: LiveKit's 5,000 free video minutes a month is about twenty one-hour calls for four, and Cloudflare's free plan runs about 80 hours of Skull a day.</p>
+              <h2 style="margin-top:8px">At a small organisation's size, the expensive parts are free</h2>
+              <p class="muted">Video calls, live multiplayer, databases and AI cost a public app money every month. For a household, a club or a practice of fewer than ten people they fit inside free plans: LiveKit's 5,000 free video minutes a month is about twenty one-hour calls for four, and Cloudflare's free plan runs about 80 hours of four-player play a day. A larger organisation answers one question about its size, and the recipe picks the provider tier that fits.</p>
             </div>
             <div class="stack" style="flex:0 0 auto"><a class="btn" href="/small">How it works ${icon("arrow")}</a><a class="btn secondary" href="/free-tiers.md">The list of free services</a></div>
           </div>
@@ -97,9 +120,9 @@ export async function landing(root: HTMLElement): Promise<void> {
             <div class="card"><div class="num">2</div><h3>Add your app</h3><p class="muted">Sign in with GitHub. Give the app a name, icon, screenshots and a few lines of text, and point it at the GitHub repository that publishes releases.</p></div>
             <div class="card"><div class="num">3</div><h3>Share it</h3><p class="muted">Create one share link per person or group, with a label, an expiry and a revoke button. Each has a QR code. ourapps signs each iPhone build, sends it through TestFlight and asks for a fresh build before one expires.</p></div>
           </div>
-          <div class="section-title"><h2>For your friends</h2></div>
+          <div class="section-title"><h2>For your people: staff, members, customers, family</h2></div>
           <div class="grid-3">
-            <div class="card"><div class="num">1</div><h3>Open the link</h3><p class="muted">A link or QR code from someone they know opens an install page that looks and feels like the store they already use.</p></div>
+            <div class="card"><div class="num">1</div><h3>Open the link</h3><p class="muted">A link or QR code from your organisation opens an install page that looks and feels like the store they already use.</p></div>
             <div class="card"><div class="num">2</div><h3>Choose your version</h3><p class="muted">Android, Mac and Windows offer direct packages. Apple devices use matching TestFlight invitations when ready. Web apps open in your browser.</p></div>
             <div class="card"><div class="num">3</div><h3>Follow the install steps</h3><p class="muted">The page shows system requirements, package choices and instructions. Updates arrive through TestFlight or a fresh download.</p></div>
           </div>
@@ -128,7 +151,7 @@ export async function devPage(root: HTMLElement, slug: string): Promise<void> {
           ${owner ? html`<div class="owner-bar"><span class="pill">You</span> This is your public page. Apps appear here when "Show on my public page" is on. <a href="/dev/apps">Manage apps</a></div>` : ""}
           <div class="dev-hero">
             ${avatar(data.developer.displayName, null, "lg")}
-            <div><h1>${data.developer.displayName}</h1><p class="muted" style="margin:2px 0 0">Shares applications built from recipes and components.</p></div>
+            <div><h1>${data.developer.displayName}</h1><p class="muted" style="margin:2px 0 0">Delivers applications built from recipes and components to its own people.</p></div>
           </div>
           <div class="card">
             ${data.apps.length === 0 ? html`<p class="muted center" style="padding:20px 0">Nothing listed yet.</p>` : data.apps.map((a) => html`
@@ -296,11 +319,11 @@ export function renderInstall(root: HTMLElement, data: LinkPage, opts: InstallOp
     root,
     storeFrame(
       html`
-        ${opts.example ? html`<div class="owner-bar"><span class="pill">Example</span> This is the page a friend would get for an imaginary app. Nothing installs. <a href="/example">Why Poker Night</a> <a href="/dev">Build yours</a></div>` : ""}
-        ${opts.preview ? html`<div class="owner-bar"><span class="pill">Preview</span> This is how the install page looks to a friend. Install buttons are shown; this preview is not a share link. <a href="/dev/apps/${app.id}">Back to the app</a></div>` : ""}
+        ${opts.example ? html`<div class="owner-bar"><span class="pill">Example</span> This is the page the people you share with would get for an imaginary app. Nothing installs. <a href="/example">Why Poker Night</a> <a href="/dev">Build yours</a></div>` : ""}
+        ${opts.preview ? html`<div class="owner-bar"><span class="pill">Preview</span> This is how the install page looks to the people you share with. Install buttons are shown; this preview is not a share link. <a href="/dev/apps/${app.id}">Back to the app</a></div>` : ""}
         ${owner && !opts.preview && !opts.example ? html`<div class="owner-bar"><span class="pill">You</span> You are the developer of this app. <a href="/dev/apps/${app.id}">Edit</a> <a href="/dev/apps/${app.id}/links">Links</a></div>` : ""}
         ${(owner || opts.preview) && !opts.example && data.release?.install.ios && !data.release.install.ios.testflight
-          ? html`<div class="owner-bar"><span class="pill warn">iPhone</span> TestFlight is not open yet, so friends on iPhone and iPad see "Coming to ${d.device} soon". <a href="/dev/apps/${app.id}#testflight">What it is waiting for</a></div>`
+          ? html`<div class="owner-bar"><span class="pill warn">iPhone</span> TestFlight is not open yet, so people on iPhone and iPad see "Coming to ${d.device} soon". <a href="/dev/apps/${app.id}#testflight">What it is waiting for</a></div>`
           : ""}
         <header class="product">
           ${appIcon(name, icon0, "xl")}
@@ -330,7 +353,7 @@ export function renderInstall(root: HTMLElement, data: LinkPage, opts: InstallOp
 
         <section class="store-section">
           <h2>About</h2>
-          <div class="readmore" id="about">${description ? paragraphs(description) : html`<p class="muted">${name} is an app ${data.developer.displayName} built and shares privately with people they know. There is no store listing, no advertising and no account to create.</p>`}</div>
+          <div class="readmore" id="about">${description ? paragraphs(description) : html`<p class="muted">${name} is an app ${data.developer.displayName} built and shares privately with the people it is for. There is no store listing, no advertising and no account to create.</p>`}</div>
           <button class="link-btn readmore-btn" id="more" hidden>more</button>
         </section>
 

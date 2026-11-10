@@ -40,7 +40,7 @@ export async function requireMe(root: HTMLElement): Promise<Me | null> {
         <h1 style="margin:8px 0 6px">Developer console</h1>
         <p class="muted">Sign in with GitHub to add apps, publish recipes and components, create share links and put iPhone apps on TestFlight. Only your public profile is read.</p>
         <a class="btn lg mt" href="/api/auth/github">${icon("github")} Sign in with GitHub</a>
-        <p class="small faint mt">New here? The <a href="/dev/guide">guide</a> walks through recipes, components and delivery, from the first sign-in to the first friend installing.</p>
+        <p class="small faint mt">New here? The <a href="/dev/guide">guide</a> walks through recipes, components and delivery, from the first sign-in to the first person installing.</p>
       </div>
     `),
   );

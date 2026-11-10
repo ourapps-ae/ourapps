@@ -183,7 +183,7 @@ export async function recipesPage(root: HTMLElement): Promise<void> {
     const targetOptions = Object.entries(CLIENT_TARGET_LABEL).map(([value, label]) => ({ value, label }));
     const filters = html`${filterRow("recipes", query, "category", "Category", list.categories.map((c) => ({ value: c.category, label: c.category, count: c.count })))}${filterRow("recipes", query, "target", "Device", targetOptions)}${deprecatedRow("recipes", query)}`;
     const body = shown.length === 0
-      ? emptyState("apps", searching ? "No recipes match" : "No recipes yet", searching ? "Try fewer words, or browse by category and device." : "Recipes appear here when developers publish them. An example looks like Poker Night, a card game for a table of friends.")
+      ? emptyState("apps", searching ? "No recipes match" : "No recipes yet", searching ? "Try fewer words, or browse by category and device." : "Recipes appear here when developers publish them. An example looks like Poker Night, a card game for a club's league night.")
       : html`<div class="grid-2">${shown.map(recipeCard)}</div>${found ? "" : pager("recipes", query, list.total, shown.length)}`;
     mount(root, listFrame("recipes", query, filters, body, me));
     wireSearch(root, "recipes", query);

@@ -1,4 +1,4 @@
-// The developer guide: recipes and components, then delivery from first sign-in to the first friend installing.
+// The developer guide: recipes and components, then delivery from first sign-in to the first person installing.
 import { CATEGORIES, CHECKED, PRINCIPLES, servicePrompt, type Service } from "../freeTiers.js";
 import { escapeHtml, html, raw, type Raw } from "../html.js";
 import { callout, icon, wireCopy } from "../ui.js";
@@ -16,7 +16,15 @@ function sections(origin: string, slug: string): Section[] {
       id: "how-it-works",
       title: "How ourapps works",
       body: html`
-        <p>ourapps delivers applications that are built from recipes, using components. A <b>component</b> is a reviewed, reusable part of an application, such as a card deck or a seating plan. It states what it provides, what it needs, who it suits and how its data moves. A <b>recipe</b> is a list of components, the questions that choose between them, and how they connect. A coding agent assembles the application from a recipe and your answers. The <a href="/recipes">recipe library</a> and the <a href="/components">component catalogue</a> are public; delivery to your friends is private.</p>
+        <p>ourapps delivers applications for your business, your club, your home or your shop: a clinic's appointment board, a club's league night, a shop's order screen, a household's chores planner, a restaurant's table display. They are built from recipes, using components. A <b>component</b> is a reviewed, reusable part of an application, such as a card deck or a seating plan. It states what it provides, what it needs, who it suits and how its data moves. A <b>recipe</b> is a list of components, the questions that choose between them, and how they connect. A coding agent assembles the application from a recipe and your answers. The <a href="/recipes">recipe library</a> and the <a href="/components">component catalogue</a> are public; delivery to your people is private.</p>
+        <h3>What you get</h3>
+        <ul class="bullets">
+          <li><b>Fast.</b> An application from a recipe in minutes, rather than days of building.</li>
+          <li><b>Low cost.</b> Little AI spending. A clinic of fewer than ten people can run on free plans; a larger business pays only for the provider tier it needs, chosen from one answer about size (<a href="#free-tiers">free services</a>).</li>
+          <li><b>Maintainable and safe.</b> Reviewed components, small updates you approve, security tests built in, a record of what is inside, and data you can move.</li>
+          <li><b>Yours.</b> Your accounts and your data. Your application's servers and databases run on your own accounts, not ours, and there is no lock-in.</li>
+          <li><b>Delivered to your people.</b> Staff, members and customers get it on phones, tablets, computers and televisions through one link.</li>
+        </ul>
         <h3>Two routes to an application</h3>
         <div class="grid-2">
           <div class="card flat"><h3>a. Compose from components</h3><p>Browse the <a href="/components">component catalogue</a>, search by the interfaces you need, check each part's suitability and deprecation warnings, and have your agent connect the parts into an application. Publish the recipe you composed if you want others to build from it. <a href="#compose">Compose from components</a>, <a href="#publish">Publish a recipe or component</a>.</p></div>
@@ -26,7 +34,7 @@ function sections(origin: string, slug: string): Section[] {
         <ol class="steps">
           <li><b>Your agent builds the application</b> in your own GitHub repository. ourapps keeps the library and the catalogue; the building is done in your repository.</li>
           <li><b>You add the app</b> in this console and the repository publishes releases (<a href="#add-app">step 3</a>, <a href="#release">step 4</a>).</li>
-          <li><b>You create a share link</b> and send it (<a href="#share">step 5</a>). Friends open it and install the version for their device; iPhone and iPad go through TestFlight (<a href="#testflight">step 6</a>).</li>
+          <li><b>You create a share link</b> and send it (<a href="#share">step 5</a>). The people you share it with open it and install the version for their device; iPhone and iPad go through TestFlight (<a href="#testflight">step 6</a>).</li>
         </ol>
         <p class="small muted">Use <a href="#tldr">the short list</a> for what only you can do, and <a href="#deprecation">Deprecation</a> for what to do when a recipe or component carries a warning.</p>
       `,
@@ -111,7 +119,7 @@ POST   /api/dev/recipes/&lt;name&gt;/undeprecate</code></pre>
   "digest": "sha256:&lt;64 lowercase hex characters&gt;",
   "source": { "repository": "acme/poker-night-recipe", "tag": "v0.1.0" },
   "bundle": { "asset": "poker-night-0.1.0.aepm", "digest": "sha256:&lt;64 lowercase hex characters&gt;" },
-  "page": { "description": "Poker Night deals a hand for every friend at the table.", "diagram": null, "screenshots": [] }
+  "page": { "description": "Poker Night deals a hand for every member at the table.", "diagram": null, "screenshots": [] }
 }</code></pre>
         <p><code>page.description</code> is text, <code>page.diagram</code> is a diagram as SVG text without scripts or outside references (or null), and <code>page.screenshots</code> are https addresses.</p>
 
@@ -121,7 +129,7 @@ POST   /api/dev/recipes/&lt;name&gt;/undeprecate</code></pre>
   "name": "acme/poker-night",
   "version": "0.1.0",
   "title": "Poker Night",
-  "summary": "A card game for a table of friends, with house rules.",
+  "summary": "A card game for a club's league night, with house rules.",
   "category": "games",
   "tags": ["cards", "multiplayer"],
   "targets": { "client": ["web", "ios", "android"], "server": [] },
@@ -209,9 +217,9 @@ POST   /api/dev/recipes/&lt;name&gt;/undeprecate</code></pre>
         <h3>You, as things happen</h3>
         <ol class="steps">
           <li><b>Wait for Apple's beta review</b> of the first build of each new iPhone version. The app's TestFlight card says what it is waiting for.</li>
-          <li><b>Send the share link</b> to the person. The agent can create it and give you the URL and QR code; the message to your friend is yours.</li>
+          <li><b>Send the share link</b> to the person. The agent can create it and give you the URL and QR code; the message to the person is yours.</li>
           <li><b>Before the signing certificate's yearly expiry</b> (the date is under <a href="/dev/settings#signing">Settings</a>), press <b>Replace certificate</b> there. ourapps makes the profiles of enabled TestFlight targets again with it.</li>
-          <li><b>Approve the release notes</b> for each version in <code>CHANGELOG.md</code>. An agent drafts them from the commits; they are shown to your friends as the revision history, so the final words are yours. <a href="/dev/guide#release-notes">How</a>.</li>
+          <li><b>Approve the release notes</b> for each version in <code>CHANGELOG.md</code>. An agent drafts them from the commits; they are shown to your people as the revision history, so the final words are yours. <a href="/dev/guide#release-notes">How</a>.</li>
         </ol>
         <h3>Everything else: hand it to an agent</h3>
         <ul class="bullets">
@@ -230,10 +238,10 @@ POST   /api/dev/recipes/&lt;name&gt;/undeprecate</code></pre>
       id: "overview",
       title: "Delivery: how your application reaches people",
       body: html`
-        <p>Once an application is built, ourapps delivers it to the people you choose, on phones, tablets, computers, Apple TV and the web. You add the app in this console, create a share link, and send it. Your friend opens the link and gets the install choices for their device. The steps below apply to every application, whether it came from a recipe, from components or from your own code.</p>
+        <p>Once an application is built, ourapps delivers it to the people you choose, on phones, tablets, computers, Apple TV and the web. You add the app in this console, create a share link, and send it. The person opens the link and gets the install choices for their device. The steps below apply to every application, whether it came from a recipe, from components or from your own code.</p>
         <div class="grid-2">
-          <div class="card flat"><h3>${icon("android", "icon-20")} Android</h3><p>The page offers a direct download of your signed APK and walks the friend through the one-time "allow from this source" prompt. Nothing else is needed.</p></div>
-          <div class="card flat"><h3>${icon("phone", "icon-20")} iPhone and iPad</h3><p>Friends install through Apple's free TestFlight app from an invitation on the install page, with nothing to change on their phone. ourapps signs each build, uploads it to TestFlight and sends it to your friends; Apple reviews the first build of each version, and ourapps asks for a fresh build before the 90-day expiry.</p></div>
+          <div class="card flat"><h3>${icon("android", "icon-20")} Android</h3><p>The page offers a direct download of your signed APK and walks the person through the one-time "allow from this source" prompt. Nothing else is needed.</p></div>
+          <div class="card flat"><h3>${icon("phone", "icon-20")} iPhone and iPad</h3><p>Your people install through Apple's free TestFlight app from an invitation on the install page, with nothing to change on their phone. ourapps signs each build, uploads it to TestFlight and sends it to your people; Apple reviews the first build of each version, and ourapps asks for a fresh build before the 90-day expiry.</p></div>
           <div class="card flat"><h3>${icon("globe", "icon-20")} Web apps</h3><p>Your repository deploys the built site to your own free Cloudflare account, which serves plain files without a request limit. The install page opens it, and the app offers a one-tap add to the home screen. Details in the <a href="/reference#web">reference</a>.</p></div>
           <div class="card flat"><h3>Mac and Windows</h3><p>Publish .dmg or .exe packages with their architecture, minimum system, signing and Mac notarization status. The page offers named package choices alongside the web version. A Mac browser does not identify its chip reliably.</p></div>
           <div class="card flat"><h3>Mac and Apple TV TestFlight</h3><p>The app page has separate setup buttons for each platform. Save the app's Apple bundle identifier, add the platform to its existing App Store Connect record, then check with Apple. Mac setup uses your browser session and provisions the installer signing key on the server. A matching ready build and open invitation are required; declaring a platform in my-app.json does not open its invitation.</p></div>
@@ -251,7 +259,7 @@ POST   /api/dev/recipes/&lt;name&gt;/undeprecate</code></pre>
         <ol class="steps">
           <li>Open <a href="${origin}/dev">${origin}/dev</a> and tap <b>Sign in with GitHub</b>. Any GitHub account works, including a free one.</li>
           <li>GitHub asks you to allow ourapps to read your public profile (scope <code>read:user</code>). That is all sign-in reads. Repository access comes later, from a token you create yourself.</li>
-          <li>You land on the console. Your public page address is set from your GitHub login, for example <a href="/${slug}">${origin}/${slug}</a>. Change it and your display name under <a href="/dev/settings">Settings</a>; the display name is what friends see on every install page.</li>
+          <li>You land on the console. Your public page address is set from your GitHub login, for example <a href="/${slug}">${origin}/${slug}</a>. Change it and your display name under <a href="/dev/settings">Settings</a>; the display name is what your people see on every install page.</li>
         </ol>
         ${callout("info", html`<p>Sign-in lasts 30 days on a browser. Sign out from the sidebar. The console is a normal website; nothing to install.</p>`)}
       `,
@@ -305,7 +313,7 @@ POST   /api/dev/recipes/&lt;name&gt;/undeprecate</code></pre>
         <p>Web apps run from your own free Cloudflare account. Cloudflare serves plain files without a request limit or a charge, your repository's workflow deploys them, and ourapps only links to the address. ourapps never sees the token.</p>
         <ol class="steps">
           <li>Create a free account at <a href="https://dash.cloudflare.com/sign-up" target="_blank" rel="noopener">dash.cloudflare.com</a>. Use a separate one if your existing account runs Workers you care about: Cloudflare cannot limit the token to one Worker, so it can replace any Worker on the account.</li>
-          <li>Open <b>Workers &amp; Pages</b> and choose your <b>workers.dev subdomain</b>, for example your name. Web apps appear at addresses like <code>https://skull-web.yourname.workers.dev</code>.</li>
+          <li>Open <b>Workers &amp; Pages</b> and choose your <b>workers.dev subdomain</b>, for example your name. Web apps appear at addresses like <code>https://poker-night-web.yourname.workers.dev</code>.</li>
           <li>Open <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener">My Profile, API Tokens</a>, tap <b>Create Token</b> and use the template <b>Edit Cloudflare Workers</b>. Account Resources: your account. Zone Resources: all zones from that account. Continue, Create, then copy the token; it is shown once.</li>
           <li>Copy the <b>Account ID</b> from Workers &amp; Pages (Account details).</li>
           <li>In each web app's repository add two secrets: ${kbd("Settings")}, ${kbd("Secrets and variables")}, ${kbd("Actions")}, <code>CLOUDFLARE_API_TOKEN</code> and <code>CLOUDFLARE_ACCOUNT_ID</code>. Or, inside the repository, <code>gh secret set CLOUDFLARE_API_TOKEN</code> and <code>gh secret set CLOUDFLARE_ACCOUNT_ID</code>. A personal GitHub account has no account-wide secrets, so each repository needs its own pair; an organisation can share one pair across its repositories.</li>
@@ -314,7 +322,7 @@ POST   /api/dev/recipes/&lt;name&gt;/undeprecate</code></pre>
         <ul class="bullets small">
           <li><b>The address is public.</b> Anyone who has it can open the app, and revoking a share link does not stop them. Keep anything private behind the app's own sign-in.</li>
           <li><b>Unity and other pre-compressed builds:</b> Cloudflare compresses files itself, so build without pre-compression, or turn on Unity's Decompression Fallback.</li>
-          <li><b>Apps that publish <code>web.zip</code></b> are served by ourapps at their link addresses and use ourapps' shared allowance. When the latest release has no <code>web.zip</code> and <code>install.pwa</code> names another address, the link addresses redirect there, so icons on friends' home screens keep opening the app.</li>
+          <li><b>Apps that publish <code>web.zip</code></b> are served by ourapps at their link addresses and use ourapps' shared allowance. When the latest release has no <code>web.zip</code> and <code>install.pwa</code> names another address, the link addresses redirect there, so icons on people's home screens keep opening the app.</li>
         </ul>
 
         <h3 id="android-setup">Android signing</h3>
@@ -349,7 +357,7 @@ base64 -i release.keystore | pbcopy   # paste as the secret ANDROID_KEYSTORE_BAS
           <li>Or in a terminal inside the repository: <code>gh secret set STORE_BUILD_TOKEN</code> then <code>gh secret set STORE_APP_ID</code>, pasting the values when asked.</li>
         </ol>
         <p>Lost the token? Open the app and tap <b>New build token</b>; the old one stops working at once.</p>
-        <p>Use <b>Preview install page</b> at any time to see exactly what a friend will see, with your current text and whatever the latest release provides.</p>
+        <p>Use <b>Preview install page</b> at any time to see exactly what your people will see, with your current text and whatever the latest release provides.</p>
         <h3>Choose targets</h3>
         <p>The app page has a switch beside each heading: iPhone and iPad, Android, Web, Mac, Windows and Apple TV. All start enabled. Turn one off to remove its options from shared links, preview and update checks. Its section stays greyed with setup, release details and history retained. Mac controls both packages and Mac TestFlight; iPhone/iPad compatibility on Mac needs both switches enabled. Turning every target off keeps the listing and screenshots with no install options.</p>
         <p>Disabled targets receive no new store-requested builds, signing material or upload operations. Already uploaded builds continue through Apple's processing and review. Turn a switch on to restore whichever retained options are available; this sends no build or setup request. Normal scheduled renewal before TestFlight expiry resumes while enabled.</p>
@@ -373,23 +381,23 @@ base64 -i release.keystore | pbcopy   # paste as the secret ANDROID_KEYSTORE_BAS
         <h3>What my-app.json looks like</h3>
         <pre><code>{
   "schema": 1,
-  "id": "skull",
-  "name": "Skull",
+  "id": "poker-night",
+  "name": "Poker Night",
   "version": "0.1.1",
-  "description": "Skull-style bluffing card game for 3 to 6 friends.",
-  "icon": "https://api.github.com/repos/you/skull/releases/assets/645774606",
+  "description": "Bluffing card game for 3 to 6 players.",
+  "icon": "https://api.github.com/repos/you/poker-night/releases/assets/645774606",
   "minPlayers": 3,
   "maxPlayers": 6,
-  "screenshots": ["https://api.github.com/repos/you/skull/releases/assets/645774610"],
+  "screenshots": ["https://api.github.com/repos/you/poker-night/releases/assets/645774610"],
   "install": {
     "pwa": null,
-    "android": { "apk": "https://api.github.com/repos/you/skull/releases/assets/645774607" },
-    "ios": { "bundleId": "com.you.skull", "testflight": "https://testflight.apple.com/join/AbCd1234" }
+    "android": { "apk": "https://api.github.com/repos/you/poker-night/releases/assets/645774607" },
+    "ios": { "bundleId": "com.you.pokernight", "testflight": "https://testflight.apple.com/join/AbCd1234" }
   }
 }</code></pre>
         <p>Use <code>null</code> for platforms you do not ship. <code>minPlayers</code> and <code>maxPlayers</code> are 1 for anything that is not a game.</p>
-        <h3 id="release-notes">Release notes your friends will read</h3>
-        <p>The install page shows a <b>Revision history</b>: one entry per release, with the version, the date, the commit it was built from, and notes. Automated bodies such as "Automated build 53 of version 0.7.2" are what friends see when nobody writes anything, so write the notes. The mechanism:</p>
+        <h3 id="release-notes">Release notes your people will read</h3>
+        <p>The install page shows a <b>Revision history</b>: one entry per release, with the version, the date, the commit it was built from, and notes. Automated bodies such as "Automated build 53 of version 0.7.2" are what people see when nobody writes anything, so write the notes. The mechanism:</p>
         <ol class="steps">
           <li>Keep a <code>CHANGELOG.md</code> at the repository root in <a href="https://keepachangelog.com" target="_blank" rel="noopener">Keep a Changelog</a> form: one <code>## [version] - date</code> section per version, newest first, bullets written for the people who use the app. An <code>[Unreleased]</code> section at the top is fine; the store ignores it.</li>
           <li>The release workflow uploads <code>CHANGELOG.md</code> as a release asset (next to my-app.json) and uses the section for the version being released as the release body. Make the workflow fail when the section is missing, so a release without notes cannot happen by accident.</li>
@@ -408,7 +416,7 @@ base64 -i release.keystore | pbcopy   # paste as the secret ANDROID_KEYSTORE_BAS
 ## [0.7.1] - 2026-10-16
 ### Added
 - Rematch button</code></pre>
-        <p>Headings like <code>### Added</code> become "Added:" labels on the page; bullets stay bullets; GitHub's generated "by @user in ..." and "Full Changelog" lines are dropped; links to GitHub appear only when the repository is public. The Latest release card in the console says whether the release shipped a changelog. An agent can draft the entry from the commits; the words to your friends are yours to approve.</p>
+        <p>Headings like <code>### Added</code> become "Added:" labels on the page; bullets stay bullets; GitHub's generated "by @user in ..." and "Full Changelog" lines are dropped; links to GitHub appear only when the repository is public. The Latest release card in the console says whether the release shipped a changelog. An agent can draft the entry from the commits; the words to your people are yours to approve.</p>
 
         <h3 id="web-apps">Web apps: home screen and permissions</h3>
         <p>The web version runs from your own Cloudflare account (<a href="#cloudflare">setup</a>). Its build carries a web app manifest, the Apple home screen tags and a copy of ourapps' small banner script (<code>https://ourapps.app/web/install-banner.js</code>), which offers "Add to home screen": Chrome's native install prompt on Android, the exact Share steps on iPhone Safari, and an "open in Safari" hint inside in-app browsers. Once added, the app launches from the icon in standalone mode and the banner never shows again. Apps published as <code>web.zip</code> get the same pieces added by ourapps.</p>
@@ -444,22 +452,22 @@ startButton.onclick = async () => {
     },
     {
       id: "share",
-      title: "5. Share with friends (agent creates the link, you send it)",
+      title: "5. Share with your people (agent creates the link, you send it)",
       body: html`
         <p>Open the app, tap <b>Share links</b>, give the link a label and create it, or ask your agent: "create a share link for Poker Night labelled Thursday table". The link is <code>${origin}/l/</code> followed by a random id; it does not list anywhere and search engines are told to stay away. Sending it to the person is the part that stays with you.</p>
         <h3>Good habits</h3>
         <ul class="bullets">
           <li><b>One link per person or group.</b> Labels like "Mum and Dad" or "Tuesday board game crowd" let you revoke one without touching the others. Rename a link any time with <b>Rename</b> next to its label; its address does not change.</li>
-          <li><b>Expiry</b> is optional. Friends who installed keep the app when a link expires or is revoked, and only new installs stop; a <code>web.zip</code> app served at the link's own address stops opening.</li>
+          <li><b>Expiry</b> is optional. People who installed keep the app when a link expires or is revoked, and only new installs stop; a <code>web.zip</code> app served at the link's own address stops opening.</li>
           <li><b>QR code.</b> Each active link shows one and you can download it as a file for a printed card.</li>
         </ul>
         <h3>Sending it</h3>
         <ul class="bullets">
           <li><b>Messages, WhatsApp:</b> tap Share next to the link. On iPhone these open the page in Safari's own view, where installing works.</li>
-          <li><b>Email:</b> paste the link. Gmail's built-in browser cannot install, so the page tells the friend to open it in Safari or Chrome.</li>
+          <li><b>Email:</b> paste the link. Gmail's built-in browser cannot install, so the page tells the person to open it in Safari or Chrome.</li>
           <li><b>Instagram, Facebook, TikTok:</b> their in-app browsers cannot install. The page detects them and shows an "Open in Safari" instruction with the extra tap.</li>
         </ul>
-        <h3>What the friend sees</h3>
+        <h3>What the person sees</h3>
         <div class="grid-2">
           <div class="card flat"><h3>On Android</h3><ol class="steps small"><li>Taps <b>Get</b>; the APK downloads.</li><li>Taps the download; Android asks to allow installs from Chrome, once.</li><li>Taps Install. Play Protect may say it has not seen this developer before; "Install anyway" continues.</li></ol></div>
           <div class="card flat"><h3>On iPhone</h3><ol class="steps small"><li>Taps <b>Get</b>, then <b>Get TestFlight</b> if they do not have Apple's TestFlight app.</li><li>Taps <b>Open the invitation</b>; TestFlight opens.</li><li>Taps <b>Accept</b>, then <b>Install</b>. The icon appears; TestFlight keeps it up to date.</li></ol></div>
@@ -471,7 +479,7 @@ startButton.onclick = async () => {
       id: "testflight",
       title: "6. iPhone and iPad through TestFlight (ourapps does the work)",
       body: html`
-        <p>Friends install iPhone and iPad apps through Apple's free TestFlight app, from an invitation link ourapps shows on the install page. They change no settings, and there is nothing for you to approve.</p>
+        <p>People install iPhone and iPad apps through Apple's free TestFlight app, from an invitation link ourapps shows on the install page. They change no settings, and there is nothing for you to approve.</p>
         <h3>Once per app</h3>
         <p>The <b>TestFlight</b> card on the app's page in the console lists these steps, ticks off the ones already done and says exactly what to do next.</p>
         <ol class="steps">
@@ -480,7 +488,7 @@ startButton.onclick = async () => {
           <li>While the app's page is open, the card notices the app within 15 seconds and finishes by itself: the App Store profile, a beta group with a public invitation link, and what Apple's beta review needs. It then asks the repository for the first build.</li>
           <li>ourapps answers Apple's export compliance question for every build: no non-exempt encryption (<code>ITSAppUsesNonExemptEncryption</code> false). Share only apps for which that is true.</li>
         </ol>
-        <p>The invitation is a public link: anyone who has it can join, with no invitation per person. Apple's page for it refuses testers until a build has passed beta review, so the install page offers it only once ourapps has found that page open; until then friends on iPhone see "coming soon", with the web version when there is one.</p>
+        <p>The invitation is a public link: anyone who has it can join, with no invitation per person. Apple's page for it refuses testers until a build has passed beta review, so the install page offers it only once ourapps has found that page open; until then people on iPhone see "coming soon", with the web version when there is one.</p>
         <h3>Every release</h3>
         <p>The <b>GitHub build</b> panel shows Requested, Pending, Running or Complete, with Failed and Cancelled outcomes. Running progress is a time-based estimate from up to five successful runs of the same workflow, using their job completion times. It stays below 100% until GitHub reports success. The run link opens the actual GitHub log. Mac/Apple TV require a matching platform workflow title; a generic release run does not count. A successful run with no matching upload shows <b>Finished without upload</b>, with its export/upload steps to check.</p>
         <table class="table">
@@ -488,10 +496,10 @@ startButton.onclick = async () => {
           <tr><td>uploading</td><td>The workflow is sending the build to Apple through ourapps</td></tr>
           <tr><td>with Apple</td><td>The upload is complete and Apple has the file</td></tr>
           <tr><td>Apple is processing it</td><td>Apple checks the build; ourapps answers Apple's export compliance question for it</td></tr>
-          <tr><td>in Apple's beta review</td><td>In the friends' group and with Apple's beta review; the first build of each version is reviewed</td></tr>
-          <tr><td>friends can install it</td><td>Approved, and the invitation accepts testers</td></tr>
+          <tr><td>in Apple's beta review</td><td>In the testers' group and with Apple's beta review; the first build of each version is reviewed</td></tr>
+          <tr><td>people can install it</td><td>Approved, and the invitation accepts testers</td></tr>
         </table>
-        ${callout("info", html`<p><b>Builds last 90 days.</b> ourapps checks every ten minutes and asks the repository for a fresh build (<code>my-store-release</code>) two weeks before the newest one expires, so friends keep the app without you doing anything.</p>`)}
+        ${callout("info", html`<p><b>Builds last 90 days.</b> ourapps checks every ten minutes and asks the repository for a fresh build (<code>my-store-release</code>) two weeks before the newest one expires, so people keep the app without you doing anything.</p>`)}
         <p class="small muted">Apple's beta review is lighter than App Store review, but Apple's rules apply. Up to 10,000 people per app can join through the link.</p>
       `,
     },
@@ -504,9 +512,9 @@ startButton.onclick = async () => {
         <table class="table">
           <tr><th>Who</th><th>What happens</th></tr>
           <tr><td>You</td><td>Bump the version, push a tag. The workflow publishes a release and uploads the iPhone build to TestFlight; the share link serves the new version at once.</td></tr>
-          <tr><td>Friend on iPhone</td><td>Nothing, with TestFlight's automatic updates on; otherwise one tap on Update in TestFlight. Settings and data stay.</td></tr>
-          <tr><td>Friend on Android</td><td>Taps Update, then Install when the phone asks. Data stays as long as the signing key is the same.</td></tr>
-          <tr><td>Friend on a web app</td><td>Nothing. The next time the app opens it loads the new version, unless the app's own service worker keeps an old copy.</td></tr>
+          <tr><td>Person on iPhone</td><td>Nothing, with TestFlight's automatic updates on; otherwise one tap on Update in TestFlight. Settings and data stay.</td></tr>
+          <tr><td>Person on Android</td><td>Taps Update, then Install when the phone asks. Data stays as long as the signing key is the same.</td></tr>
+          <tr><td>Person on a web app</td><td>Nothing. The next time the app opens it loads the new version, unless the app's own service worker keeps an old copy.</td></tr>
         </table>
         <ul class="bullets">
           <li><b>Version numbers must go up:</b> Android <code>versionCode</code> and iOS <code>CFBundleVersion</code>, or the phone refuses the update as "older".</li>
@@ -520,7 +528,7 @@ startButton.onclick = async () => {
         <pre><code>GET https://ourapps.app/api/public/links/&lt;linkId&gt;/latest
 
 {
-  "name": "Skull",
+  "name": "Poker Night",
   "version": "0.1.2",
   "testflightUrl": "https://testflight.apple.com/join/AbCd1234",
   "apple": {
@@ -565,7 +573,7 @@ suspend fun checkForUpdate(context: Context) {
     // Show your own "Update to ${"$"}{latest.version}" button, then:
     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(latest.android.apkUrl)))
 }</code></pre>
-        <p class="small muted">Android installs from the browser need the one-time "allow from this source" permission the friend already granted at first install. For a smoother in-app install, download the APK yourself and hand it to the package installer with a content URI; the one-tap confirmation remains.</p>
+        <p class="small muted">Android installs from the browser need the one-time "allow from this source" permission the person already granted at first install. For a smoother in-app install, download the APK yourself and hand it to the package installer with a content URI; the one-tap confirmation remains.</p>
       `,
     },
     {
@@ -603,11 +611,11 @@ suspend fun checkForUpdate(context: Context) {
     },
     {
       id: "security",
-      title: "Security: how your secrets, your account and your friends are protected",
+      title: "Security: how your secrets, your account and your people are protected",
       sub: [
         { id: "security-credentials", title: "Credentials" },
         { id: "security-access", title: "Who can act on your account" },
-        { id: "security-friends", title: "Your friends" },
+        { id: "security-people", title: "Your people" },
         { id: "security-artefacts", title: "App files and links" },
         { id: "security-you", title: "What is yours to do" },
       ],
@@ -639,16 +647,16 @@ suspend fun checkForUpdate(context: Context) {
           <li>Every security event (sign-in, sign-out, credential saves and removals, iPhone signing setup, key creation and revocation, build token rotation, app deletion, terms acceptance) is recorded with the country of the request and shown to you under Settings, Security.</li>
         </ul>
 
-        <h3 id="security-friends">Your friends</h3>
+        <h3 id="security-people">Your people</h3>
         <ul class="bullets">
-          <li>iPhone and iPad installs go between the friend and Apple through TestFlight; ourapps records nothing about them.</li>
-          <li>Android and web installs record nothing about the friend. Install pages set no cookies and load no analytics or third-party scripts.</li>
+          <li>iPhone and iPad installs go between the person and Apple through TestFlight; ourapps records nothing about them.</li>
+          <li>Android and web installs record nothing about the person. Install pages set no cookies and load no analytics or third-party scripts.</li>
         </ul>
 
         <h3 id="security-artefacts">App files and share links</h3>
         <ul class="bullets">
           <li>Your release files stay in your GitHub repository, public or private. Phones never receive a GitHub address; they receive a signed one-hour link to this service, which fetches the file with your token and streams it on.</li>
-          <li>Share links are random ids, never listed, never indexed, revocable at any time, and may carry an expiry. A revoked link shows "no longer active"; the friend keeps what they installed.</li>
+          <li>Share links are random ids, never listed, never indexed, revocable at any time, and may carry an expiry. A revoked link shows "no longer active"; the person keeps what they installed.</li>
           <li>Web apps run on their own address (your Cloudflare account, or a per-link address for <code>web.zip</code> apps), so they cannot read your console session.</li>
           <li>Every response carries HSTS, a strict Content Security Policy, no-sniff, frame-deny and a cross-origin opener policy.</li>
         </ul>
@@ -675,9 +683,9 @@ suspend fun checkForUpdate(context: Context) {
           <tr><td>The TestFlight card stays at "Add the app in App Store Connect"</td><td>The app is not in App Store Connect yet, or was added with another bundle ID. Follow the card's steps and choose the bundle ID it names; the card moves on by itself within 15 seconds, or press Check now.</td></tr>
           <tr><td>A fresh-build request fails with a GitHub 404</td><td>The token cannot write to that repository. Edit the token on GitHub: add the repository, Contents read and write.</td></tr>
           <tr><td>Release fails at the web deploy with "register a workers.dev subdomain"</td><td>The Cloudflare account has no workers.dev subdomain yet. Workers &amp; Pages, choose one, then run the release again. Renaming it later moves every web app's address.</td></tr>
-          <tr><td>Web app opens but cannot reach its server</td><td>The server does not allow the web app's address. Add the exact address, for example <code>https://skull-web.yourname.workers.dev</code>, to the server's CORS list.</td></tr>
+          <tr><td>Web app opens but cannot reach its server</td><td>The server does not allow the web app's address. Add the exact address, for example <code>https://poker-night-web.yourname.workers.dev</code>, to the server's CORS list.</td></tr>
           <tr><td>Install page says the app has no published build yet, for a minute after a release</td><td>The release went public before <code>my-app.json</code> was uploaded. Create releases as drafts and publish them after every file is in.</td></tr>
-          <tr><td>The TestFlight invitation says "This beta isn't accepting any new testers right now"</td><td>No build has passed Apple's beta review yet, or the public link is off. The app's TestFlight card says which, and what it waits for. Until it opens, the install page tells friends on iPhone and iPad that the app is coming soon.</td></tr>
+          <tr><td>The TestFlight invitation says "This beta isn't accepting any new testers right now"</td><td>No build has passed Apple's beta review yet, or the public link is off. The app's TestFlight card says which, and what it waits for. Until it opens, the install page tells people on iPhone and iPad that the app is coming soon.</td></tr>
           <tr><td>Nothing happens when tapping Open the invitation on iPhone</td><td>The page is inside another app's browser (Gmail, Instagram). Open in Safari. WhatsApp and Messages are fine.</td></tr>
           <tr><td>Android says "App not installed"</td><td>An older build signed with a different key is installed. Uninstall it first, or keep the signing key stable.</td></tr>
           <tr><td>Play Protect blocks the install</td><td>Tap More details, Install anyway. If there is no such button, the device policy forbids unknown sources (work phones).</td></tr>
@@ -734,11 +742,11 @@ function serviceCard(s: Service): Raw {
 
 function freeTiersBody(): Raw {
   return html`
-    <p>AI coding agents make it practical to build an app for eight people. That has a second effect that is easy to miss: <b>at eight people, the expensive parts of an app become free.</b> Video calls, realtime multiplayer servers, databases and AI all have free plans sized for hobby use, and a group of friends sits comfortably inside them. A public app with the same features would pay for every one.</p>
+    <p>AI coding agents make it practical to build an app for one organisation. That has a second effect that is easy to miss: <b>at a small organisation's size, the expensive parts of an app become free.</b> Video calls, realtime multiplayer servers, databases and AI all have free plans sized for small use, and a household, a club or a practice of fewer than ten people sits comfortably inside them. A larger business answers one question about its size, and the recipe chooses the provider tier that fits: it pays for the tier it needs and nothing more. A public app with the same features would pay for every service at full price.</p>
     <div class="grid-2">
-      <div class="card flat"><h3>${icon("devices", "icon-20")} Video calls</h3><p class="small">LiveKit's free plan gives 5,000 participant minutes a month: about twenty one-hour calls with four people. Skull and McInPoker put every player's face at the table on it.</p></div>
-      <div class="card flat"><h3>${icon("apps", "icon-20")} Multiplayer</h3><p class="small">Skull's own cost model (<code>skull/server</code>, <code>npm run costs</code>) shows a four-player table on hibernating WebSockets fits about 80 hours of play a day in Cloudflare's free plan, against about 23 hours when the same game polls.</p></div>
-      <div class="card flat"><h3>${icon("lock", "icon-20")} Data</h3><p class="small">Free databases hold hundreds of megabytes; a game history or a shared list for a family is kilobytes.</p></div>
+      <div class="card flat"><h3>${icon("devices", "icon-20")} Video calls</h3><p class="small">LiveKit's free plan gives 5,000 participant minutes a month: about twenty one-hour calls with four people. A table game that shows every player's camera fits inside it.</p></div>
+      <div class="card flat"><h3>${icon("apps", "icon-20")} Multiplayer</h3><p class="small">A four-player table on hibernating WebSockets fits about 80 hours of play a day in Cloudflare's free plan, against about 23 hours when the same game polls.</p></div>
+      <div class="card flat"><h3>${icon("lock", "icon-20")} Data</h3><p class="small">Free databases hold hundreds of megabytes; a game history or a shared list for a household is kilobytes.</p></div>
       <div class="card flat"><h3>${icon("bot", "icon-20")} AI</h3><p class="small">On-device models (Apple, Android, Chrome) cost nothing per use, and free tiers cover a few hundred requests a day. Your personal AI subscription builds the app but must not power it for others; see the AI section.</p></div>
     </div>
     <h3>Rules that apply to every service</h3>

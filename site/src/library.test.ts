@@ -121,11 +121,19 @@ describe("one story across the pages", () => {
   });
 
   it("no page or document tells the old story", () => {
-    const files = ["./pages/public.ts", "./pages/guide.ts", "./pages/small.ts", "./pages/example.ts", "./pages/shell.ts", "./pages/dev.ts", "./pages/prompts.ts", "../index.html", "../public/agents.md", "../public/llms.txt"];
+    const files = ["./pages/public.ts", "./pages/guide.ts", "./pages/small.ts", "./pages/example.ts", "./pages/shell.ts", "./pages/dev.ts", "./pages/prompts.ts", "./pages/reference.ts", "./pages/terms.ts", "../index.html", "../public/agents.md", "../public/llms.txt"];
     for (const file of files) {
       const text = read(file);
-      for (const old of ["Built with AI agents, shared with friends", "Private by design", "a private installer", "Builds apps for friends and family", "private app store"]) expect(text, `${file}: ${old}`).not.toContain(old);
+      for (const old of ["Built with AI agents, shared with friends", "Private by design", "a private installer", "Builds apps for friends and family", "friends and family", "For your friends", "At eight people", "private app store"]) expect(text, `${file}: ${old}`).not.toContain(old);
     }
+  });
+
+  it("the landing page speaks to businesses, clubs, households and shops", () => {
+    const landing = read("./pages/public.ts");
+    for (const text of ["Our apps for our businesses, our club, our home, our shop", "For your people", "For you, the developer", "Who it is for", "A clinic's appointment board", "A club's league night", "A shop's order screen", "A household's chores planner", "A restaurant's table display", "Fast", "Low cost", "Maintainable and safe", "Delivered to your people"]) expect(landing, text).toContain(text);
+    const small = read("./pages/small.ts");
+    expect(small).toContain("At a small organisation's size, the expensive parts are free");
+    expect(small).toContain("Choose free or paid by size");
   });
 
   it("the console sidebar links the library and the catalogue", () => {
