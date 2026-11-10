@@ -1,8 +1,9 @@
 // The recipe library and the component catalogue: browse, search, and read one entry.
 import { describeCondition, type BundleLink, type ComponentList, type ComponentSearch, type ComponentSummary, type ComponentVersionView, type Deprecation, type EntryStatus, type Profile, type RecipeList, type RecipeSearch, type RecipeSummary, type RecipeVersionView } from "@my/store-shared";
 import { ApiError, api, whoAmI } from "../api.js";
-import { html, mount, type Raw } from "../html.js";
-import { CLIENT_TARGET_LABEL, answerText, costLabel, deprecationAdvice, deprecationSentence, includedWhenText, loadText, paragraphsOf, queryString, readQuery, releaseUrl, statusLabel, targetLabel, versionFromSearch, withFilter, type LibraryQuery } from "../library.js";
+import { html, mount, raw, type Raw } from "../html.js";
+import { renderMarkdown } from "../markdown.js";
+import { CLIENT_TARGET_LABEL, answerText, costLabel, deprecationAdvice, deprecationSentence, includedWhenText, loadText, queryString, readQuery, releaseUrl, statusLabel, targetLabel, versionFromSearch, withFilter, type LibraryQuery } from "../library.js";
 import { navigate } from "../nav.js";
 import { setTheme } from "../theme.js";
 import { callout, copyRow, emptyState, errorBox, fmtDate, icon, toast, wireCopy } from "../ui.js";
@@ -310,7 +311,7 @@ export function recipeBody(v: RecipeVersionView, requested: string): Raw {
 
           <div class="card mt">
             <h2>About</h2>
-            ${paragraphsOf(v.description).map((p) => html`<p>${p}</p>`)}
+            <div class="markdown">${raw(renderMarkdown(v.description))}</div>
             ${v.diagram ? html`<h3 class="mt">Design diagram</h3><a href="${v.diagram}" target="_blank" rel="noopener"><img src="${v.diagram}" alt="Design diagram of ${v.title}: its components and how they connect" style="max-width:100%;background:#fff;border-radius:12px;border:1px solid var(--line)" /></a>` : ""}
             ${v.screenshots.length > 0 ? html`<h3 class="mt">Screenshots</h3><div class="row wrap" style="gap:10px;align-items:flex-start">${v.screenshots.map((s) => html`<img src="${s}" alt="" loading="lazy" style="max-height:320px;border-radius:12px;border:1px solid var(--line)" />`)}</div>` : ""}
           </div>

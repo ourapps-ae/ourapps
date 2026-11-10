@@ -589,3 +589,12 @@ h3.ft-category { font-size: 19px; margin-top: 26px; }
 .target-body:disabled { background: var(--surface); filter: grayscale(1); }
 .target-body:disabled :is(p, dd, dt, .muted, .faint) { color: var(--text); }
 .target-body:disabled .card { box-shadow: none; }
+
+.markdown h3, .markdown h4, .markdown h5, .markdown h6 { margin: 18px 0 6px; }
+.markdown p { margin: 8px 0; }
+.markdown ol { padding-left: 22px; margin: 8px 0; }
+.markdown ol li { margin: 4px 0; }
+.markdown pre { overflow-x: auto; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); }
+.markdown blockquote { margin: 8px 0; padding-left: 12px; border-left: 3px solid var(--line); }
+.markdown hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+.markdown > :first-child { margin-top: 0; }
