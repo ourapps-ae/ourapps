@@ -254,13 +254,17 @@ describe("publishing a recipe", () => {
     ]);
   });
 
-  it("accepts the condition tree and the reserved application endpoint", async () => {
+  it("stores CEL conditions as written and accepts the reserved application endpoint", async () => {
     await publishRecipe();
-    const stored = await env.DB.prepare("SELECT instance_id, included_when FROM recipe_components WHERE instance_id IN ('apple', 'tour') ORDER BY instance_id").all<{ instance_id: string; included_when: string }>();
-    expect(stored.results.map((r) => [r.instance_id, JSON.parse(r.included_when)])).toEqual([
-      ["apple", { any: [{ question: "targets", contains: "ios" }, { question: "targets", contains: "macos" }] }],
-      ["tour", { question: "lessons", truthy: true }],
+    const stored = await env.DB.prepare("SELECT instance_id, included_when FROM recipe_components WHERE instance_id IN ('apple', 'deck', 'tour') ORDER BY instance_id").all<{ instance_id: string; included_when: string | null }>();
+    expect(stored.results.map((r) => [r.instance_id, r.included_when])).toEqual([
+      ["apple", "'ios' in targets || 'macos' in targets"],
+      ["deck", null],
+      ["tour", "lessons"],
     ]);
+    const bad = await post("/api/dev/recipes", recipe((e) => ((e.recipe.version = "0.2.0"), (e.recipe.components[4].includedWhen = "lessons + 1"))));
+    expect(bad.status).toBe(400);
+    expect(((await bad.json()) as { error: string }).error).toContain("components[4].includedWhen (component tour): + is not allowed");
     const ghost = await post("/api/dev/recipes", recipe((e) => ((e.recipe.version = "0.2.0"), (e.recipe.components[0].id = "application"))));
     expect(ghost.status).toBe(400);
     expect(((await ghost.json()) as { error: string }).error).toContain("application is reserved");
@@ -621,7 +625,7 @@ describe("page variants", () => {
     expect(page).toContain("- chips (integer): Starting chips?");
     expect(page).toContain("- deck: acme/card-deck 0.1.0");
     expect(page).toContain("- apple: acme/apple-host 0.1.0 (only when (targets includes ios) or (targets includes macos))");
-    expect(page).toContain("asked only when lessons is set; otherwise it takes its default");
+    expect(page).toContain("asked only when lessons is yes; otherwise it takes its default");
     expect(page).toContain("sets host.targets to the answer");
     expect(page).toContain("range: 100 to 1000000");
     expect(page).toContain("- job server (the answer to server restricts the candidates first): acme/server-host (free), acme/server-host (paid)");

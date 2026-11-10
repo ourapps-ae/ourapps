@@ -32,6 +32,16 @@ describe("scripts/validate-recipe-file.ts", () => {
     expect(result.stderr).toContain("- recipe: unknown field extra");
   });
 
+  it("type-checks CEL conditions and names the component or question", () => {
+    const recipe = structuredClone(exampleRecipeEntry().recipe);
+    recipe.components[4].includedWhen = "lessons == 'yes'";
+    recipe.questions[4].askWhen = "{'a': 1}";
+    const result = run(recipe);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("- components[4].includedWhen (component tour): == compares bool with string; both sides must have one type");
+    expect(result.stderr).toContain("- questions[4].askWhen (question tourStyle): a map or message literal is not allowed");
+  });
+
   it("exits 2 when the file cannot be read", () => {
     const result = spawnSync(process.execPath, ["--disable-warning=MODULE_TYPELESS_PACKAGE_JSON", script, "/nonexistent/recipe.json"], { encoding: "utf8" });
     expect(result.status).toBe(2);

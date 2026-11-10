@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { run } from "@bufbuild/cel";
 import {
   GRAMMARS,
   RESERVED_NAMES,
+  checkCondition,
   describeCondition,
   matchesGrammar,
   compareVersions,
@@ -135,10 +137,9 @@ describe("validateRecipe", () => {
 
   it("checks includedWhen against the recipe's questions", () => {
     const tour = (c: unknown) => recipe((r) => (r.components[4].includedWhen = c));
-    expect(errorsOf(validateRecipe(tour({ question: "nope", equals: true })))).toContain("must name one of the recipe's questions");
-    expect(errorsOf(validateRecipe(tour({ question: "lessons" })))).toContain("exactly one of equals, in, contains or truthy");
-    expect(errorsOf(validateRecipe(tour({ question: "lessons", equals: true, contains: "x" })))).toContain("exactly one of equals, in, contains or truthy");
-    expect(validateRecipe(tour({ question: "targets", contains: "ios" })).ok).toBe(true);
+    expect(errorsOf(validateRecipe(tour("nope")))).toContain("components[4].includedWhen (component tour): nope is not a question of the recipe");
+    expect(errorsOf(validateRecipe(tour("lessons &&")))).toContain("components[4].includedWhen (component tour): not valid CEL");
+    expect(validateRecipe(tour("'ios' in targets")).ok).toBe(true);
   });
 
   it("checks questions", () => {
@@ -219,73 +220,126 @@ describe("reserved instance application", () => {
 describe("conditions", () => {
   const included = (c: unknown) => validateRecipe(recipe((r) => (r.components[4].includedWhen = c)));
   const asked = (c: unknown) => validateRecipe(recipe((r) => (questionById(r, "server").askWhen = c)));
+  // The question types of the example recipe as CEL values, for running conditions with @bufbuild/cel.
+  const answers = { targets: ["web", "ios"], scale: "small", chips: 5000n, lessons: true, tourStyle: "short", server: "free", serverKey: "" };
 
-  it("accepts equals, in, contains, truthy, all, any and not in includedWhen and askWhen", () => {
-    const conditions = [
-      { question: "lessons", equals: true },
-      { question: "scale", in: ["small", "medium"] },
-      { question: "targets", contains: "ios" },
-      { question: "lessons", truthy: true },
-      { all: [{ question: "lessons", truthy: true }, { question: "targets", contains: "web" }] },
-      { any: [{ question: "targets", contains: "ios" }, { question: "targets", contains: "macos" }] },
-      { not: { question: "scale", equals: "small" } },
-      { not: { all: [{ any: [{ question: "lessons", truthy: true }] }] } },
-    ];
-    for (const c of conditions) {
-      expect(errorsOf(included(c)), JSON.stringify(c)).toBe("");
-      expect(errorsOf(asked(c)), JSON.stringify(c)).toBe("");
+  const accepted = [
+    "lessons",
+    "!lessons",
+    "lessons == true",
+    "'ios' in targets",
+    "!('web' in targets)",
+    "scale in ['small', 'medium']",
+    "scale == 'small' && chips >= 1000",
+    "chips > 100 || chips < -5",
+    "chips != 5000",
+    "size(targets) > 1",
+    "targets.size() == 0",
+    "size(tourStyle) <= 5",
+    "tourStyle < 'z'",
+    "(lessons || 'macos' in targets) && !(scale == 'medium')",
+    "chips in [100, 5000]",
+    "true",
+  ];
+
+  it("accepts the allowed CEL subset in includedWhen and askWhen, and @bufbuild/cel evaluates each to true or false", () => {
+    for (const c of accepted) {
+      expect(errorsOf(included(c)), c).toBe("");
+      expect(errorsOf(asked(c)), c).toBe("");
+      expect(typeof run(c, answers), c).toBe("boolean");
     }
+    expect(errorsOf(included("serverKey != ''"))).toBe("");
   });
 
   it("keeps a condition as written", () => {
-    const c = { any: [{ question: "targets", contains: "ios" }, { not: { question: "lessons", truthy: true } }] };
+    const c = "'ios' in targets || !lessons";
     const result = included(c);
-    expect(result.ok && result.recipe.components[4].includedWhen).toEqual(c);
+    expect(result.ok && result.recipe.components[4].includedWhen).toBe(c);
     const askedResult = asked(c);
-    expect(askedResult.ok && askedResult.recipe.questions.find((q) => q.id === "server")?.askWhen).toEqual(c);
+    expect(askedResult.ok && askedResult.recipe.questions.find((q) => q.id === "server")?.askWhen).toBe(c);
   });
 
-  it("accepts nothing else", () => {
-    expect(errorsOf(included({ question: "lessons", truthy: false }))).toContain("truthy must be true");
-    expect(errorsOf(included({ question: "lessons", equals: true, in: [true] }))).toContain("exactly one of");
-    expect(errorsOf(included({ question: "lessons", startsWith: "a" }))).toContain("unknown field startsWith");
-    expect(errorsOf(included({ all: [], extra: 1 }))).toContain("exactly one of all, any or not");
-    expect(errorsOf(included({ all: [] }))).toContain("1 to 20 conditions");
-    expect(errorsOf(included({ any: "x" }))).toContain("1 to 20 conditions");
-    expect(errorsOf(included({ not: [] }))).toContain("must be an object");
-    expect(errorsOf(included({ all: [{ question: "ghost", equals: 1 }] }))).toContain("must name one of the recipe's questions");
-    expect(errorsOf(included("lessons"))).toContain("must be an object");
-    expect(errorsOf(included({ not: { question: "lessons", equals: { a: 1 } } }))).toContain("must be a string, number or boolean");
+  it("refuses constructs outside the allowed list", () => {
+    const refused: [string, string][] = [
+      ["chips + 1 > 2", "+ is not allowed"],
+      ["-chips < 0", "unary minus is not allowed"],
+      ["lessons ? true : false", "the conditional ?: is not allowed"],
+      ["targets[0] == 'web'", "indexing is not allowed"],
+      ["targets.all(t, t == 'web')", "macros"],
+      ["has(scale.x)", "field selection"],
+      ["scale.x == 'a'", "field selection"],
+      ["{'a': true}['a']", "indexing is not allowed"],
+      ["scale.startsWith('s')", "the method startsWith() is not allowed"],
+      ["int(scale) == 1", "the function int() is not allowed"],
+      ["chips == 1.5", "a double literal is not allowed"],
+      ["chips == 1u", "a uint64 literal is not allowed"],
+      ["scale == null", "a null literal is not allowed"],
+      ["scale in []", "a list needs 1 to 50 values"],
+      ["scale in [tourStyle]", "a list holds only literals"],
+      ["chips in [1, 'a']", "a list holds values of one type"],
+      ["chips < 9223372036854775808", "9223372036854775808 is outside the 64-bit integer range"],
+    ];
+    for (const [c, why] of refused) expect(errorsOf(included(c)), c).toContain(why);
   });
 
-  it("checks values against the question", () => {
-    expect(errorsOf(included({ question: "lessons", equals: "yes" }))).toContain("must be true or false");
-    expect(errorsOf(included({ question: "scale", equals: "huge" }))).toContain("one of the question's options");
-    expect(errorsOf(included({ question: "scale", in: ["small", "huge"] }))).toContain("in[1] must be one of");
-    expect(errorsOf(included({ question: "scale", in: [] }))).toContain("1 to 50 values");
-    expect(errorsOf(included({ question: "targets", contains: "tv" }))).toContain("one of the question's options");
-    expect(errorsOf(included({ question: "scale", contains: "small" }))).toContain("contains applies to set questions");
-    expect(errorsOf(included({ question: "targets", equals: "web" }))).toContain("use contains");
-    expect(errorsOf(included({ question: "chips", equals: 5.5 }))).toContain("must be an integer");
+  it("type-checks to bool against the question types", () => {
+    expect(errorsOf(included("chips"))).toContain("the expression is of type int; a condition must be true or false");
+    expect(errorsOf(included("scale"))).toContain("of type string");
+    expect(errorsOf(included("targets"))).toContain("of type list(string)");
+    expect(errorsOf(included("lessons == 'yes'"))).toContain("== compares bool with string");
+    expect(errorsOf(included("chips == '5'"))).toContain("== compares int with string");
+    expect(errorsOf(included("targets == ['web']"))).toContain("== cannot compare sets");
+    expect(errorsOf(included("lessons < true"))).toContain("< cannot order true and false");
+    expect(errorsOf(included("'web' in scale"))).toContain("in needs a value and a list of the same type");
+    expect(errorsOf(included("1 in targets"))).toContain("not int in list(string)");
+    expect(errorsOf(included("lessons && chips"))).toContain("&& takes true or false, not int");
+    expect(errorsOf(included("!scale"))).toContain("! takes true or false, not string");
+    expect(errorsOf(included("size(lessons) > 0"))).toContain("size() takes text or a set, not bool");
   });
 
-  it("limits nesting", () => {
-    let c: unknown = { question: "lessons", truthy: true };
-    for (let i = 0; i < 10; i++) c = { not: c };
-    expect(errorsOf(included(c))).toContain("nested more than");
+  it("checks text literals against the options of choice and set questions", () => {
+    expect(errorsOf(included("scale == 'huge'"))).toContain("'huge' is not an option of scale (small, medium)");
+    expect(errorsOf(included("'huge' != scale"))).toContain("'huge' is not an option of scale");
+    expect(errorsOf(included("scale in ['small', 'huge']"))).toContain("'huge' is not an option of scale");
+    expect(errorsOf(included("'tv' in targets"))).toContain("'tv' is not an option of targets");
+  });
+
+  it("refuses what is not an expression", () => {
+    for (const c of [{ question: "lessons", truthy: true }, 1, true, [], "", "   ", "x".repeat(1001)]) expect(errorsOf(included(c)), JSON.stringify(c)).toContain("a condition must be a CEL expression of 1 to 1000 characters, or null");
   });
 
   it("applies to a job candidate too", () => {
-    const ok = validateRecipe(recipe((r) => (r.jobs[0].candidates[1].includedWhen = { question: "lessons", truthy: true })));
+    const ok = validateRecipe(recipe((r) => (r.jobs[0].candidates[1].includedWhen = "lessons")));
     expect(errorsOf(ok)).toBe("");
-    expect(ok.ok && ok.recipe.jobs[0].candidates[1].includedWhen).toEqual({ question: "lessons", truthy: true });
-    expect(errorsOf(validateRecipe(recipe((r) => (r.jobs[0].candidates[1].includedWhen = { question: "ghost", truthy: true }))))).toContain("candidates[1].includedWhen.question");
+    expect(ok.ok && ok.recipe.jobs[0].candidates[1].includedWhen).toBe("lessons");
+    expect(errorsOf(validateRecipe(recipe((r) => (r.jobs[0].candidates[1].includedWhen = "ghost"))))).toContain("jobs[0].candidates[1].includedWhen (job server, acme/server-host paid): ghost is not a question of the recipe");
   });
 
-  it("describes a condition in words", () => {
-    const say = (v: unknown) => String(v);
-    expect(describeCondition({ any: [{ question: "targets", contains: "ios" }, { not: { question: "scale", in: ["small", "medium"] } }] }, say)).toBe("(targets includes ios) or (not (scale is one of small, medium))");
-    expect(describeCondition({ question: "lessons", truthy: true }, say)).toBe("lessons is set");
+  it("names the questions a condition reads", () => {
+    const byId = new Map(exampleRecipeEntry().recipe.questions.map((q) => [q.id, q]));
+    const checked = checkCondition("scale == 'small' && ('ios' in targets || lessons)", byId);
+    expect(checked.ok && [...checked.questions].sort()).toEqual(["lessons", "scale", "targets"]);
+  });
+
+  it("describes a condition in words, or gives null for the expression to be shown as written", () => {
+    expect(describeCondition("'ios' in targets")).toBe("targets includes ios");
+    expect(describeCondition("video")).toBe("video is yes");
+    expect(describeCondition("!video")).toBe("video is no");
+    expect(describeCondition("!('web' in targets)")).toBe("targets does not include web");
+    expect(describeCondition("computerPlayers != 'none'")).toBe("computerPlayers is not none");
+    expect(describeCondition("scale in ['medium', 'large']")).toBe("scale is one of medium, large");
+    expect(describeCondition("players >= 4")).toBe("players is at least 4");
+    expect(describeCondition("4 < players")).toBe("players is more than 4");
+    expect(describeCondition("size(targets) == 0")).toBe("targets is empty");
+    expect(describeCondition("targets.size() > 0")).toBe("targets is not empty");
+    expect(describeCondition("storeInvitation != ''")).toBe("storeInvitation is not empty");
+    expect(describeCondition("'ios' in targets || 'macos' in targets || 'tvos' in targets")).toBe("(targets includes ios) or (targets includes macos) or (targets includes tvos)");
+    expect(describeCondition("updates && !('web' in targets)")).toBe("(updates is yes) and (targets does not include web)");
+    expect(describeCondition("!(lessons && video)")).toBe("not ((lessons is yes) and (video is yes))");
+    expect(describeCondition("lessons == true", (v) => `[${String(v)}]`)).toBe("lessons is [true]");
+    expect(describeCondition("size(targets) > 2")).toBeNull();
+    expect(describeCondition("lessons && size(targets) > 2")).toBeNull();
+    expect(describeCondition("not CEL (")).toBeNull();
   });
 });
 
@@ -297,14 +351,14 @@ describe("question format", () => {
   });
 
   it("refuses askWhen that names an unknown question or waits on itself", () => {
-    expect(errorsOf(validateRecipe(recipe((r) => (questionById(r, "server").askWhen = { question: "ghost", equals: 1 }))))).toContain("questions[5].askWhen.question");
-    expect(errorsOf(validateRecipe(recipe((r) => (questionById(r, "server").askWhen = { question: "server", equals: "free" }))))).toContain("leads back to server");
+    expect(errorsOf(validateRecipe(recipe((r) => (questionById(r, "server").askWhen = "ghost == 1"))))).toContain("questions[5].askWhen (question server): ghost is not a question of the recipe");
+    expect(errorsOf(validateRecipe(recipe((r) => (questionById(r, "server").askWhen = "server == 'free'"))))).toContain("leads back to server");
     expect(
       errorsOf(
         validateRecipe(
           recipe((r) => {
-            questionById(r, "server").askWhen = { question: "tourStyle", equals: "full" };
-            questionById(r, "tourStyle").askWhen = { question: "server", equals: "paid" };
+            questionById(r, "server").askWhen = "tourStyle == 'full'";
+            questionById(r, "tourStyle").askWhen = "server == 'paid'";
           }),
         ),
       ),
@@ -558,37 +612,35 @@ describe("conflicting sets", () => {
     expect(errorsOf(clash((r) => (questionById(r, "chips").effects = [{ sets: { "host.plan": "a" } }, { sets: { "host.plan": "a" } }])))).toBe("");
   });
 
-  it("accepts questions whose askWhen conditions are disjoint on equals or in values of one question", () => {
-    const both = (a: unknown, b: unknown) =>
-      clash((r) => {
-        questionById(r, "chips").effects = setting("a");
-        questionById(r, "chips").askWhen = a;
-        questionById(r, "lessons").effects = setting("b");
-        questionById(r, "lessons").askWhen = b;
-      });
-    expect(errorsOf(both({ question: "server", equals: "free" }, { question: "server", equals: "paid" }))).toBe("");
-    expect(errorsOf(both({ question: "scale", in: ["small"] }, { question: "scale", in: ["medium"] }))).toBe("");
-    expect(errorsOf(both({ all: [{ question: "lessons", truthy: true }, { question: "server", equals: "free" }] }, { question: "server", equals: "paid" }))).toBe("");
-    expect(errorsOf(both({ any: [{ question: "server", equals: "free" }] }, { question: "server", in: ["paid"] }))).toBe("");
+  const both = (a: unknown, b: unknown) =>
+    clash((r) => {
+      questionById(r, "chips").effects = setting("a");
+      questionById(r, "chips").askWhen = a;
+      questionById(r, "tourStyle").effects = setting("b");
+      questionById(r, "tourStyle").askWhen = b;
+    });
+
+  it("accepts questions whose askWhen conditions confine one question to disjoint values", () => {
+    expect(errorsOf(both("server == 'free'", "server == 'paid'"))).toBe("");
+    expect(errorsOf(both("'free' == server", "server != 'free' && server == 'paid'"))).toBe("");
+    expect(errorsOf(both("scale in ['small']", "scale in ['medium']"))).toBe("");
+    expect(errorsOf(both("lessons && server == 'free'", "server == 'paid'"))).toBe("");
+    expect(errorsOf(both("server == 'free' || server == 'free'", "server in ['paid']"))).toBe("");
+    expect(errorsOf(both("lessons", "!lessons"))).toBe("");
+    expect(errorsOf(both("lessons == true", "!lessons"))).toBe("");
   });
 
   it("treats conditions as exclusive only when provably disjoint", () => {
-    const both = (a: unknown, b: unknown) =>
-      clash((r) => {
-        questionById(r, "chips").effects = setting("a");
-        questionById(r, "chips").askWhen = a;
-        questionById(r, "lessons").effects = setting("b");
-        questionById(r, "lessons").askWhen = b;
-      });
     const bad = "both set host.plan";
-    expect(errorsOf(both({ question: "server", equals: "free" }, { question: "server", equals: "free" }))).toContain(bad);
-    expect(errorsOf(both({ question: "scale", in: ["small", "medium"] }, { question: "scale", in: ["medium"] }))).toContain(bad);
-    expect(errorsOf(both({ question: "server", equals: "free" }, { question: "scale", equals: "small" }))).toContain(bad);
-    expect(errorsOf(both({ question: "server", equals: "free" }, { not: { question: "server", equals: "paid" } }))).toContain(bad);
-    expect(errorsOf(both({ question: "targets", contains: "web" }, { question: "targets", contains: "ios" }))).toContain(bad);
-    expect(errorsOf(both({ any: [{ question: "server", equals: "free" }, { question: "scale", equals: "small" }] }, { question: "server", equals: "paid" }))).toContain(bad);
-    expect(errorsOf(both(undefined, { question: "server", equals: "paid" }))).toContain(bad);
-    expect(errorsOf(both({ question: "lessons", truthy: true }, { not: { question: "lessons", truthy: true } }))).toContain(bad);
+    expect(errorsOf(both("server == 'free'", "server == 'free'"))).toContain(bad);
+    expect(errorsOf(both("scale in ['small', 'medium']", "scale in ['medium']"))).toContain(bad);
+    expect(errorsOf(both("server == 'free'", "scale == 'small'"))).toContain(bad);
+    expect(errorsOf(both("server == 'free'", "!(server == 'paid')"))).toContain(bad);
+    expect(errorsOf(both("server == 'free'", "server != 'free'"))).toContain(bad);
+    expect(errorsOf(both("'web' in targets", "'ios' in targets"))).toContain(bad);
+    expect(errorsOf(both("server == 'free' || scale == 'small'", "server == 'paid'"))).toContain(bad);
+    expect(errorsOf(both(undefined, "server == 'paid'"))).toContain(bad);
+    expect(errorsOf(both("lessons", "lessons"))).toContain(bad);
   });
 });
 

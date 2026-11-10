@@ -61,7 +61,8 @@ function answer(value: unknown): string {
   return value === undefined || value === null ? "asked" : typeof value === "string" ? value : JSON.stringify(value);
 }
 
-const when = (c: Condition): string => describeCondition(c, answer, { is: "is", includes: "includes" });
+// A condition in words, or the CEL expression itself in backticks when it has no plain wording.
+const when = (c: Condition): string => describeCondition(c) ?? `\`${c}\``;
 
 function setValue(v: unknown): string {
   if (typeof v === "string") return v === "$answer" ? "the answer" : JSON.stringify(v);

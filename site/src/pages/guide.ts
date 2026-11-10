@@ -139,7 +139,7 @@ POST   /api/dev/recipes/&lt;name&gt;/undeprecate</code></pre>
   "targets": { "client": ["web", "ios", "android"], "server": [] },
   "components": [
     { "id": "deck", "name": "acme/card-deck", "version": "0.1.0", "configuration": {}, "includedWhen": null },
-    { "id": "tour", "name": "acme/guided-tour", "version": "0.1.0", "configuration": {}, "includedWhen": { "question": "lessons", "truthy": true } }
+    { "id": "tour", "name": "acme/guided-tour", "version": "0.1.0", "configuration": {}, "includedWhen": "lessons" }
   ],
   "questions": [
     { "id": "chips", "ask": "Starting chips?", "type": "integer", "default": 5000, "min": 100, "max": 1000000,
@@ -154,7 +154,7 @@ POST   /api/dev/recipes/&lt;name&gt;/undeprecate</code></pre>
         <ul class="bullets">
           <li><b>Components:</b> each is <code>scope/name</code> with an exact version and an instance <code>id</code>. It is included when <code>includedWhen</code> is null or true. The instance id <code>application</code> is the recipe's own component; no component is named <code>application</code>.</li>
           <li><b>Questions:</b> <code>{ id, ask, askAgent, askWhen, type, options, default, min, max, effects }</code>. The type is <code>set</code>, <code>choice</code>, <code>boolean</code>, <code>integer</code> (with <code>min</code> and <code>max</code>), <code>text</code>, <code>secretRef</code> or <code>account</code>. A question with <code>askWhen</code> needs a <code>default</code>, which it takes when the condition is false. A <code>secretRef</code> question carries no value and no default.</li>
-          <li><b>Conditions</b> (<code>askWhen</code>, <code>includedWhen</code>): <code>{ question, equals }</code>, <code>{ question, in }</code>, <code>{ question, contains }</code>, <code>{ question, truthy }</code>, <code>{ all: [...] }</code>, <code>{ any: [...] }</code> and <code>{ not: condition }</code>.</li>
+          <li><b>Conditions</b> (<code>askWhen</code>, <code>includedWhen</code>): CEL (Common Expression Language) expressions that are true or false, such as <code>lessons</code>, <code>'ios' in targets</code> or <code>scale in ['medium', 'large']</code>. Each question id holds its answer (a set question is a list of text); a condition uses literals, question ids, <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code>, <code>in</code>, <code>&amp;&amp;</code>, <code>||</code>, <code>!</code>, parentheses and <code>size()</code>.</li>
           <li><b>Effects:</b> <code>{ sets: { "&lt;componentId&gt;.&lt;settingId&gt;": value } }</code>. A value is a literal, <code>"$answer"</code>, <code>{ map }</code>, <code>{ fromScale }</code>, <code>{ template }</code> or <code>{ ref }</code>. Two questions may not set one target to different values unless their <code>askWhen</code> conditions cannot both hold.</li>
           <li><b>Jobs and scale (optional):</b> a job chooses between candidate components by suitability profile; <code>scale</code> is a choice question whose options are load bands.</li>
           <li><b>Connections:</b> each joins two <code>{ instance, port }</code> endpoints.</li>

@@ -93,9 +93,9 @@ describe("recipe page", () => {
     expect(html).toContain('href="/components/card-deck"');
     expect(html).toContain("Guardians: Example Guardian Ltd");
     expect(html).toContain("Not in the catalogue");
-    expect(html).toContain("when lessons is set");
+    expect(html).toContain("when lessons is yes");
     expect(html).toContain("when (targets includes ios) or (targets includes macos)");
-    expect(html).toContain("asked when lessons is set");
+    expect(html).toContain("asked when lessons is yes");
     expect(html).toContain("asked when server is paid");
     expect(html).toContain("fewer than 10 people, occasional use");
     expect(html).toContain("iPhone and iPad");
@@ -132,8 +132,8 @@ describe("recipe page", () => {
 
   it("names the condition of a job candidate", () => {
     const r = recipeView();
-    const html = recipeBody(recipeView({ jobs: [{ ...r.jobs[0], candidates: [{ component: "acme/server-host", profile: "paid", includedWhen: { question: "server", equals: "paid" } }] }] }), "latest").html;
-    expect(html).toContain("acme/server-host (paid) when server is paid");
+    const html = recipeBody(recipeView({ jobs: [{ ...r.jobs[0], candidates: [{ component: "acme/free-host", profile: "free" }, { component: "acme/server-host", profile: "paid", includedWhen: "server == 'paid'" }, { component: "acme/big-host", profile: "paid", includedWhen: "size(targets) > 2" }] }] }), "latest").html;
+    expect(html).toContain("acme/free-host (free), acme/server-host (paid) when server is paid, acme/big-host (paid) when <code>size(targets) &gt; 2</code>");
   });
 });
 

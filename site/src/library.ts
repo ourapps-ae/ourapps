@@ -1,5 +1,6 @@
 // Pure helpers for the recipe library and component catalogue pages.
-import { describeCondition, type Deprecation, type EntryStatus, type Profile, type RecipeComponent } from "@my/store-shared";
+import { describeCondition, type Condition, type Deprecation, type EntryStatus, type Profile, type RecipeComponent } from "@my/store-shared";
+import { html, type Raw } from "./html.js";
 
 export const CLIENT_TARGET_LABEL: Record<string, string> = {
   web: "Web",
@@ -91,9 +92,14 @@ export function answerText(value: unknown): string {
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
-export function includedWhenText(c: Pick<RecipeComponent, "includedWhen">): string {
-  const w = c.includedWhen;
-  return w ? `when ${describeCondition(w, answerText)}` : "always";
+// A condition in words, or the CEL expression itself in code font when it has no plain wording.
+export function conditionHtml(c: Condition): Raw {
+  const words = describeCondition(c, answerText);
+  return words === null ? html`<code>${c}</code>` : html`${words}`;
+}
+
+export function includedWhenHtml(c: Pick<RecipeComponent, "includedWhen">): Raw {
+  return c.includedWhen ? html`when ${conditionHtml(c.includedWhen)}` : html`always`;
 }
 
 // The version a page shows: ?version=, else the newest.
