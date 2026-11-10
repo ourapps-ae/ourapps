@@ -1,5 +1,5 @@
 // Plain-text pages of the recipe library and component catalogue, for agents that read without a browser.
-import { deprecationLine, describeCondition, type Condition, type Deprecation, type ComponentList, ComponentSearch, ComponentSummary, ComponentVersionView, Port, RecipeComponentView, RecipeList, RecipeQuestion, RecipeSearch, RecipeSummary, RecipeVersionView, Suitability, Targets } from "@my/store-shared";
+import { COMPONENT_PACKAGE, RECIPE_PACKAGE, deprecationLine, describeCondition, type Condition, type PackageSummary, type Deprecation, type ComponentList, ComponentSearch, ComponentSummary, ComponentVersionView, Port, RecipeComponentView, RecipeList, RecipeQuestion, RecipeSearch, RecipeSummary, RecipeVersionView, Suitability, Targets } from "@my/store-shared";
 
 const COPYRIGHT = "Copyright Level N Ltd 2026";
 
@@ -8,6 +8,7 @@ const targets = (t: Targets): string => `client ${list(t.client)}; server ${list
 const ports = (p: Port[]): string => list(p.map((x) => `${x.id} (${x.type} ${x.version}${x.optional ? ", optional" : ""})`));
 
 const warnings = (deprecations: Deprecation[]): string[] => deprecations.map((d) => `DEPRECATION WARNING: ${deprecationLine(d)}`);
+const packageLines = (summary: PackageSummary): string[] => ["", "What you download", summary.headline, ...summary.parts.map(([label, text]) => `- ${label}: ${text}`), summary.where, summary.check];
 const publisherLine = (p: { displayName: string; slug: string } | null): string => (p ? `Publisher: ${p.displayName} (${p.slug})` : "Publisher: none (the publisher deleted their account)");
 
 function page(title: string, body: string[]): string {
@@ -129,6 +130,7 @@ export function recipeText(v: RecipeVersionView, origin: string): string {
     `Bundle download: GET ${v.bundle.url} returns a link valid for one hour${v.status === "orphaned" ? "; with no publisher the link exists only while the release is public, otherwise the status is bundle-unavailable" : ""}`,
     `Build: an agent reads this page, asks the questions, and installs the components with aepm (https://github.com/ourapps-ae/aepm); one-command assembly (aepm create) is coming soon`,
     `Page: ${origin}/recipes/${v.slug}; JSON: ${origin}/api/recipes/${v.slug}/${v.version}`,
+    ...packageLines(RECIPE_PACKAGE),
     v.diagram ? `Diagram: ${origin}/api/recipes/${v.slug}/${v.version}/diagram.svg` : "Diagram: none",
     "",
     "Description",
@@ -165,6 +167,7 @@ export function componentText(v: ComponentVersionView, origin: string): string {
     `Bundle: ${v.bundle.asset} ${v.bundle.digest}`,
     `Bundle download: GET ${v.bundle.url} returns a link valid for one hour${v.status === "orphaned" ? "; with no publisher the link exists only while the release is public, otherwise the status is bundle-unavailable" : ""}`,
     `Page: ${origin}/components/${v.slug}; JSON: ${origin}/api/components/${v.slug}/${v.version}`,
+    ...packageLines(COMPONENT_PACKAGE),
     "",
     `Provides: ${ports(v.provides)}`,
     `Requires: ${ports(v.requires)}`,

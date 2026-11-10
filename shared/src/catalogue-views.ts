@@ -164,3 +164,36 @@ export interface BundleLink {
   expiresAt: string | null;
   deprecations: Deprecation[];
 }
+
+// What a downloaded package is, in one place: the site pages, the plain-text pages and the documents quote this.
+export interface PackageSummary {
+  headline: string;
+  parts: [label: string, text: string][];
+  where: string;
+  check: string;
+}
+
+export const COMPONENT_PACKAGE: PackageSummary = {
+  headline: "The component itself: reviewed source code in one archive file, not a link to code elsewhere.",
+  parts: [
+    ["Code", "The working implementation for each device or server it supports (the pills above), as ordinary source files in those platforms' languages."],
+    ["Contract", "The interfaces it provides and requires, written as data, with its documentation and instructions for an agent."],
+    ["Tests", "The tests that prove it works, and the versions of the tools they need."],
+    ["Manifest", "component.json lists every file with its fingerprint and the place it takes in your application, so nothing is copied that is not listed."],
+    ["Not included", "The components it requires (each is a separate download), your settings, and any secret."],
+  ],
+  where: "The archive is a release file on the publisher's public GitHub repository. ourapps keeps this page's details and a pointer to the release; it does not hold or run the code.",
+  check: "The digest is the sha256 fingerprint of the archive. aepm checks it before anything is copied. Installing copies the listed files into your application and runs none of the package's code.",
+};
+
+export const RECIPE_PACKAGE: PackageSummary = {
+  headline: "The recipe itself: source code and a form, in one archive file, not a link to code elsewhere.",
+  parts: [
+    ["Recipe", "recipe.json holds the questions it asks, the components it names (each by exact version), the settings that connect them, the choice of providers by size, and the tested answer sets."],
+    ["Application code", "The recipe's own application-specific component: the screens, artwork, sounds, translated text, rules and end-to-end tests that belong to this application and to no other."],
+    ["Instructions", "INSTRUCTIONS.md tells an agent how to answer the questions and what each answer changes, and tells the developer which accounts are needed."],
+    ["Not included", "The components it names. Each is a separate download, fetched by exact version and checked against its digest."],
+  ],
+  where: "The archive is a release file on the publisher's public GitHub repository. ourapps keeps this page's details and a pointer to the release; it does not hold or run the code.",
+  check: "The digest is the sha256 fingerprint of the archive. aepm checks it before anything is copied. Installing copies the listed files into your application and runs none of the package's code.",
+};

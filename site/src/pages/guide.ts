@@ -97,7 +97,7 @@ GET /api/components/search?q=seating&amp;deprecated=exclude</code></pre>
         { id: "publish-deprecate", title: "Deprecate and undeprecate" },
       ],
       body: html`
-        <p>A recipe or component is published from its own GitHub repository. ourapps keeps a catalogue entry (name, version, descriptions, declarations, digests) and a pointer to the repository's release. The package itself stays in your release. Publishing needs no approval and has no queue.</p>
+        <p>A recipe or component is published from its own GitHub repository. ourapps keeps a catalogue entry (name, version, descriptions, declarations, digests) and a pointer to the repository's release. The package itself stays in your release: it is the source code, one archive file (<code>.tar</code>, made by <code>aepm pack</code>) with the implementation, the contract, the tests and a manifest that lists every file with its fingerprint. A recipe's archive holds <code>recipe.json</code> and the recipe's own application code and text, and names its components by exact version without including them. Publishing needs no approval and has no queue.</p>
         <p><b>You need:</b> to be signed in (or to hold a key with the manage scope), a GitHub token saved under <a href="/dev/settings#credentials">Settings</a> that can push to the repository, and a GitHub release whose tag holds the package as an asset. A name is <code>scope/name</code> in lowercase letters, digits and single hyphens, and the scope must equal the repository owner. A name belongs to the first developer and repository that published it.</p>
         <h3 id="publish-routes">Routes</h3>
         <pre><code>POST   /api/dev/components               the component entry
@@ -118,7 +118,7 @@ POST   /api/dev/recipes/&lt;name&gt;/undeprecate</code></pre>
   "recipe": { ...the recipe.json below... },
   "digest": "sha256:&lt;64 lowercase hex characters&gt;",
   "source": { "repository": "acme/poker-night-recipe", "tag": "v0.1.0" },
-  "bundle": { "asset": "poker-night-0.1.0.aepm", "digest": "sha256:&lt;64 lowercase hex characters&gt;" },
+  "bundle": { "asset": "poker-night-0.1.0.tar", "digest": "sha256:&lt;64 lowercase hex characters&gt;" },
   "page": { "description": "Poker Night deals a hand for every member at the table.", "diagram": null, "screenshots": [] }
 }</code></pre>
         <p><code>page.description</code> is text, <code>page.diagram</code> is a diagram as SVG text without scripts or outside references (or null), and <code>page.screenshots</code> are https addresses.</p>

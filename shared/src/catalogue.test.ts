@@ -777,7 +777,7 @@ describe("validateComponentEntry", () => {
     expect(e.requires[0].id).toBe("random-source");
     expect(e.suitability.profiles[0].cost).toBe("none");
     expect(e.source).toEqual({ repository: "acme/card-deck", tag: "v0.1.0" });
-    expect(e.bundle.asset).toBe("card-deck-0.1.0.aepm");
+    expect(e.bundle.asset).toBe("card-deck-0.1.0.tar");
     expect(e.guardians).toEqual(["Example Guardian Ltd"]);
   });
 
