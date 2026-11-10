@@ -2,6 +2,7 @@
 // catalogue entry for a component version. Format authority: .opencode/knowledge/component-standard.md
 // in the workspace root.
 import { isAppTarget, type AppTarget } from "./targets.js";
+import { checkCondition, confinements, type Condition, type ConditionExpr } from "./conditions.js";
 
 export const CATALOGUE_FORMAT = 1;
 
@@ -193,16 +194,6 @@ function readRelease(source: unknown, bundle: unknown, errors: string[]): { sour
 
 // ---------------------------------------------------------------- recipe.json
 
-// A condition over answers, used by askWhen and includedWhen.
-export type Condition =
-  | { question: string; equals: Json }
-  | { question: string; in: Json[] }
-  | { question: string; contains: Json }
-  | { question: string; truthy: true }
-  | { all: Condition[] }
-  | { any: Condition[] }
-  | { not: Condition };
-
 // The instance id of the recipe's own application-specific component. No component may use it.
 export const APPLICATION_INSTANCE = "application";
 
@@ -285,17 +276,6 @@ export function matchesGrammar(grammar: string, value: string): boolean {
   }
 }
 
-// "<question> is <value>" and so on; `words` lets a page choose its own verbs.
-export function describeCondition(c: Condition, value: (v: unknown) => string, words: { is: string; includes: string } = { is: "is", includes: "includes" }): string {
-  if ("all" in c) return c.all.map((x) => `(${describeCondition(x, value, words)})`).join(" and ");
-  if ("any" in c) return c.any.map((x) => `(${describeCondition(x, value, words)})`).join(" or ");
-  if ("not" in c) return `not (${describeCondition(c.not, value, words)})`;
-  if ("equals" in c) return `${c.question} ${words.is} ${value(c.equals)}`;
-  if ("in" in c) return `${c.question} ${words.is} one of ${c.in.map(value).join(", ")}`;
-  if ("contains" in c) return `${c.question} ${words.includes} ${value(c.contains)}`;
-  return `${c.question} is set`;
-}
-
 export interface Recipe {
   format: 1;
   name: string;
@@ -321,129 +301,25 @@ function isLiteral(value: unknown): value is SetLiteral {
   return typeof value === "string" || typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value));
 }
 
-// What a literal compared in a condition or a `sets` value may be: a string, number or boolean.
-function conditionValueError(q: RecipeQuestion, value: unknown): string | null {
-  if (!isLiteral(value)) return "must be a string, number or boolean";
-  switch (q.type) {
-    case "boolean":
-      return typeof value === "boolean" ? null : "must be true or false";
-    case "integer":
-      return Number.isSafeInteger(value) ? null : "must be an integer";
-    case "choice":
-    case "set":
-      return q.options?.includes(value as string | number) ? null : "must be one of the question's options";
-    default:
-      return typeof value === "string" ? null : "must be text";
-  }
-}
+// A condition (CEL) checked against the questions, with its parsed expression and the questions it reads.
+type ReadCondition = { condition: Condition; expr: ConditionExpr; questions: Set<string> };
 
-const CONDITION_LEAVES = ["equals", "in", "contains", "truthy"] as const;
-const CONDITION_DEPTH = 8;
-
-function readCondition(value: unknown, where: string, byId: ReadonlyMap<string, RecipeQuestion>, errors: string[], depth = 0): Condition | null {
-  if (!isRecord(value)) {
-    errors.push(`${where} must be an object`);
-    return null;
-  }
-  if (depth > CONDITION_DEPTH) {
-    errors.push(`${where} is nested more than ${CONDITION_DEPTH} levels deep`);
-    return null;
-  }
-  const combinators = (["all", "any", "not"] as const).filter((k) => k in value);
-  if ("question" in value) {
-    unknownKeys(value, ["question", ...CONDITION_LEAVES], where, errors);
-    const forms = CONDITION_LEAVES.filter((k) => k in value);
-    if (forms.length !== 1) {
-      errors.push(`${where} needs exactly one of equals, in, contains or truthy`);
-      return null;
-    }
-    const q = typeof value.question === "string" ? byId.get(value.question) : undefined;
-    if (!q) {
-      errors.push(`${where}.question must name one of the recipe's questions`);
-      return null;
-    }
-    const form = forms[0];
-    const check = (v: unknown, at: string): boolean => {
-      const problem = conditionValueError(q, v);
-      if (problem) errors.push(`${at} ${problem}`);
-      return problem === null;
-    };
-    if (form === "truthy") {
-      if (value.truthy !== true) errors.push(`${where}.truthy must be true`);
-      return { question: q.id, truthy: true };
-    }
-    if (form === "contains") {
-      if (q.type !== "set") errors.push(`${where}.contains applies to set questions; ${q.id} is ${q.type}`);
-      check(value.contains, `${where}.contains`);
-      return { question: q.id, contains: value.contains };
-    }
-    if (q.type === "set") errors.push(`${where}.${form} cannot compare the set question ${q.id}; use contains`);
-    if (form === "equals") {
-      check(value.equals, `${where}.equals`);
-      return { question: q.id, equals: value.equals };
-    }
-    if (!Array.isArray(value.in) || value.in.length === 0 || value.in.length > 50) {
-      errors.push(`${where}.in must be a list of 1 to 50 values`);
-      return { question: q.id, in: [] };
-    }
-    value.in.forEach((v, i) => check(v, `${where}.in[${i}]`));
-    return { question: q.id, in: value.in };
-  }
-  if (combinators.length !== 1 || Object.keys(value).length !== 1) {
-    errors.push(`${where} needs a question with one of equals, in, contains or truthy, or exactly one of all, any or not`);
-    return null;
-  }
-  const kind = combinators[0];
-  if (kind === "not") {
-    const inner = readCondition(value.not, `${where}.not`, byId, errors, depth + 1);
-    return inner ? { not: inner } : null;
-  }
-  const list = value[kind];
-  if (!Array.isArray(list) || list.length === 0 || list.length > 20) {
-    errors.push(`${where}.${kind} must be a list of 1 to 20 conditions`);
-    return null;
-  }
-  const items = list.map((c, i) => readCondition(c, `${where}.${kind}[${i}]`, byId, errors, depth + 1));
-  if (items.some((c) => c === null)) return null;
-  return kind === "all" ? { all: items as Condition[] } : { any: items as Condition[] };
-}
-
-function readOptionalCondition(value: unknown, where: string, byId: ReadonlyMap<string, RecipeQuestion>, errors: string[]): Condition | null {
+// `label` names the question, component or job candidate the condition belongs to.
+function readCondition(value: unknown, where: string, label: string, byId: ReadonlyMap<string, RecipeQuestion>, errors: string[]): ReadCondition | null {
   if (value === null || value === undefined) return null;
-  return readCondition(value, where, byId, errors);
-}
-
-function conditionQuestions(c: Condition, out = new Set<string>()): Set<string> {
-  if ("all" in c) c.all.forEach((x) => conditionQuestions(x, out));
-  else if ("any" in c) c.any.forEach((x) => conditionQuestions(x, out));
-  else if ("not" in c) conditionQuestions(c.not, out);
-  else out.add(c.question);
-  return out;
-}
-
-// The answers a condition certainly confines each question to: only equals and in count; anything else confines nothing.
-function confinements(c: Condition): Map<string, Set<string>> {
-  const out = new Map<string, Set<string>>();
-  if ("equals" in c) out.set(c.question, new Set([JSON.stringify(c.equals)]));
-  else if ("in" in c) out.set(c.question, new Set(c.in.map((v) => JSON.stringify(v))));
-  else if ("all" in c)
-    for (const part of c.all)
-      for (const [q, values] of confinements(part)) {
-        const have = out.get(q);
-        out.set(q, have ? new Set([...have].filter((v) => values.has(v))) : values);
-      }
-  else if ("any" in c) {
-    const branches = c.any.map(confinements);
-    for (const q of branches[0]?.keys() ?? []) if (branches.every((b) => b.has(q))) out.set(q, new Set(branches.flatMap((b) => [...b.get(q)!])));
+  const checked = checkCondition(value, byId);
+  if (!checked.ok) {
+    errors.push(`${where} (${label}): ${checked.error}`);
+    return null;
   }
-  return out;
+  return { condition: value as string, expr: checked.expr, questions: checked.questions };
 }
 
 // True only when no answers can satisfy both conditions: they confine one question to values that do not overlap.
-function exclusive(a: Condition | undefined, b: Condition | undefined): boolean {
+function exclusive(a: ReadCondition | undefined, b: ReadCondition | undefined, byId: ReadonlyMap<string, RecipeQuestion>): boolean {
   if (!a || !b) return false;
-  const left = confinements(a);
-  const right = confinements(b);
+  const left = confinements(a.expr, byId);
+  const right = confinements(b.expr, byId);
   for (const [q, values] of left) {
     const other = right.get(q);
     if (other && [...values].every((v) => !other.has(v))) return true;
@@ -623,7 +499,7 @@ function readQuestion(raw: unknown, index: number, errors: string[]): { question
     else if (type !== "secretRef") checkAnswer(q, raw.default, `${where}.default`, errors);
     q.default = raw.default;
   }
-  if (raw.askWhen !== undefined && type !== "secretRef" && (raw.default === undefined || raw.default === null)) errors.push(`${where}: a question with askWhen needs a default, which it takes when it is not asked`);
+  if (raw.askWhen !== undefined && raw.askWhen !== null && type !== "secretRef" && (raw.default === undefined || raw.default === null)) errors.push(`${where}: a question with askWhen needs a default, which it takes when it is not asked`);
   if (raw.effects !== undefined) {
     if (!Array.isArray(raw.effects) || raw.effects.length > 20) errors.push(`${where}.effects must be a list of at most 20 effects`);
     else {
@@ -641,19 +517,18 @@ function readQuestion(raw: unknown, index: number, errors: string[]): { question
 }
 
 // True when the condition of `from`, followed through the askWhen of the questions it names, reaches `target`.
-function reaches(from: RecipeQuestion, target: string, byId: ReadonlyMap<string, RecipeQuestion>, seen: Set<string>): boolean {
-  for (const id of from.askWhen ? conditionQuestions(from.askWhen) : []) {
+function reaches(from: string, target: string, askWhen: ReadonlyMap<string, ReadCondition>, seen: Set<string>): boolean {
+  for (const id of askWhen.get(from)?.questions ?? []) {
     if (id === target) return true;
     if (seen.has(id)) continue;
     seen.add(id);
-    const next = byId.get(id);
-    if (next && reaches(next, target, byId, seen)) return true;
+    if (reaches(id, target, askWhen, seen)) return true;
   }
   return false;
 }
 
 // Rule 5: two questions may not set one target to different values unless their askWhen conditions cannot both hold.
-function checkConflicts(questions: RecipeQuestion[], errors: string[]): void {
+function checkConflicts(questions: RecipeQuestion[], askWhen: ReadonlyMap<string, ReadCondition>, byId: ReadonlyMap<string, RecipeQuestion>, errors: string[]): void {
   const seen = new Map<string, { q: RecipeQuestion; value: SetValue }[]>();
   const answerDependent = (v: SetValue) => typeof v === "object" ? !("fromScale" in v) : v === "$answer";
   for (const q of questions)
@@ -662,7 +537,7 @@ function checkConflicts(questions: RecipeQuestion[], errors: string[]): void {
         for (const prior of seen.get(target) ?? []) {
           const same = prior.q.id === q.id ? JSON.stringify(prior.value) === JSON.stringify(value) : !answerDependent(value) && !answerDependent(prior.value) && JSON.stringify(prior.value) === JSON.stringify(value);
           if (same) continue;
-          if (prior.q.id !== q.id && exclusive(prior.q.askWhen, q.askWhen)) continue;
+          if (prior.q.id !== q.id && exclusive(askWhen.get(prior.q.id), askWhen.get(q.id), byId)) continue;
           errors.push(`questions ${prior.q.id} and ${q.id} both set ${target.slice(0, 60)} to different values and are not mutually exclusive by askWhen`);
         }
         seen.set(target, [...(seen.get(target) ?? []), { q, value }]);
@@ -697,13 +572,15 @@ export function validateRecipe(input: unknown, context: RecipeContext = {}): Res
     });
   const questionIds = new Set(questions.map((q) => q.id));
   const byId: ReadonlyMap<string, RecipeQuestion> = new Map(questions.map((q) => [q.id, q]));
+  const askWhen = new Map<string, ReadCondition>();
   questions.forEach((q, i) => {
-    if (askWhens[i] === undefined) return;
-    const condition = readCondition(askWhens[i], `questions[${i}].askWhen`, byId, errors);
-    if (condition) q.askWhen = condition;
+    const condition = readCondition(askWhens[i], `questions[${i}].askWhen`, `question ${q.id}`, byId, errors);
+    if (!condition) return;
+    q.askWhen = condition.condition;
+    askWhen.set(q.id, condition);
   });
   questions.forEach((q, i) => {
-    if (q.askWhen && reaches(q, q.id, byId, new Set())) errors.push(`questions[${i}].askWhen leads back to ${q.id}: questions may not wait on each other in a circle`);
+    if (askWhen.has(q.id) && reaches(q.id, q.id, askWhen, new Set())) errors.push(`questions[${i}].askWhen leads back to ${q.id}: questions may not wait on each other in a circle`);
   });
 
   const components: RecipeComponent[] = [];
@@ -736,7 +613,7 @@ export function validateRecipe(input: unknown, context: RecipeContext = {}): Res
         name: String(c.name),
         version: String(c.version),
         configuration: isRecord(c.configuration) ? c.configuration : {},
-        includedWhen: readOptionalCondition(c.includedWhen, `${where}.includedWhen`, byId, errors),
+        includedWhen: readCondition(c.includedWhen, `${where}.includedWhen`, `component ${String(c.id).slice(0, 64)}`, byId, errors)?.condition ?? null,
       });
     });
   const instanceIds = new Set(components.map((c) => c.id));
@@ -779,7 +656,7 @@ export function validateRecipe(input: unknown, context: RecipeContext = {}): Res
                 if (problem) errors.push(`${at}.profile ${c.profile} setting ${setting} ${problem}`);
               }
             }
-            const includedWhen = readOptionalCondition(c.includedWhen, `${at}.includedWhen`, byId, errors);
+            const includedWhen = readCondition(c.includedWhen, `${at}.includedWhen`, `job ${String(j.id).slice(0, 64)}, ${c.component} ${c.profile}`, byId, errors)?.condition;
             candidates.push({ component: c.component, profile: c.profile, ...(includedWhen ? { includedWhen } : {}) });
           });
         jobs.push({ id: String(j.id), candidates, ...(overrideQuestion ? { overrideQuestion } : {}) });
@@ -846,7 +723,7 @@ export function validateRecipe(input: unknown, context: RecipeContext = {}): Res
       }
     }),
   );
-  checkConflicts(questions, errors);
+  checkConflicts(questions, askWhen, byId, errors);
 
   const tests: Recipe["tests"] = { defaultAnswers: {}, answerSets: [] };
   if (!isRecord(input.tests)) errors.push("tests must be an object with defaultAnswers and answerSets");

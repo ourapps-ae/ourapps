@@ -1,0 +1,237 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1190 1741" width="1190" height="1741" font-synthesis="none">
+<!-- How a recipe is cooked: the steps from a recipe to an application and its updates, by who acts. -->
+<defs><marker id="arr-455A64" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#455A64"/></marker></defs>
+<rect x="0" y="0" width="1190" height="1741" fill="#FAFAFA"/>
+<text x="40" y="52" font-family="Helvetica Neue,Arial,sans-serif" font-size="26" font-weight="bold" fill="#263238">How a recipe is cooked</text>
+<text x="40" y="78" font-family="Helvetica Neue,Arial,sans-serif" font-size="14" fill="#607D8B">From a recipe in the library to an application on your people's devices, and every update after</text>
+<rect x="40" y="108" width="611.4" height="234" rx="8" fill="white" stroke="#90A4AE" stroke-width="1.4"/>
+<path d="M 40 116 a8 8 0 0 1 8 -8 h595.4 a8 8 0 0 1 8 8 v22 h-611.4 z" fill="#37474F"/>
+<text x="54" y="128" font-family="Helvetica Neue,Arial,sans-serif" font-size="14" font-weight="bold" fill="white">Legend</text>
+<rect x="54" y="150" width="14" height="14" rx="3" fill="#1E88E5"/>
+<text x="76" y="161" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">a step by you and your agent</text>
+<rect x="54" y="174" width="14" height="14" rx="3" fill="#5E35B1"/>
+<text x="76" y="185" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">a step by the recipe evaluation</text>
+<rect x="54" y="198" width="14" height="14" rx="3" fill="#FB8C00"/>
+<text x="76" y="209" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">a step by aepm</text>
+<rect x="54" y="222" width="14" height="14" rx="3" fill="#43A047"/>
+<text x="76" y="233" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">a step by your accounts and ourapps</text>
+<rect x="54" y="246" width="14" height="14" rx="3" fill="#AD1457"/>
+<text x="76" y="257" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">a step by aepm and you, the owner</text>
+<path d="M 54 287 L 84 287" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" fill="none" stroke-linecap="round"/>
+<text x="94" y="291" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">the next step</text>
+<path d="M 54 311 L 84 311" stroke="#FB8C00" stroke-width="1.4" stroke-dasharray="5 3" fill="none" stroke-linecap="round"/>
+<text x="94" y="315" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">dashed card: coming soon</text>
+<text x="354.75" y="161" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">Each zone is one party that acts.</text>
+<text x="354.75" y="176" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">A pill names what passes from one</text>
+<text x="354.75" y="191" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">zone to the next.</text>
+<text x="354.75" y="206" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">ourapps keeps the library, the catalogue</text>
+<text x="354.75" y="221" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">and the share links. The building happens</text>
+<text x="354.75" y="236" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">in your repository, on your computer.</text>
+<rect x="84" y="392" width="1066" height="183" rx="10" fill="#E8EAF6" stroke="#3949AB" stroke-width="1.6"/>
+<path d="M 84 402 a10 10 0 0 1 10 -10 h1046 a10 10 0 0 1 10 10 v34 h-1066 z" fill="#3949AB" fill-opacity="0.92"/>
+<circle cx="101" cy="419" r="2.6" fill="white"/><circle cx="111" cy="419" r="2.6" fill="white"/><circle cx="106" cy="409" r="2.6" fill="white"/><path d="M 106 409 L 101 419 M 106 409 L 111 419 M 101 419 H 111" stroke="white" stroke-width="1.4"/>
+<text x="124" y="420" font-family="Helvetica Neue,Arial,sans-serif" font-size="15" font-weight="bold" fill="white">You and your agent</text>
+<g><rect x="110" y="460" width="204" height="89" rx="8" fill="#E3F2FD" stroke="#1E88E5" stroke-width="1.4"/>
+<path d="M 110 468 a8 8 0 0 1 8 -8 h188 a8 8 0 0 1 8 8 v22 h-204 z" fill="#1E88E5"/>
+<rect x="119" y="469" width="16" height="10" rx="1.5" fill="none" stroke="white" stroke-width="1.8"/><line x1="127" y1="479" x2="127" y2="482" stroke="white" stroke-width="1.8"/><line x1="123" y1="482.5" x2="131" y2="482.5" stroke="white" stroke-width="1.8"/>
+<text x="142" y="480" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">1 Find a recipe</text>
+<text x="122" y="509" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">in the recipe library at</text>
+<text x="122" y="524" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">ourapps.app/recipes, or</text>
+<text x="122" y="539" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">compose one from components</text>
+</g>
+<g><rect x="370" y="460" width="224" height="89" rx="8" fill="#E3F2FD" stroke="#1E88E5" stroke-width="1.4"/>
+<path d="M 370 468 a8 8 0 0 1 8 -8 h208 a8 8 0 0 1 8 8 v22 h-224 z" fill="#1E88E5"/>
+<rect x="379" y="469" width="16" height="10" rx="1.5" fill="none" stroke="white" stroke-width="1.8"/><line x1="387" y1="479" x2="387" y2="482" stroke="white" stroke-width="1.8"/><line x1="383" y1="482.5" x2="391" y2="482.5" stroke="white" stroke-width="1.8"/>
+<text x="402" y="480" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">2 Read its questions</text>
+<text x="382" y="509" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">the recipe page lists each</text>
+<text x="382" y="524" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">question, its options and</text>
+<text x="382" y="539" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">its default</text>
+</g>
+<path d="M 314 504 L 369 504" fill="none" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" stroke-linejoin="round" stroke-linecap="round"/>
+<g><rect x="650" y="460" width="191" height="89" rx="8" fill="#E3F2FD" stroke="#1E88E5" stroke-width="1.4"/>
+<path d="M 650 468 a8 8 0 0 1 8 -8 h175 a8 8 0 0 1 8 8 v22 h-191 z" fill="#1E88E5"/>
+<rect x="659" y="469" width="16" height="10" rx="1.5" fill="none" stroke="white" stroke-width="1.8"/><line x1="667" y1="479" x2="667" y2="482" stroke="white" stroke-width="1.8"/><line x1="663" y1="482.5" x2="671" y2="482.5" stroke="white" stroke-width="1.8"/>
+<text x="682" y="480" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">3 Answer them</text>
+<text x="662" y="509" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">your agent infers what it</text>
+<text x="662" y="524" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">can from your repository</text>
+<text x="662" y="539" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">and asks you the rest</text>
+</g>
+<path d="M 594 504 L 649 504" fill="none" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="84" y="629" width="1066" height="198" rx="10" fill="#F3E5F5" stroke="#8E24AA" stroke-width="1.6"/>
+<path d="M 84 639 a10 10 0 0 1 10 -10 h1046 a10 10 0 0 1 10 10 v34 h-1066 z" fill="#8E24AA" fill-opacity="0.92"/>
+<circle cx="101" cy="656" r="2.6" fill="white"/><circle cx="111" cy="656" r="2.6" fill="white"/><circle cx="106" cy="646" r="2.6" fill="white"/><path d="M 106 646 L 101 656 M 106 646 L 111 656 M 101 656 H 111" stroke="white" stroke-width="1.4"/>
+<text x="124" y="657" font-family="Helvetica Neue,Arial,sans-serif" font-size="15" font-weight="bold" fill="white">Evaluation: the recipe and your answers make a design</text>
+<g><rect x="110" y="697" width="224" height="104" rx="8" fill="#EDE7F6" stroke="#5E35B1" stroke-width="1.4"/>
+<path d="M 110 705 a8 8 0 0 1 8 -8 h208 a8 8 0 0 1 8 8 v22 h-224 z" fill="#5E35B1"/>
+<rect x="120" y="708" width="14" height="9" rx="4" fill="none" stroke="white" stroke-width="1.8"/><path d="M 124 710.5 v4 m-2 -2 h4" stroke="white" stroke-width="1.5" fill="none"/><circle cx="130" cy="712.5" r="1.2" fill="white"/>
+<text x="142" y="717" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">4 Include components</text>
+<text x="122" y="746" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">conditions over the answers</text>
+<text x="122" y="761" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">(Common Expression Language)</text>
+<text x="122" y="776" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">decide which components</text>
+<text x="122" y="791" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">are included</text>
+</g>
+<g><rect x="390" y="697" width="210" height="104" rx="8" fill="#EDE7F6" stroke="#5E35B1" stroke-width="1.4"/>
+<path d="M 390 705 a8 8 0 0 1 8 -8 h194 a8 8 0 0 1 8 8 v22 h-210 z" fill="#5E35B1"/>
+<rect x="400" y="708" width="14" height="9" rx="4" fill="none" stroke="white" stroke-width="1.8"/><path d="M 404 710.5 v4 m-2 -2 h4" stroke="white" stroke-width="1.5" fill="none"/><circle cx="410" cy="712.5" r="1.2" fill="white"/>
+<text x="422" y="717" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">5 Choose providers</text>
+<text x="402" y="746" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">the answer about size picks</text>
+<text x="402" y="761" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">a scale band; the band</text>
+<text x="402" y="776" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">chooses a provider profile</text>
+<text x="402" y="791" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">for each job</text>
+</g>
+<path d="M 334 741 L 389 741" fill="none" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" stroke-linejoin="round" stroke-linecap="round"/>
+<g><rect x="656" y="697" width="195" height="89" rx="8" fill="#EDE7F6" stroke="#5E35B1" stroke-width="1.4"/>
+<path d="M 656 705 a8 8 0 0 1 8 -8 h179 a8 8 0 0 1 8 8 v22 h-195 z" fill="#5E35B1"/>
+<rect x="666" y="708" width="14" height="9" rx="4" fill="none" stroke="white" stroke-width="1.8"/><path d="M 670 710.5 v4 m-2 -2 h4" stroke="white" stroke-width="1.5" fill="none"/><circle cx="676" cy="712.5" r="1.2" fill="white"/>
+<text x="688" y="717" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">6 Apply settings</text>
+<text x="668" y="746" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">answers and the chosen</text>
+<text x="668" y="761" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">profiles set each</text>
+<text x="668" y="776" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">component's settings</text>
+</g>
+<path d="M 600 741 L 655 741" fill="none" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" stroke-linejoin="round" stroke-linecap="round"/>
+<g><rect x="907" y="697" width="217" height="89" rx="8" fill="#EDE7F6" stroke="#5E35B1" stroke-width="1.4"/>
+<path d="M 907 705 a8 8 0 0 1 8 -8 h201 a8 8 0 0 1 8 8 v22 h-217 z" fill="#5E35B1"/>
+<rect x="917" y="708" width="14" height="9" rx="4" fill="none" stroke="white" stroke-width="1.8"/><path d="M 921 710.5 v4 m-2 -2 h4" stroke="white" stroke-width="1.5" fill="none"/><circle cx="927" cy="712.5" r="1.2" fill="white"/>
+<text x="939" y="717" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">7 Check connections</text>
+<text x="919" y="746" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">every interface a component</text>
+<text x="919" y="761" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">requires is connected to</text>
+<text x="919" y="776" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">one that provides it</text>
+</g>
+<path d="M 851 741 L 906 741" fill="none" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="84" y="881" width="1066" height="316" rx="10" fill="#FFF8E1" stroke="#FFB300" stroke-width="1.6"/>
+<path d="M 84 891 a10 10 0 0 1 10 -10 h1046 a10 10 0 0 1 10 10 v34 h-1066 z" fill="#FFB300" fill-opacity="0.92"/>
+<circle cx="101" cy="908" r="2.6" fill="white"/><circle cx="111" cy="908" r="2.6" fill="white"/><circle cx="106" cy="898" r="2.6" fill="white"/><path d="M 106 898 L 101 908 M 106 898 L 111 908 M 101 908 H 111" stroke="white" stroke-width="1.4"/>
+<text x="124" y="909" font-family="Helvetica Neue,Arial,sans-serif" font-size="15" font-weight="bold" fill="white">aepm: assembles the design on your computer</text>
+<g><rect x="110" y="949" width="210" height="74" rx="8" fill="#FFF3E0" stroke="#FB8C00" stroke-width="1.4"/>
+<path d="M 110 957 a8 8 0 0 1 8 -8 h194 a8 8 0 0 1 8 8 v22 h-210 z" fill="#FB8C00"/>
+<path d="M 121 956 h8 l4 4 v12 h-12 z" fill="none" stroke="white" stroke-width="1.8"/><path d="M 129 956 v4 h4" fill="none" stroke="white" stroke-width="1.4"/>
+<text x="142" y="969" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">8 Resolve versions</text>
+<text x="122" y="998" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">the exact version of each</text>
+<text x="122" y="1013" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">component in the design</text>
+</g>
+<g><rect x="376" y="949" width="197" height="74" rx="8" fill="#FFF3E0" stroke="#FB8C00" stroke-width="1.4"/>
+<path d="M 376 957 a8 8 0 0 1 8 -8 h181 a8 8 0 0 1 8 8 v22 h-197 z" fill="#FB8C00"/>
+<path d="M 387 956 h8 l4 4 v12 h-12 z" fill="none" stroke="white" stroke-width="1.8"/><path d="M 395 956 v4 h4" fill="none" stroke="white" stroke-width="1.4"/>
+<text x="408" y="969" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">9 Download</text>
+<text x="388" y="998" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">each archive from its</text>
+<text x="388" y="1013" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">publisher's GitHub release</text>
+</g>
+<path d="M 320 993 L 375 993" fill="none" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" stroke-linejoin="round" stroke-linecap="round"/>
+<g><rect x="629" y="949" width="204" height="89" rx="8" fill="#FFF3E0" stroke="#FB8C00" stroke-width="1.4"/>
+<path d="M 629 957 a8 8 0 0 1 8 -8 h188 a8 8 0 0 1 8 8 v22 h-204 z" fill="#FB8C00"/>
+<path d="M 640 956 h8 l4 4 v12 h-12 z" fill="none" stroke="white" stroke-width="1.8"/><path d="M 648 956 v4 h4" fill="none" stroke="white" stroke-width="1.4"/>
+<text x="661" y="969" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">10 Check</text>
+<text x="641" y="998" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">the sha256 digest of each</text>
+<text x="641" y="1013" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">archive, and the signatures</text>
+<text x="641" y="1028" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">of the guardians you trust</text>
+</g>
+<path d="M 573 993 L 628 993" fill="none" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" stroke-linejoin="round" stroke-linecap="round"/>
+<g><rect x="889" y="949" width="204" height="89" rx="8" fill="#FFF3E0" stroke="#FB8C00" stroke-width="1.4"/>
+<path d="M 889 957 a8 8 0 0 1 8 -8 h188 a8 8 0 0 1 8 8 v22 h-204 z" fill="#FB8C00"/>
+<path d="M 900 956 h8 l4 4 v12 h-12 z" fill="none" stroke="white" stroke-width="1.8"/><path d="M 908 956 v4 h4" fill="none" stroke="white" stroke-width="1.4"/>
+<text x="921" y="969" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">11 Review</text>
+<text x="901" y="998" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">you or your agent read what</text>
+<text x="901" y="1013" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">will be installed, before</text>
+<text x="901" y="1028" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">anything is written</text>
+</g>
+<path d="M 833 993 L 888 993" fill="none" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" stroke-linejoin="round" stroke-linecap="round"/>
+<g><rect x="110" y="1082" width="217" height="74" rx="8" fill="#FFF3E0" stroke="#FB8C00" stroke-width="1.4"/>
+<path d="M 110 1090 a8 8 0 0 1 8 -8 h201 a8 8 0 0 1 8 8 v22 h-217 z" fill="#FB8C00"/>
+<path d="M 121 1089 h8 l4 4 v12 h-12 z" fill="none" stroke="white" stroke-width="1.8"/><path d="M 129 1089 v4 h4" fill="none" stroke="white" stroke-width="1.4"/>
+<text x="142" y="1102" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">12 Install</text>
+<text x="122" y="1131" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">copy the files each package</text>
+<text x="122" y="1146" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">lists; run none of their code</text>
+</g>
+<g><rect x="383" y="1082" width="177" height="74" rx="8" fill="#FFF3E0" stroke="#FB8C00" stroke-width="1.4"/>
+<path d="M 383 1090 a8 8 0 0 1 8 -8 h161 a8 8 0 0 1 8 8 v22 h-177 z" fill="#FB8C00"/>
+<path d="M 394 1089 h8 l4 4 v12 h-12 z" fill="none" stroke="white" stroke-width="1.8"/><path d="M 402 1089 v4 h4" fill="none" stroke="white" stroke-width="1.4"/>
+<text x="415" y="1102" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">13 Verify</text>
+<text x="395" y="1131" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">run the components' own</text>
+<text x="395" y="1146" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">tests on the result</text>
+</g>
+<path d="M 327 1126 L 382 1126" fill="none" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" stroke-linejoin="round" stroke-linecap="round"/>
+<g><rect x="650" y="1082" width="184" height="89" rx="8" fill="#FFF3E0" stroke="#FB8C00" stroke-width="1.4" stroke-dasharray="5 3"/>
+<path d="M 650 1090 a8 8 0 0 1 8 -8 h168 a8 8 0 0 1 8 8 v22 h-184 z" fill="#FB8C00"/>
+<path d="M 661 1089 h8 l4 4 v12 h-12 z" fill="none" stroke="white" stroke-width="1.8"/><path d="M 669 1089 v4 h4" fill="none" stroke="white" stroke-width="1.4"/>
+<text x="682" y="1102" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">aepm create</text>
+<text x="662" y="1131" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">coming soon: one command</text>
+<text x="662" y="1146" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">that runs steps 4 to 13</text>
+<text x="662" y="1161" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">from your answers</text>
+</g>
+<path d="M 991 1038 L 991 1060 L 218.5 1060 L 218.5 1081" fill="none" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="84" y="1251" width="1066" height="183" rx="10" fill="#E0F2F1" stroke="#00897B" stroke-width="1.6"/>
+<path d="M 84 1261 a10 10 0 0 1 10 -10 h1046 a10 10 0 0 1 10 10 v34 h-1066 z" fill="#00897B" fill-opacity="0.92"/>
+<circle cx="101" cy="1278" r="2.6" fill="white"/><circle cx="111" cy="1278" r="2.6" fill="white"/><circle cx="106" cy="1268" r="2.6" fill="white"/><path d="M 106 1268 L 101 1278 M 106 1268 L 111 1278 M 101 1278 H 111" stroke="white" stroke-width="1.4"/>
+<text x="124" y="1279" font-family="Helvetica Neue,Arial,sans-serif" font-size="15" font-weight="bold" fill="white">Delivery: your accounts, your people</text>
+<g><rect x="110" y="1319" width="197" height="89" rx="8" fill="#E8F5E9" stroke="#43A047" stroke-width="1.4"/>
+<path d="M 110 1327 a8 8 0 0 1 8 -8 h181 a8 8 0 0 1 8 8 v22 h-197 z" fill="#43A047"/>
+<circle cx="122" cy="1339" r="2.6" fill="white"/><circle cx="132" cy="1339" r="2.6" fill="white"/><circle cx="127" cy="1329" r="2.6" fill="white"/><path d="M 127 1329 L 122 1339 M 127 1329 L 132 1339 M 122 1339 H 132" stroke="white" stroke-width="1.4"/>
+<text x="142" y="1339" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">14 Your accounts</text>
+<text x="122" y="1368" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">the application runs on</text>
+<text x="122" y="1383" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">hosting, Apple and Android</text>
+<text x="122" y="1398" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">accounts you own</text>
+</g>
+<g><rect x="363" y="1319" width="191" height="74" rx="8" fill="#E8F5E9" stroke="#43A047" stroke-width="1.4"/>
+<path d="M 363 1327 a8 8 0 0 1 8 -8 h175 a8 8 0 0 1 8 8 v22 h-191 z" fill="#43A047"/>
+<circle cx="375" cy="1339" r="2.6" fill="white"/><circle cx="385" cy="1339" r="2.6" fill="white"/><circle cx="380" cy="1329" r="2.6" fill="white"/><path d="M 380 1329 L 375 1339 M 380 1329 L 385 1339 M 375 1339 H 385" stroke="white" stroke-width="1.4"/>
+<text x="395" y="1339" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">15 Share link</text>
+<text x="375" y="1368" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">ourapps makes one private</text>
+<text x="375" y="1383" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">link per person or group</text>
+</g>
+<path d="M 307 1363 L 362 1363" fill="none" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" stroke-linejoin="round" stroke-linecap="round"/>
+<g><rect x="610" y="1319" width="191" height="89" rx="8" fill="#E8F5E9" stroke="#43A047" stroke-width="1.4"/>
+<path d="M 610 1327 a8 8 0 0 1 8 -8 h175 a8 8 0 0 1 8 8 v22 h-191 z" fill="#43A047"/>
+<circle cx="622" cy="1339" r="2.6" fill="white"/><circle cx="632" cy="1339" r="2.6" fill="white"/><circle cx="627" cy="1329" r="2.6" fill="white"/><path d="M 627 1329 L 622 1339 M 627 1329 L 632 1339 M 622 1339 H 632" stroke="white" stroke-width="1.4"/>
+<text x="642" y="1339" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">16 Your people</text>
+<text x="622" y="1368" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">staff, members, customers</text>
+<text x="622" y="1383" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">open the link and install</text>
+<text x="622" y="1398" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">on their devices</text>
+</g>
+<path d="M 554 1363 L 609 1363" fill="none" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="84" y="1488" width="1066" height="213" rx="10" fill="#FCE4EC" stroke="#AD1457" stroke-width="1.6"/>
+<path d="M 84 1498 a10 10 0 0 1 10 -10 h1046 a10 10 0 0 1 10 10 v34 h-1066 z" fill="#AD1457" fill-opacity="0.92"/>
+<circle cx="101" cy="1515" r="2.6" fill="white"/><circle cx="111" cy="1515" r="2.6" fill="white"/><circle cx="106" cy="1505" r="2.6" fill="white"/><path d="M 106 1505 L 101 1515 M 106 1505 L 111 1515 M 101 1515 H 111" stroke="white" stroke-width="1.4"/>
+<text x="124" y="1516" font-family="Helvetica Neue,Arial,sans-serif" font-size="15" font-weight="bold" fill="white">Updates: you approve every change</text>
+<g><rect x="110" y="1556" width="197" height="74" rx="8" fill="#FCE4EC" stroke="#AD1457" stroke-width="1.4"/>
+<path d="M 110 1564 a8 8 0 0 1 8 -8 h181 a8 8 0 0 1 8 8 v22 h-197 z" fill="#AD1457"/>
+<path d="M 127 1564 a7 7 0 1 0 0 14 c1.6 0 2 -1.2 1.2 -2.4 c-.8 -1.2 -.2 -2.6 1.4 -2.6 h2 a2.4 2.4 0 0 0 2.4 -2.4 c0 -3.8 -3.2 -6.6 -7 -6.6 z" fill="none" stroke="white" stroke-width="1.6"/><circle cx="124" cy="1570" r="1.1" fill="white"/><circle cx="127.5" cy="1567.5" r="1.1" fill="white"/>
+<text x="142" y="1576" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">17 New version</text>
+<text x="122" y="1605" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">a publisher releases a new</text>
+<text x="122" y="1620" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">version of a component</text>
+</g>
+<g><rect x="363" y="1556" width="184" height="74" rx="8" fill="#FCE4EC" stroke="#AD1457" stroke-width="1.4"/>
+<path d="M 363 1564 a8 8 0 0 1 8 -8 h168 a8 8 0 0 1 8 8 v22 h-184 z" fill="#AD1457"/>
+<path d="M 380 1564 a7 7 0 1 0 0 14 c1.6 0 2 -1.2 1.2 -2.4 c-.8 -1.2 -.2 -2.6 1.4 -2.6 h2 a2.4 2.4 0 0 0 2.4 -2.4 c0 -3.8 -3.2 -6.6 -7 -6.6 z" fill="none" stroke="white" stroke-width="1.6"/><circle cx="377" cy="1570" r="1.1" fill="white"/><circle cx="380.5" cy="1567.5" r="1.1" fill="white"/>
+<text x="395" y="1576" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">18 Proposal</text>
+<text x="375" y="1605" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">aepm proposes the update</text>
+<text x="375" y="1620" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">and shows what changes</text>
+</g>
+<path d="M 307 1600 L 362 1600" fill="none" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" stroke-linejoin="round" stroke-linecap="round"/>
+<g><rect x="603" y="1556" width="177" height="74" rx="8" fill="#FCE4EC" stroke="#AD1457" stroke-width="1.4"/>
+<path d="M 603 1564 a8 8 0 0 1 8 -8 h161 a8 8 0 0 1 8 8 v22 h-177 z" fill="#AD1457"/>
+<path d="M 620 1564 a7 7 0 1 0 0 14 c1.6 0 2 -1.2 1.2 -2.4 c-.8 -1.2 -.2 -2.6 1.4 -2.6 h2 a2.4 2.4 0 0 0 2.4 -2.4 c0 -3.8 -3.2 -6.6 -7 -6.6 z" fill="none" stroke="white" stroke-width="1.6"/><circle cx="617" cy="1570" r="1.1" fill="white"/><circle cx="620.5" cy="1567.5" r="1.1" fill="white"/>
+<text x="635" y="1576" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">19 Approve</text>
+<text x="615" y="1605" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">you, the owner, approve</text>
+<text x="615" y="1620" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">it or leave it</text>
+</g>
+<path d="M 547 1600 L 602 1600" fill="none" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" stroke-linejoin="round" stroke-linecap="round"/>
+<g><rect x="836" y="1556" width="197" height="119" rx="8" fill="#FCE4EC" stroke="#AD1457" stroke-width="1.4"/>
+<path d="M 836 1564 a8 8 0 0 1 8 -8 h181 a8 8 0 0 1 8 8 v22 h-197 z" fill="#AD1457"/>
+<path d="M 853 1564 a7 7 0 1 0 0 14 c1.6 0 2 -1.2 1.2 -2.4 c-.8 -1.2 -.2 -2.6 1.4 -2.6 h2 a2.4 2.4 0 0 0 2.4 -2.4 c0 -3.8 -3.2 -6.6 -7 -6.6 z" fill="none" stroke="white" stroke-width="1.6"/><circle cx="850" cy="1570" r="1.1" fill="white"/><circle cx="853.5" cy="1567.5" r="1.1" fill="white"/>
+<text x="868" y="1576" font-family="Menlo,Consolas,monospace" font-size="12" font-weight="bold" fill="white" xml:space="preserve">20 Apply</text>
+<text x="848" y="1605" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">aepm applies it with</text>
+<text x="848" y="1620" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">recovery: it can return to</text>
+<text x="848" y="1635" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">the previous version; your</text>
+<text x="848" y="1650" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">people update through the</text>
+<text x="848" y="1665" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">same link</text>
+</g>
+<path d="M 780 1600 L 835 1600" fill="none" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 745.5 549 L 745.5 602 L 52 602 L 52 741 L 109 741" fill="none" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" stroke-linejoin="round" stroke-linecap="round"/>
+<g><rect x="668.5" y="593" width="61" height="18" rx="9" fill="white" stroke="#263238" stroke-width="1.2"/><text x="699" y="606" text-anchor="middle" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">answers</text></g>
+<path d="M 1015.5 786 L 1015.5 854 L 52 854 L 52 993 L 109 993" fill="none" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" stroke-linejoin="round" stroke-linecap="round"/>
+<g><rect x="931.5" y="845" width="68" height="18" rx="9" fill="white" stroke="#263238" stroke-width="1.2"/><text x="965.5" y="858" text-anchor="middle" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">a design</text></g>
+<path d="M 471.5 1156 L 471.5 1224 L 52 1224 L 52 1363 L 109 1363" fill="none" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" stroke-linejoin="round" stroke-linecap="round"/>
+<g><rect x="341.5" y="1215" width="114" height="18" rx="9" fill="white" stroke="#263238" stroke-width="1.2"/><text x="398.5" y="1228" text-anchor="middle" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">the application</text></g>
+<path d="M 705.5 1408 L 705.5 1461 L 52 1461 L 52 1600 L 109 1600" fill="none" stroke="#455A64" stroke-width="2" marker-end="url(#arr-455A64)" stroke-linejoin="round" stroke-linecap="round"/>
+<g><rect x="641.5" y="1452" width="48" height="18" rx="9" fill="white" stroke="#263238" stroke-width="1.2"/><text x="665.5" y="1465" text-anchor="middle" font-family="Menlo,Consolas,monospace" font-size="11" fill="#263238" xml:space="preserve">later</text></g>
+</svg>

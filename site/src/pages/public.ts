@@ -2,6 +2,7 @@ import { pickScreenshots, type ScreenshotSets } from "@my/store-shared";
 import { ApiError, api, whoAmI, type AppDetails, type HistoryEntry, type Install, type LinkPage, type Me } from "../api.js";
 import { html, mount, paragraphs, raw, type Raw } from "../html.js";
 import { navigate } from "../nav.js";
+import { cookingFigure } from "../figures.js";
 import { notesHtml } from "../notes.js";
 import { desktopAvailability, desktopPanel, televisionPanel, televisionSetupLink } from "../desktop.js";
 import { screenshotSvg } from "../placeholders.js";
@@ -114,6 +115,9 @@ export async function landing(root: HTMLElement): Promise<void> {
         </section>
 
         <section class="how" id="how">
+          <div class="section-title"><h2>How a recipe is cooked</h2></div>
+          <p class="muted">Your agent answers a recipe's questions with you. The answers decide which reviewed components go in and which providers they use. aepm downloads each one from its publisher, checks it and installs it without running its code. The application runs on your own accounts and reaches your people through one link, and every update waits for your approval.</p>
+          ${cookingFigure()}
           <div class="section-title"><h2>For you, the developer</h2></div>
           <div class="grid-3">
             <div class="card"><div class="num">1</div><h3>Choose how to start</h3><p class="muted">Pick a <a href="/recipes">recipe</a> and answer its questions, or compose your own from the <a href="/components">component catalogue</a>. A recipe you compose can be published for others to use.</p></div>

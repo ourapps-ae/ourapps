@@ -222,7 +222,7 @@ export class CatalogueDb {
     );
     for (const c of r.components) {
       statements.push(
-        this.d1.prepare("INSERT INTO recipe_components (recipe_id, version, instance_id, component_name, component_version, included_when) VALUES (?, ?, ?, ?, ?, ?)").bind(target.id, r.version, c.id, c.name, c.version, c.includedWhen ? JSON.stringify(c.includedWhen) : null),
+        this.d1.prepare("INSERT INTO recipe_components (recipe_id, version, instance_id, component_name, component_version, included_when) VALUES (?, ?, ?, ?, ?, ?)").bind(target.id, r.version, c.id, c.name, c.version, c.includedWhen),
       );
     }
     statements.push(...(await this.refreshStatements("recipe", target.id, now, r.version)));

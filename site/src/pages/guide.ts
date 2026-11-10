@@ -1,6 +1,7 @@
 // The developer guide: recipes and components, then delivery from first sign-in to the first person installing.
 import { CATEGORIES, CHECKED, PRINCIPLES, servicePrompt, type Service } from "../freeTiers.js";
 import { escapeHtml, html, raw, type Raw } from "../html.js";
+import { cookingFigure } from "../figures.js";
 import { callout, icon, wireCopy } from "../ui.js";
 import { diagram, wireFigures } from "./reference.js";
 import { mountShell, requireMe } from "./shell.js";
@@ -17,6 +18,9 @@ function sections(origin: string, slug: string): Section[] {
       title: "How ourapps works",
       body: html`
         <p>ourapps delivers applications for your business, your club, your home or your shop: a clinic's appointment board, a club's league night, a shop's order screen, a household's chores planner, a restaurant's table display. They are built from recipes, using components. A <b>component</b> is a reviewed, reusable part of an application, such as a card deck or a seating plan. It states what it provides, what it needs, who it suits and how its data moves. A <b>recipe</b> is a list of components, the questions that choose between them, and how they connect. A coding agent assembles the application from a recipe and your answers. The <a href="/recipes">recipe library</a> and the <a href="/components">component catalogue</a> are public; delivery to your people is private.</p>
+        <h3>How a recipe is cooked</h3>
+        <p>You and your agent answer the recipe's questions. The recipe and your answers make a design: conditions decide which components are included, the answer about size chooses a provider for each job, settings are applied and every connection is checked. aepm then resolves exact versions, downloads each archive from its publisher's GitHub release, checks its digest and signatures, lets you review, installs by copying files without running their code, and verifies the result with the components' tests. The application runs on your own accounts and reaches your people through a share link. Each update is proposed, approved by you and applied with recovery.</p>
+        ${cookingFigure()}
         <h3>What you get</h3>
         <ul class="bullets">
           <li><b>Fast.</b> An application from a recipe in minutes, rather than days of building.</li>
@@ -135,7 +139,7 @@ POST   /api/dev/recipes/&lt;name&gt;/undeprecate</code></pre>
   "targets": { "client": ["web", "ios", "android"], "server": [] },
   "components": [
     { "id": "deck", "name": "acme/card-deck", "version": "0.1.0", "configuration": {}, "includedWhen": null },
-    { "id": "tour", "name": "acme/guided-tour", "version": "0.1.0", "configuration": {}, "includedWhen": { "question": "lessons", "truthy": true } }
+    { "id": "tour", "name": "acme/guided-tour", "version": "0.1.0", "configuration": {}, "includedWhen": "lessons" }
   ],
   "questions": [
     { "id": "chips", "ask": "Starting chips?", "type": "integer", "default": 5000, "min": 100, "max": 1000000,
@@ -150,7 +154,7 @@ POST   /api/dev/recipes/&lt;name&gt;/undeprecate</code></pre>
         <ul class="bullets">
           <li><b>Components:</b> each is <code>scope/name</code> with an exact version and an instance <code>id</code>. It is included when <code>includedWhen</code> is null or true. The instance id <code>application</code> is the recipe's own component; no component is named <code>application</code>.</li>
           <li><b>Questions:</b> <code>{ id, ask, askAgent, askWhen, type, options, default, min, max, effects }</code>. The type is <code>set</code>, <code>choice</code>, <code>boolean</code>, <code>integer</code> (with <code>min</code> and <code>max</code>), <code>text</code>, <code>secretRef</code> or <code>account</code>. A question with <code>askWhen</code> needs a <code>default</code>, which it takes when the condition is false. A <code>secretRef</code> question carries no value and no default.</li>
-          <li><b>Conditions</b> (<code>askWhen</code>, <code>includedWhen</code>): <code>{ question, equals }</code>, <code>{ question, in }</code>, <code>{ question, contains }</code>, <code>{ question, truthy }</code>, <code>{ all: [...] }</code>, <code>{ any: [...] }</code> and <code>{ not: condition }</code>.</li>
+          <li><b>Conditions</b> (<code>askWhen</code>, <code>includedWhen</code>): CEL (Common Expression Language) expressions that are true or false, such as <code>lessons</code>, <code>'ios' in targets</code> or <code>scale in ['medium', 'large']</code>. Each question id holds its answer (a set question is a list of text); a condition uses literals, question ids, <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code>, <code>in</code>, <code>&amp;&amp;</code>, <code>||</code>, <code>!</code>, parentheses and <code>size()</code>.</li>
           <li><b>Effects:</b> <code>{ sets: { "&lt;componentId&gt;.&lt;settingId&gt;": value } }</code>. A value is a literal, <code>"$answer"</code>, <code>{ map }</code>, <code>{ fromScale }</code>, <code>{ template }</code> or <code>{ ref }</code>. Two questions may not set one target to different values unless their <code>askWhen</code> conditions cannot both hold.</li>
           <li><b>Jobs and scale (optional):</b> a job chooses between candidate components by suitability profile; <code>scale</code> is a choice question whose options are load bands.</li>
           <li><b>Connections:</b> each joins two <code>{ instance, port }</code> endpoints.</li>

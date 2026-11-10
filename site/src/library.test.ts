@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TERMS_VERSION } from "@my/store-shared";
-import { answerText, costLabel, includedWhenText, loadText, paragraphsOf, queryString, readQuery, releaseUrl, targetLabel, versionFromSearch, withFilter } from "./library.js";
+import { answerText, conditionHtml, costLabel, includedWhenHtml, loadText, paragraphsOf, queryString, readQuery, releaseUrl, targetLabel, versionFromSearch, withFilter } from "./library.js";
 import { termsBody } from "./pages/terms.js";
 import { storeFrame } from "./pages/public.js";
 import { html } from "./html.js";
@@ -67,13 +67,15 @@ describe("library wording", () => {
     expect(answerText(["web", "ios"])).toBe("web, ios");
     expect(answerText([])).toBe("none");
     expect(answerText(5000)).toBe("5000");
-    expect(includedWhenText({ includedWhen: null })).toBe("always");
-    expect(includedWhenText({ includedWhen: { question: "lessons", equals: true } })).toBe("when lessons is yes");
-    expect(includedWhenText({ includedWhen: { question: "lessons", truthy: true } })).toBe("when lessons is set");
-    expect(includedWhenText({ includedWhen: { question: "scale", in: ["small", "medium"] } })).toBe("when scale is one of small, medium");
-    expect(includedWhenText({ includedWhen: { all: [{ question: "lessons", truthy: true }, { not: { question: "targets", contains: "web" } }] } })).toBe("when (lessons is set) and (not (targets includes web))");
-    expect(includedWhenText({ includedWhen: { any: [{ question: "targets", contains: "ios" }, { question: "targets", contains: "macos" }] } })).toBe("when (targets includes ios) or (targets includes macos)");
-    expect(includedWhenText({ includedWhen: { question: "targets", contains: "ios" } })).toBe("when targets includes ios");
+    expect(includedWhenHtml({ includedWhen: null }).html).toBe("always");
+    expect(includedWhenHtml({ includedWhen: "lessons" }).html).toBe("when lessons is yes");
+    expect(includedWhenHtml({ includedWhen: "lessons == true" }).html).toBe("when lessons is yes");
+    expect(includedWhenHtml({ includedWhen: "scale in ['small', 'medium']" }).html).toBe("when scale is one of small, medium");
+    expect(includedWhenHtml({ includedWhen: "lessons && !('web' in targets)" }).html).toBe("when (lessons is yes) and (targets does not include web)");
+    expect(includedWhenHtml({ includedWhen: "'ios' in targets || 'macos' in targets" }).html).toBe("when (targets includes ios) or (targets includes macos)");
+    expect(includedWhenHtml({ includedWhen: "'ios' in targets" }).html).toBe("when targets includes ios");
+    expect(includedWhenHtml({ includedWhen: "size(languages) > 1" }).html).toBe("when <code>size(languages) &gt; 1</code>");
+    expect(conditionHtml("players >= 4 && video").html).toBe("(players is at least 4) and (video is yes)");
   });
 
   it("links to the release and splits paragraphs", () => {

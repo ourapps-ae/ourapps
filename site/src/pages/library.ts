@@ -1,9 +1,10 @@
 // The recipe library and the component catalogue: browse, search, and read one entry.
-import { COMPONENT_PACKAGE, RECIPE_PACKAGE, describeCondition, type BundleLink, type PackageSummary, type ComponentList, type ComponentSearch, type ComponentSummary, type ComponentVersionView, type Deprecation, type EntryStatus, type Profile, type RecipeList, type RecipeSearch, type RecipeSummary, type RecipeVersionView } from "@my/store-shared";
+import { COMPONENT_PACKAGE, RECIPE_PACKAGE, type BundleLink, type PackageSummary, type ComponentList, type ComponentSearch, type ComponentSummary, type ComponentVersionView, type Deprecation, type EntryStatus, type Profile, type RecipeList, type RecipeSearch, type RecipeSummary, type RecipeVersionView } from "@my/store-shared";
 import { ApiError, api, whoAmI } from "../api.js";
 import { html, mount, raw, type Raw } from "../html.js";
+import { svgFigure } from "../figures.js";
 import { renderMarkdown } from "../markdown.js";
-import { CLIENT_TARGET_LABEL, answerText, costLabel, deprecationAdvice, deprecationSentence, includedWhenText, loadText, queryString, readQuery, releaseUrl, statusLabel, targetLabel, versionFromSearch, withFilter, type LibraryQuery } from "../library.js";
+import { CLIENT_TARGET_LABEL, answerText, conditionHtml, costLabel, deprecationAdvice, deprecationSentence, includedWhenHtml, loadText, queryString, readQuery, releaseUrl, statusLabel, targetLabel, versionFromSearch, withFilter, type LibraryQuery } from "../library.js";
 import { navigate } from "../nav.js";
 import { setTheme } from "../theme.js";
 import { callout, copyRow, emptyState, errorBox, fmtDate, icon, toast, wireCopy } from "../ui.js";
@@ -330,8 +331,14 @@ export function recipeBody(v: RecipeVersionView, requested: string): Raw {
           <div class="card mt">
             <h2>About</h2>
             <div class="markdown">${raw(renderMarkdown(v.description))}</div>
-            ${v.diagram ? html`<h3 class="mt">Design diagram</h3><a href="${v.diagram}" target="_blank" rel="noopener"><img src="${v.diagram}" alt="Design diagram of ${v.title}: its components and how they connect" style="max-width:100%;background:#fff;border-radius:12px;border:1px solid var(--line)" /></a>` : ""}
             ${v.screenshots.length > 0 ? html`<h3 class="mt">Screenshots</h3><div class="row wrap" style="gap:10px;align-items:flex-start">${v.screenshots.map((s) => html`<img src="${s}" alt="" loading="lazy" style="max-height:320px;border-radius:12px;border:1px solid var(--line)" />`)}</div>` : ""}
+          </div>
+
+          <div class="card mt" id="how-components-connect">
+            <h2>How its components connect</h2>
+            <p class="muted small">Drawn by ourapps from the recipe and the catalogue: each component in a zone by category, each line an interface from the component that provides it to the one that requires it.</p>
+            ${svgFigure(`/api/recipes/${v.slug}/${v.version}/components.svg`, `Diagram of the ${v.components.length} components of ${v.title}, grouped by category, with ${v.connections.length} lines from each component that provides an interface to each component that requires it.`)}
+            ${v.diagram ? html`<h3 class="mt">Publisher's diagram</h3>${svgFigure(v.diagram, `The publisher's design diagram of ${v.title}`)}` : ""}
           </div>
 
           <div class="card mt">
@@ -339,7 +346,7 @@ export function recipeBody(v: RecipeVersionView, requested: string): Raw {
             ${v.questions.length === 0 ? html`<p class="muted">This recipe asks no questions.</p>` : html`
               <table class="table">
                 <tr><th>Question</th><th>Answer</th><th>Default</th></tr>
-                ${v.questions.map((q) => html`<tr><td>${q.ask}<br /><code class="small">${q.id}</code></td><td>${q.type}${q.options ? html`<br /><span class="small muted">${q.options.join(", ")}</span>` : ""}${q.askWhen ? html`<br /><span class="small muted">asked when ${describeCondition(q.askWhen, answerText)}</span>` : ""}</td><td>${q.type === "secretRef" ? "a reference, never a value" : answerText(q.default)}</td></tr>`)}
+                ${v.questions.map((q) => html`<tr><td>${q.ask}<br /><code class="small">${q.id}</code></td><td>${q.type}${q.options ? html`<br /><span class="small muted">${q.options.join(", ")}</span>` : ""}${q.askWhen ? html`<br /><span class="small muted">asked when ${conditionHtml(q.askWhen)}</span>` : ""}</td><td>${q.type === "secretRef" ? "a reference, never a value" : answerText(q.default)}</td></tr>`)}
               </table>`}
           </div>
 
@@ -351,7 +358,7 @@ export function recipeBody(v: RecipeVersionView, requested: string): Raw {
               ${v.components.map(
                 (c) => html`<tr>
                   <td>${c.catalogue ? html`<a href="${new URL(c.catalogue.url).pathname}">${c.name}</a>` : c.name}${c.deprecation ? html` ${statusPill(c.deprecation.status, [c.deprecation])}` : none}<br /><span class="small muted">${c.version}, as <code>${c.id}</code></span>${c.catalogue ? html`<br /><span class="small muted">${c.catalogue.description}</span>` : ""}</td>
-                  <td>${includedWhenText(c)}</td>
+                  <td>${includedWhenHtml(c)}</td>
                   <td>${c.catalogue ? html`${c.catalogue.suitability.profiles.map((p) => html`<div class="small"><b>${p.id}</b>: ${costLabel(p.cost)}, ${loadText(p.load)}</div>`)}<div class="small muted mt-s">Guardians: ${c.catalogue.guardians.length > 0 ? c.catalogue.guardians.join(", ") : "none recorded"}</div>` : html`<span class="small muted">Not in the catalogue</span>`}</td>
                 </tr>`,
               )}
@@ -362,7 +369,7 @@ export function recipeBody(v: RecipeVersionView, requested: string): Raw {
             <div class="card mt">
               <h2>Choosing by suitability</h2>
               ${v.scale ? html`<p class="muted">The <code>${v.scale.question}</code> question sets the load the application must carry.</p><ul class="bullets">${v.scale.bands.map((b) => html`<li><b>${b.id}</b>: ${b.label} (${loadText(b.load)})</li>`)}</ul>` : ""}
-              ${v.jobs.map((j) => html`<p><b>${j.id}</b>: ${j.candidates.map((c) => `${c.component} (${c.profile})${c.includedWhen ? ` when ${describeCondition(c.includedWhen, answerText)}` : ""}`).join(", ")}${j.overrideQuestion ? html`<br /><span class="small muted">The answer to <code>${j.overrideQuestion}</code> restricts the candidates first.</span>` : ""}</p>`)}
+              ${v.jobs.map((j) => html`<p><b>${j.id}</b>: ${j.candidates.map((c, i) => html`${i > 0 ? ", " : ""}${c.component} (${c.profile})${c.includedWhen ? html` when ${conditionHtml(c.includedWhen)}` : ""}`)}${j.overrideQuestion ? html`<br /><span class="small muted">The answer to <code>${j.overrideQuestion}</code> restricts the candidates first.</span>` : ""}</p>`)}
             </div>` : ""}
 
           <div class="card mt">
@@ -430,6 +437,12 @@ export function componentBody(v: ComponentVersionView, requested: string): Raw {
           <div class="grid-2 mt">
             <div class="card"><h2>Provides</h2>${ports(v.provides, "provides")}</div>
             <div class="card"><h2>Requires</h2>${ports(v.requires, "requires")}</div>
+          </div>
+
+          <div class="card mt" id="what-it-connects-to">
+            <h2>What it connects to</h2>
+            <p class="muted small">Left: the catalogue components that provide what it requires. Right: the catalogue components that require what it provides.</p>
+            ${svgFigure(`/api/components/${v.slug}/${v.version}/connections.svg`, `Diagram of ${v.name} ${v.version}: on the left the ${v.requires.length} interfaces it requires and the catalogue components that provide them, on the right the ${v.provides.length} interfaces it provides and the catalogue components that require them.`)}
           </div>
 
           ${v.dependencies.length > 0 ? html`<div class="card mt"><h2>Builds on</h2><ul class="bullets">${v.dependencies.map((d) => html`<li><a href="/components/${d.name.split("/")[1]}">${d.name}</a> ${d.version}</li>`)}</ul></div>` : none}

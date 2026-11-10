@@ -1,5 +1,6 @@
 // A worked example: Poker Night, an imaginary app for a club's league night of eight members.
 import { whoAmI, type LinkPage } from "../api.js";
+import { cookingFigure } from "../figures.js";
 import { html, mount } from "../html.js";
 import { setTheme } from "../theme.js";
 import { icon, wireCopy, wireImages } from "../ui.js";
@@ -107,6 +108,7 @@ export async function examplePage(root: HTMLElement): Promise<void> {
 
           <h2>The app can come from a recipe</h2>
           <p>A <a href="/recipes">recipe</a> for a card game asks a few questions: which devices, how many chips to start with, whether new players get lessons. It names the <a href="/components">components</a> it is made from, such as a card deck, a seating plan and a guided tour, and an agent assembles the app from them. Dana could pick that recipe from the library and answer the questions for her table, or compose the same app from catalogue components and publish the recipe for other tables. A part that carries a deprecation warning shows it on its page and in every response, so the agent reads it before building. The <a href="/dev/guide#how-it-works">guide</a> explains both routes.</p>
+          ${cookingFigure()}
 
           <h2>How ourapps helps</h2>
           <ol class="steps">
