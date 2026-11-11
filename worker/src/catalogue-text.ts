@@ -9,6 +9,19 @@ const ports = (p: Port[]): string => list(p.map((x) => `${x.id} (${x.type} ${x.v
 
 const warnings = (deprecations: Deprecation[]): string[] => deprecations.map((d) => `DEPRECATION WARNING: ${deprecationLine(d)}`);
 const packageLines = (summary: PackageSummary): string[] => ["", "What you download", summary.headline, ...summary.parts.map(([label, text]) => `- ${label}: ${text}`), summary.where, summary.check];
+// The steps an agent runs to build an application from this recipe with aepm.
+const buildSteps = (v: { slug: string; version: string; instructions?: string | null }): string[] => [
+  "",
+  "Build it (aepm, Python 3.12, Node.js, Graphviz)",
+  "1. git clone https://github.com/ourapps-ae/aepm && export PYTHONPATH=$PWD/aepm",
+  `2. python3 -m aepm fetch ${v.slug}@${v.version} --with-dependencies --store store   (downloads the recipe and every component it names, checks each sha256 digest and the signatures)`,
+  `3. python3 -m aepm questions ${v.slug}@${v.version} --store store   (the questions as JSON; answer from the person's description, ask the rest)`,
+  `4. write answers.json (question id to answer), then: python3 -m aepm design ${v.slug}@${v.version} --store store --answers answers.json --out definition.json`,
+  "5. python3 -m aepm resolve definition.json --catalogue store/catalogue.json --out lock.json",
+  "6. make the owner policy: Level N's release and guardian keys from https://ourapps.app/policy/levelnpolicy.json plus your own owner key (python3 -m aepm.test_identities DIR makes a disposable one); INSTRUCTIONS.md in the recipe archive shows how",
+  "7. python3 -m aepm install definition.json --lock lock.json --store store --policy policy.json --target app",
+  "8. build and run: section \"Build and run\" of INSTRUCTIONS.md in the recipe archive (local: cd app/server && npm ci && npm start, then cd app/web && npm ci && npm run dev)",
+];
 const publisherLine = (p: { displayName: string; slug: string } | null): string => (p ? `Publisher: ${p.displayName} (${p.slug})` : "Publisher: none (the publisher deleted their account)");
 
 function page(title: string, body: string[]): string {
@@ -129,7 +142,7 @@ export function recipeText(v: RecipeVersionView, origin: string): string {
     `Digest: ${v.digest}`,
     `Bundle: ${v.bundle.asset} ${v.bundle.digest}`,
     `Bundle download: GET ${v.bundle.url} returns a link valid for one hour${v.status === "orphaned" ? "; with no publisher the link exists only while the release is public, otherwise the status is bundle-unavailable" : ""}`,
-    `Build: an agent reads this page, asks the questions, and installs the components with aepm (https://github.com/ourapps-ae/aepm); one-command assembly (aepm create) is coming soon`,
+    ...buildSteps(v),
     `Page: ${origin}/recipes/${v.slug}; JSON: ${origin}/api/recipes/${v.slug}/${v.version}`,
     ...packageLines(RECIPE_PACKAGE),
     v.diagram ? `Diagram: ${origin}/api/recipes/${v.slug}/${v.version}/diagram.svg` : "Diagram: none",

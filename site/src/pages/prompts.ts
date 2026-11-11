@@ -65,12 +65,14 @@ Finding things (no key needed):
 
 Tools:
 - aepm packs, resolves, reviews, installs, verifies and updates packages. Get it from https://github.com/ourapps-ae/aepm (needs Python 3.12, Node.js and Graphviz; run python3 -m aepm --help from the checkout, or set PYTHONPATH to it). It runs no package code during installation.
-- Not yet available, coming soon: aepm create (assemble a recipe from the answers in one command), and the component scaffolder and checker. Do not invent them; tell me they are not available yet.
+- Not yet available, coming soon: aepm create (the steps below in one command), and the component scaffolder and checker. Do not invent them; tell me they are not available yet.
 
-Building from a recipe:
-1. Read the recipe's questions. Answer from what I have said; ask me only what my description leaves open and the recipe marks as asked. Never invent a secret, an account name or an address; secrets are named by reference, never written as values.
-2. Read INSTRUCTIONS.md in the recipe bundle: it says which answers include which components and which settings they set. Write the list of components and settings for my answers and show it to me before installing anything.
-3. Install the listed components with aepm, review what each one contains, and tell me anything that fails. Report what was built, what was not, and what I must do myself (accounts, tokens, store setup).
+Building from a recipe (the recipe's .txt page lists the same steps):
+1. git clone https://github.com/ourapps-ae/aepm and set PYTHONPATH to it. Then: python3 -m aepm fetch <recipe>@<version> --with-dependencies --store store (checks every digest and signature).
+2. python3 -m aepm questions <recipe>@<version> --store store. Answer from what I have said; ask me only what my description leaves open. Never invent a secret, an account name or an address; secrets are named by reference, never written as values. Write answers.json.
+3. python3 -m aepm design <recipe>@<version> --store store --answers answers.json --out definition.json, then aepm resolve. Show me the components and settings the design chose before installing.
+4. Make policy.json from https://ourapps.app/policy/levelnpolicy.json plus an owner key (INSTRUCTIONS.md in the recipe archive shows how), then python3 -m aepm install ... --target app.
+5. Build and run as INSTRUCTIONS.md section "Build and run" says, for the devices I chose. Report what was built, what was not, and what I must do myself (accounts, tokens, store setup).
 
 Rules: do not install a component that is not named by the recipe or by me. Do not claim something runs that you have not run. Keep replies short.`;
 }

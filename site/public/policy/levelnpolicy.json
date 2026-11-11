@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "keys": {
+    "release": [
+      {
+        "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAXhg6Mb90m8C6K58Tp/Mmd1hhhvfW9hCgCK3z8+9fl78=\n-----END PUBLIC KEY-----\n"
+      }
+    ],
+    "guardian": [
+      {
+        "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAo6/7sJwRe8Q2q2Hu6plKfJ5GMf9IGAANCn9hkhFAjQI=\n-----END PUBLIC KEY-----\n"
+      }
+    ],
+    "owner": []
+  },
+  "trustedExecution": []
+}

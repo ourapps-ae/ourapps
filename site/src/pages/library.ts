@@ -323,7 +323,7 @@ export function recipeBody(v: RecipeVersionView, requested: string): Raw {
 
           <div class="card mt">
             <h2>Build it</h2>
-            <p class="muted">Give your coding agent this line. It asks the questions below, shows you the components it will install, and installs them with aepm. One-command assembly (<code>aepm create</code>) is coming soon. <a href="/dev/agents#recipes-and-components">Tools and instructions for agents</a>.</p>
+            <p class="muted">Give your coding agent this line. The page it reads lists the aepm steps: fetch the recipe and its components, ask you the questions below, design, install, then build and run. One-command assembly (<code>aepm create</code>) is coming soon. <a href="/dev/agents#recipes-and-components">Tools and instructions for agents</a>.</p>
             ${copyRow(`Build an application from the ${v.title} recipe: https://ourapps.app/recipes/${v.slug}.txt`)}
             <div class="row wrap mt-s"><button class="btn secondary sm" id="bundle-link" type="button">${icon("external")} Download the archive</button><span class="small faint">The link is valid for one hour. Digest ${v.bundle.digest.slice(0, 19)}</span></div>
           </div>

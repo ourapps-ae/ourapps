@@ -58,7 +58,7 @@ async function route(request: Request, env: Env, deps: Deps): Promise<Response> 
   if (parts[0] === "dl" && parts.length === 2 && m === "GET") return serveArtefact(env, deps, parts[1]);
   if (parts[0] !== "api") {
     if (m === "GET" && parts.length === 1 && parts[0] === "sitemap.xml") return catalogue.sitemap(env);
-    const variant = m === "GET" ? catalogue.pageVariant(env, parts, url) : null;
+    const variant = m === "GET" ? catalogue.pageVariant(env, parts, url, request) : null;
     if (variant) return variant;
     const verification = env.GOOGLE_SITE_VERIFICATION;
     if (verification && parts.length === 1 && parts[0] === verification && m === "GET") {

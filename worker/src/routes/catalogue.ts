@@ -352,9 +352,17 @@ export async function deprecations(env: Env, kind: Kind, name: string, version: 
 
 const plain = (body: string): Response => new Response(body, { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
 
+// A browser sends Accept with text/html; fetch tools and curl do not.
+export function wantsHtml(request: Request): boolean {
+  return /text\/html/i.test(request.headers.get("Accept") ?? "");
+}
+
 // /recipes.txt, /recipes.json, /recipes/:name.txt, /recipes/:name.json and the same for components.
 // Returns null for any other path. ?version= picks a version; ?q= searches a list.
-export function pageVariant(env: Env, parts: string[], url: URL): Promise<Response> | null {
+export function pageVariant(env: Env, parts: string[], url: URL, request?: Request): Promise<Response> | null {
+  // A client that does not ask for HTML (an agent's fetch tool, curl) gets the plain-text page at the page's own address.
+  const bare = parts.length <= 2 && (parts[0] === "recipes" || parts[0] === "components") && !/\.(txt|json)$/.test(parts[parts.length - 1] ?? "");
+  if (bare && request && !wantsHtml(request)) return variant(env, parts[0] as "recipes" | "components", parts[1] ?? null, "txt", url);
   const top = /^(recipes|components)\.(txt|json)$/.exec(parts[0] ?? "");
   const nested = parts.length === 2 && (parts[0] === "recipes" || parts[0] === "components") ? /^(.+)\.(txt|json)$/.exec(parts[1]) : null;
   if (parts.length === 1 && top) return variant(env, top[1] as "recipes" | "components", null, top[2] as "txt" | "json", url);
