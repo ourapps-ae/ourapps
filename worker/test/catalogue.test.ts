@@ -609,6 +609,14 @@ describe("page variants", () => {
     await publishRecipe();
   });
 
+  it("answers a page address with plain text when the client does not ask for HTML", async () => {
+    const text = await handle(api(null, "GET", "/recipes/poker-night", undefined, { Accept: "*/*" }), env, deps);
+    expect(text.headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
+    expect(await text.text()).toContain("Poker Night (acme/poker-night) 0.1.0");
+    const list = await handle(api(null, "GET", "/components", undefined, { Accept: "text/plain" }), env, deps);
+    expect(await list.text()).toContain("card-deck");
+  });
+
   it("serves plain text and JSON for every public page", async () => {
     const list = await get("/recipes.txt");
     expect(list.status).toBe(200);
@@ -620,8 +628,8 @@ describe("page variants", () => {
 
     const page = await (await get("/recipes/poker-night.txt")).text();
     expect(page).toContain("Poker Night (acme/poker-night) 0.1.0");
-    expect(page).toContain("Build: an agent reads this page");
-    expect(page).toContain("aepm create) is coming soon");
+    expect(page).toContain("Build it (aepm, Python 3.12, Node.js, Graphviz)");
+    expect(page).toContain("python3 -m aepm fetch poker-night@0.1.0 --with-dependencies --store store");
     expect(page).toContain("- chips (integer): Starting chips?");
     expect(page).toContain("- deck: acme/card-deck 0.1.0");
     expect(page).toContain("- apple: acme/apple-host 0.1.0 (only when (targets includes ios) or (targets includes macos))");
@@ -994,3 +1002,4 @@ describe("account deletion keeps the catalogue and orphans it", () => {
     await expect(env.DB.prepare("DELETE FROM developers WHERE id = ?").bind(dev).run()).rejects.toThrow();
   });
 });
+
