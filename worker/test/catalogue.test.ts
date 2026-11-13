@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { EXAMPLE_BUNDLE_DIGEST, exampleComponentEntry, exampleRecipeEntry, type BundleLink, type ComponentList, type ComponentSearch, type ComponentVersionView, type DeprecationReport, type RecipeList, type RecipeSearch, type RecipeVersionView } from "@my/store-shared";
+import { EXAMPLE_BUNDLE_DIGEST, EXAMPLE_INTERFACE_DIGEST, exampleComponentEntries, exampleComponentEntry, exampleRecipeEntry, type BundleLink, type ComponentList, type ComponentSearch, type ComponentVersionView, type DeprecationReport, type RecipeList, type RecipeSearch, type RecipeVersionView } from "@my/store-shared";
 import { Db } from "../src/db.js";
 import { ftsQuery } from "../src/catalogue-db.js";
 import type { Env } from "../src/env.js";
@@ -31,6 +31,9 @@ function githubFor(extra: Record<string, (call: Call) => Response | Promise<Resp
     ...release("acme/poker-night-recipe", "v0.1.0", "poker-night-0.1.0.tar", 21),
     ...release("acme/seating", "v0.1.0", "seating-0.1.0.tar", 31),
     ...release("acme/random-pool", "v0.1.0", "random-pool-0.1.0.tar", 41),
+    ...release("acme/server-host", "v0.1.0", "server-host-0.1.0.tar", 51),
+    ...release("acme/apple-host", "v0.1.0", "apple-host-0.1.0.tar", 52),
+    ...release("acme/guided-tour", "v0.1.0", "guided-tour-0.1.0.tar", 53),
     ...extra,
   });
   calls = stub.calls;
@@ -85,7 +88,17 @@ async function publishCard(patch?: (e: Mutable) => void) {
   return res;
 }
 
+// The example recipe's preferred components that the catalogue does not hold yet.
+async function publishParts() {
+  const held = new Set((await env.DB.prepare("SELECT name FROM components").all<{ name: string }>()).results.map((r) => r.name));
+  for (const part of exampleComponentEntries().filter((e) => !held.has(e.name))) {
+    const res = await post("/api/dev/components", part);
+    expect(res.status, part.name).toBe(201);
+  }
+}
+
 async function publishRecipe(patch?: (e: Mutable) => void) {
+  await publishParts();
   const res = await post("/api/dev/recipes", recipe(patch));
   expect(res.status).toBe(201);
   return res;
@@ -221,6 +234,7 @@ describe("publishing a component", () => {
   });
 
   it("limits the names one developer can hold", async () => {
+    await publishParts();
     const now = new Date().toISOString();
     const dev = (await env.DB.prepare("SELECT id FROM developers").first<{ id: string }>())!.id;
     await env.DB.batch(Array.from({ length: 50 }, (_, i) => env.DB.prepare("INSERT INTO recipes (id, name, scope, slug, developer_id, repo, created_at, updated_at) VALUES (?, ?, 'acme', ?, ?, 'acme/x', ?, ?)").bind(`r${i}`, `acme/recipe-${i}`, `recipe-${i}`, dev, now, now)));
@@ -232,54 +246,147 @@ describe("publishing a component", () => {
 
 describe("publishing a recipe", () => {
   it("validates recipe.json, the pointers and the diagram", async () => {
-    const bad = await post("/api/dev/recipes", recipe((e) => (e.recipe.components[0].version = "x")));
+    await publishParts();
+    const bad = await post("/api/dev/recipes", recipe((e) => (e.recipe.components[0].preferred.version = "x")));
     expect(bad.status).toBe(400);
-    expect(((await bad.json()) as { error: string }).error).toContain("recipe: components[0].version");
+    expect(((await bad.json()) as { error: string }).error).toContain("recipe: components[0].preferred.version");
     const svg = await post("/api/dev/recipes", recipe((e) => (e.page.diagram = "<svg><script>alert(1)</script></svg>")));
     expect(svg.status).toBe(400);
   });
 
-  it("stores the recipe, its components and its page material", async () => {
+  it("stores the recipe, its slots and its page material", async () => {
     await publishRecipe();
     const version = await env.DB.prepare("SELECT * FROM recipe_versions").first<Record<string, unknown>>();
     expect(version).toMatchObject({ title: "Poker Night", category: "games", source_repo: "acme/poker-night-recipe", source_tag: "v0.1.0", bundle_asset: "poker-night-0.1.0.tar" });
-    expect(JSON.parse(version!.recipe as string).questions).toHaveLength(7);
-    const components = await env.DB.prepare("SELECT instance_id, component_name FROM recipe_components ORDER BY instance_id").all();
-    expect(components.results).toEqual([
-      { instance_id: "apple", component_name: "acme/apple-host" },
-      { instance_id: "deck", component_name: "acme/card-deck" },
-      { instance_id: "host", component_name: "acme/server-host" },
-      { instance_id: "seats", component_name: "acme/seating" },
-      { instance_id: "tour", component_name: "acme/guided-tour" },
+    const stored = JSON.parse(version!.recipe as string);
+    expect(stored.questions).toHaveLength(7);
+    expect(stored.components[1]).toEqual(exampleRecipeEntry().recipe.components[1]);
+    const slots = await env.DB.prepare("SELECT slot_id, component_name, component_version, preferred FROM recipe_slots ORDER BY slot_id").all();
+    expect(slots.results).toEqual([
+      { slot_id: "apple", component_name: "acme/apple-host", component_version: "0.1.0", preferred: 1 },
+      { slot_id: "deck", component_name: "acme/card-deck", component_version: "0.1.0", preferred: 1 },
+      { slot_id: "host", component_name: "acme/server-host", component_version: "0.1.0", preferred: 1 },
+      { slot_id: "seats", component_name: "acme/seating", component_version: "0.1.0", preferred: 1 },
+      { slot_id: "tour", component_name: "acme/guided-tour", component_version: "0.1.0", preferred: 1 },
     ]);
   });
 
   it("stores CEL conditions as written and accepts the reserved application endpoint", async () => {
     await publishRecipe();
-    const stored = await env.DB.prepare("SELECT instance_id, included_when FROM recipe_components WHERE instance_id IN ('apple', 'deck', 'tour') ORDER BY instance_id").all<{ instance_id: string; included_when: string | null }>();
-    expect(stored.results.map((r) => [r.instance_id, r.included_when])).toEqual([
+    const stored = await env.DB.prepare("SELECT slot_id, included_when FROM recipe_slots WHERE slot_id IN ('apple', 'deck', 'tour') ORDER BY slot_id").all<{ slot_id: string; included_when: string | null }>();
+    expect(stored.results.map((r) => [r.slot_id, r.included_when])).toEqual([
       ["apple", "'ios' in targets || 'macos' in targets"],
       ["deck", null],
       ["tour", "lessons"],
     ]);
     const bad = await post("/api/dev/recipes", recipe((e) => ((e.recipe.version = "0.2.0"), (e.recipe.components[4].includedWhen = "lessons + 1"))));
     expect(bad.status).toBe(400);
-    expect(((await bad.json()) as { error: string }).error).toContain("components[4].includedWhen (component tour): + is not allowed");
+    expect(((await bad.json()) as { error: string }).error).toContain("components[4].includedWhen (slot tour): + is not allowed");
     const ghost = await post("/api/dev/recipes", recipe((e) => ((e.recipe.version = "0.2.0"), (e.recipe.components[0].id = "application"))));
     expect(ghost.status).toBe(400);
     expect(((await ghost.json()) as { error: string }).error).toContain("application is reserved");
   });
 
-  it("shows the guardians and suitability of components the catalogue lists", async () => {
-    await publishCard();
+  it("refuses a preferred component the catalogue does not list at that version", async () => {
+    const res = await post("/api/dev/recipes", recipe());
+    expect(res.status).toBe(400);
+    const error = ((await res.json()) as { error: string }).error;
+    expect(error).toContain("recipe: components[0].preferred acme/card-deck 0.1.0 is not in the catalogue");
+    expect(calls.some((c) => c.url.includes("poker-night-recipe"))).toBe(false);
+    await publishParts();
+    await del("/api/dev/components/seating/0.1.0");
+    expect(((await (await post("/api/dev/recipes", recipe())).json()) as { error: string }).error).toContain("components[1].preferred acme/seating 0.1.0 is not in the catalogue");
+  });
+
+  it("applies the fit rule to the stored component entries", async () => {
+    await publishParts();
+    githubFor(release("acme/seating", "v0.2.0", "seating-0.2.0.tar", 32));
+    const seating = exampleComponentEntries()[1]!;
+    const unfit = { ...seating, version: "0.2.0", digest: digest("2"), settings: [], requires: [...seating.requires, { id: "audit", type: "ae/audit", version: "1.0.0" }], source: { repository: "acme/seating", tag: "v0.2.0" }, bundle: { ...seating.bundle, asset: "seating-0.2.0.tar" } };
+    expect((await post("/api/dev/components", unfit)).status).toBe(201);
+    const res = await post("/api/dev/recipes", recipe((e) => (e.recipe.components[1].preferred.version = "0.2.0")));
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toContain("recipe: components[1].preferred: acme/seating 0.2.0 does not fit the class of slot seats: requires:ae/audit@1.0.0, setting:minimumPlayers");
+  });
+
+  it("compares interface documents by the digests the entries record", async () => {
+    await publishParts();
+    githubFor(release("acme/seating", "v0.2.0", "seating-0.2.0.tar", 33));
+    const seating = exampleComponentEntries()[1]!;
+    const reworded = { ...seating, version: "0.2.0", digest: digest("3"), interfaceDigests: { "ae/seating@1.0.0": digest("9") }, source: { repository: "acme/seating", tag: "v0.2.0" }, bundle: { ...seating.bundle, asset: "seating-0.2.0.tar" } };
+    expect((await post("/api/dev/components", reworded)).status).toBe(201);
+    const candidate = await post("/api/dev/recipes", recipe((e) => e.recipe.jobs.push({ id: "seats", slot: "seats", candidates: [{ component: "acme/seating", profile: "any" }, { component: "acme/seating", version: "0.2.0", profile: "any" }] })));
+    expect(candidate.status).toBe(400);
+    expect(((await candidate.json()) as { error: string }).error).toContain("recipe: jobs[1].candidates[1]: acme/seating 0.2.0 does not fit the class of slot seats: document:ae/seating@1.0.0");
+  });
+
+  it("refuses a sets target the slot's class does not declare and a class configuration that is not a valid schema", async () => {
+    await publishParts();
+    const unknown = await post("/api/dev/recipes", recipe((e) => (e.recipe.questions[2].effects = [{ sets: { "seats.maximumPlayers": "$answer" } }])));
+    expect(((await unknown.json()) as { error: string }).error).toContain("maximumPlayers is not declared in the class configuration of slot seats");
+    const invalid = await post("/api/dev/recipes", recipe((e) => (e.recipe.components[1].class.configuration.properties.minimumPlayers = { type: "integer", minimum: "two" })));
+    expect(invalid.status).toBe(400);
+    expect(((await invalid.json()) as { error: string }).error).toContain("components[1].class.configuration.properties.minimumPlayers is not a valid JSON Schema 2020-12 schema");
+  });
+
+  it("shows each slot's class, preferred component, guardians and suitability", async () => {
     await publishRecipe();
     const view = (await (await get("/api/recipes/poker-night")).json()) as RecipeVersionView;
-    const deck = view.components.find((c) => c.id === "deck")!;
-    expect(deck.catalogue).toMatchObject({ url: `${BASE}/components/card-deck`, guardians: ["Example Guardian Ltd"] });
+    const deck = view.components.find((s) => s.id === "deck")!;
+    expect(deck.class.provides).toEqual([{ type: "ae/card-deck", version: "1.0.0" }]);
+    expect(deck.preferred).toEqual({ name: "acme/card-deck", version: "0.1.0", url: `${BASE}/components/card-deck` });
+    expect(deck.catalogue).toMatchObject({ description: "A shuffled deck of 52 cards that deals and burns cards.", guardians: ["Example Guardian Ltd"] });
     expect(deck.catalogue!.suitability.profiles[0].cost).toBe("none");
-    expect(view.components.find((c) => c.id === "seats")!.catalogue).toBeNull();
+    expect(deck.alternatives).toEqual({ count: 0, url: `${BASE}/components?provides=ae%2Fcard-deck` });
+    await del("/api/dev/components/seating/0.1.0");
+    const unlisted = ((await (await get("/api/recipes/poker-night")).json()) as RecipeVersionView).components.find((s) => s.id === "seats")!;
+    expect(unlisted.catalogue).toBeNull();
+    expect(unlisted.preferred.url).toBeNull();
     const used = (await (await get("/api/components/card-deck")).json()) as ComponentVersionView;
-    expect(used.usedBy).toEqual([{ name: "acme/poker-night", slug: "poker-night", title: "Poker Night", version: "0.1.0", url: `${BASE}/recipes/poker-night` }]);
+    expect(used.usedBy).toEqual([{ name: "acme/poker-night", slug: "poker-night", title: "Poker Night", version: "0.1.0", url: `${BASE}/recipes/poker-night`, slots: [{ id: "deck", preferred: true }] }]);
+  });
+
+  it("counts the other catalogue components that fit each slot's class", async () => {
+    await publishRecipe();
+    // Other decks: one fits the deck slot's class; one requires more, one provides another version, one needs a setting
+    // the recipe never writes, one has another interface document, one does not install an entry module.
+    const other = (slug: string, id: number, patch: (e: Mutable) => void = () => {}) => {
+      githubFor(release(`acme/${slug}`, "v0.1.0", `${slug}-0.1.0.tar`, id));
+      return post("/api/dev/components", component((e) => ((e.name = `acme/${slug}`), (e.source = { repository: `acme/${slug}`, tag: "v0.1.0" }), (e.bundle.asset = `${slug}-0.1.0.tar`), patch(e))));
+    };
+    expect((await other("fancy-deck", 61)).status).toBe(201);
+    expect((await other("strict-deck", 62, (e) => (e.requires = [{ id: "audit", type: "ae/audit", version: "1.0.0" }]))).status).toBe(201);
+    expect((await other("old-deck", 63, (e) => ((e.provides = [{ id: "card-deck", type: "ae/card-deck", version: "0.9.0" }]), (e.interfaceDigests = { "ae/card-deck@0.9.0": EXAMPLE_INTERFACE_DIGEST }), (e.interfaceModules = {})))).status).toBe(201);
+    expect((await other("reworded-deck", 65, (e) => (e.interfaceDigests = { "ae/card-deck@1.0.0": digest("9") }))).status).toBe(201);
+    expect((await other("partial-deck", 66, (e) => (e.interfaceModules["ae/card-deck@1.0.0"].web.installed = false))).status).toBe(201);
+    expect((await other("needy-deck", 64, (e) => (e.settings = [{ id: "seed", type: "string", grammar: "label", required: true, secret: false, hasDefault: false }]))).status).toBe(201);
+    const view = (await (await get("/api/recipes/poker-night")).json()) as RecipeVersionView;
+    expect(view.components.find((s) => s.id === "deck")!.alternatives).toEqual({ count: 1, url: `${BASE}/components?provides=ae%2Fcard-deck` });
+    expect(view.components.find((s) => s.id === "seats")!.alternatives.count).toBe(0);
+    const listed = ((await (await get("/api/components?provides=ae/card-deck")).json()) as ComponentList).components.map((c) => c.name);
+    expect(listed).toEqual(["acme/card-deck", "acme/fancy-deck", "acme/needy-deck", "acme/old-deck", "acme/partial-deck", "acme/reworded-deck", "acme/strict-deck"]);
+    const text = await (await get("/recipes/poker-night.txt")).text();
+    expect(text).toContain(`    other components of this class (1): ${BASE}/components?provides=ae%2Fcard-deck`);
+  });
+});
+
+describe("job candidates", () => {
+  it("records each candidate in its slot: used by, and in the deprecation tree", async () => {
+    await publishParts();
+    const host = exampleComponentEntries()[2]!;
+    githubFor(release("acme/cheap-host", "v0.1.0", "cheap-host-0.1.0.tar", 71));
+    expect((await post("/api/dev/components", { ...host, name: "acme/cheap-host", source: { repository: "acme/cheap-host", tag: "v0.1.0" }, bundle: { ...host.bundle, asset: "cheap-host-0.1.0.tar" } })).status).toBe(201);
+    await publishRecipe((e) => e.recipe.jobs[0].candidates.push({ component: "acme/cheap-host", version: "0.1.0", profile: "free" }));
+    const rows = await env.DB.prepare("SELECT component_name, preferred FROM recipe_slots WHERE slot_id = 'host' ORDER BY component_name").all();
+    expect(rows.results).toEqual([{ component_name: "acme/cheap-host", preferred: 0 }, { component_name: "acme/server-host", preferred: 1 }]);
+    const used = (await (await get("/api/components/cheap-host")).json()) as ComponentVersionView;
+    expect(used.usedBy.map((u) => [u.name, u.slots])).toEqual([["acme/poker-night", [{ id: "host", preferred: false }]]]);
+    expect(await (await get("/components/cheap-host.txt")).text()).toContain("Used by recipes: acme/poker-night 0.1.0 (slot host as a job candidate)");
+    await post("/api/dev/components/cheap-host/deprecate", {});
+    const view = (await (await get("/api/recipes/poker-night")).json()) as RecipeVersionView;
+    expect(view.deprecations.map((d) => [d.name, d.via])).toEqual([["acme/cheap-host", ["acme/poker-night"]]]);
+    const hostSlot = view.components.find((s) => s.id === "host")!;
+    expect(hostSlot.alternatives.count).toBe(1);
   });
 });
 
@@ -298,7 +405,7 @@ describe("reading recipes", () => {
       e.recipe.tags = ["plants"];
       e.recipe.targets = { client: ["windows"], server: [] };
       e.recipe.version = "1.0.0";
-      e.recipe.components = [{ id: "plan", name: "acme/planner", version: "0.1.0", includedWhen: null }];
+      e.recipe.components = [e.recipe.components[0]];
       e.recipe.jobs = [];
       e.recipe.scale = null;
       e.recipe.questions = [];
@@ -383,7 +490,6 @@ describe("reading recipes", () => {
 describe("search", () => {
   beforeEach(async () => {
     await publishRecipe();
-    await publishCard();
   });
 
   it("finds recipes by name, title, summary, tags and description, with prefixes", async () => {
@@ -444,6 +550,8 @@ describe("components", () => {
           e.targets = { client: ["web", "ios"], server: ["hosting-provider"] };
           e.provides = [{ id: "seating", type: "ae/seating", version: "1.0.0" }];
           e.requires = [{ id: "guest-identity", type: "ae/guest-identity", version: "1.0.0" }];
+          e.interfaceDigests = { "ae/seating@1.0.0": EXAMPLE_INTERFACE_DIGEST };
+          e.interfaceModules = {};
           e.source = { repository: "acme/seating", tag: "v0.1.0" };
           e.bundle.asset = "seating-0.1.0.tar";
         }))
@@ -553,7 +661,6 @@ describe("unlisting", () => {
 describe("bundle links", () => {
   beforeEach(async () => {
     await publishRecipe();
-    await publishCard();
   });
 
   it("returns a signed one-hour link that streams the release asset with the publisher's token", async () => {
@@ -605,7 +712,6 @@ describe("bundle links", () => {
 
 describe("page variants", () => {
   beforeEach(async () => {
-    await publishCard();
     await publishRecipe();
   });
 
@@ -631,15 +737,19 @@ describe("page variants", () => {
     expect(page).toContain("Build it (aepm, Python 3.12, Node.js, Graphviz)");
     expect(page).toContain("python3 -m aepm fetch poker-night@0.1.0 --with-dependencies --store store");
     expect(page).toContain("- chips (integer): Starting chips?");
-    expect(page).toContain("- deck: acme/card-deck 0.1.0");
-    expect(page).toContain("- apple: acme/apple-host 0.1.0 (only when (targets includes ios) or (targets includes macos))");
+    expect(page).toContain("Slots (5): each needs a component of its class");
+    expect(page).toContain("- slot deck\n    class: provides ae/card-deck 1.0.0; requires none; settings none\n    preferred: acme/card-deck 0.1.0 (https://ourapps.app/components/card-deck.txt)");
+    expect(page).toContain("- slot seats\n    class: provides ae/seating 1.0.0; requires ae/card-deck 1.0.0; settings minimumPlayers integer, always written");
+    expect(page).toContain("- slot host\n    class: provides ae/server-host 1.0.0; requires none; settings targets string (label), always written, expectedPeople integer, always written, accountReference string (slug)");
+    expect(page).toContain("- slot apple (only when (targets includes ios) or (targets includes macos))");
+    expect(page).toContain("    other components of this class (0): https://ourapps.app/components?provides=ae%2Fcard-deck\n    python3 -m aepm alternatives poker-night@0.1.0 deck --store store");
+    expect(page).toContain("python3 -m aepm design poker-night@0.1.0 --store store --answers answers.json --substitute SLOT=NAME@VERSION --out definition.json");
     expect(page).toContain("asked only when lessons is yes; otherwise it takes its default");
     expect(page).toContain("sets host.targets to the answer");
     expect(page).toContain("range: 100 to 1000000");
-    expect(page).toContain("- job server (the answer to server restricts the candidates first): acme/server-host (free), acme/server-host (paid)");
+    expect(page).toContain("- job server fills slot host (the answer to server restricts the candidates first): acme/server-host (free), acme/server-host (paid)");
     expect(page).toContain("- seats.seating -> application.seating");
     expect(page).toContain("guardians: Example Guardian Ltd");
-    expect(page).toContain("not listed in the catalogue");
     expect(page).toContain("Tested answer sets: default, web-only");
     expect(page).not.toContain(GH_TOKEN);
 
@@ -651,7 +761,10 @@ describe("page variants", () => {
     expect(components).toContain("- acme/card-deck 0.1.0: A shuffled deck of 52 cards that deals and burns cards.");
     const one = await (await get("/components/card-deck.txt")).text();
     expect(one).toContain("Provides: card-deck (ae/card-deck 1.0.0)");
-    expect(one).toContain("Used by recipes: acme/poker-night 0.1.0");
+    expect(one).toContain("Used by recipes: acme/poker-night 0.1.0 (slot deck)");
+    expect(one).toContain("Settings (0)");
+    const host = await (await get("/components/server-host.txt")).text();
+    expect(host).toContain("Settings (3)\n- targets: string (label); required, no default\n- expectedPeople: integer; optional, has a default\n- accountReference: string (slug); optional, no default, secret");
     expect(one).toContain("Data migration: this component keeps no data");
     expect(((await (await get("/components/card-deck.json")).json()) as ComponentVersionView).name).toBe("acme/card-deck");
   });
@@ -699,6 +812,8 @@ const POOL = (patch: (e: Mutable) => void = () => {}) =>
     e.tags = ["random"];
     e.provides = [{ id: "random-source", type: "ae/random-source", version: "1.0.0" }];
     e.requires = [];
+    e.interfaceDigests = { "ae/random-source@1.0.0": EXAMPLE_INTERFACE_DIGEST };
+    e.interfaceModules = {};
     e.source = { repository: "acme/random-pool", tag: "v0.1.0" };
     e.bundle.asset = "random-pool-0.1.0.tar";
     patch(e);
@@ -709,7 +824,7 @@ async function publishPool(patch?: (e: Mutable) => void) {
   expect(res.status).toBe(201);
 }
 
-// card-deck builds on random-pool, and poker-night names card-deck (and seating, guided-tour, which are not listed).
+// card-deck builds on random-pool, and poker-night prefers card-deck and the other example components.
 async function publishChain() {
   await publishPool();
   await publishCard((e) => (e.dependencies = [{ name: "acme/random-pool", version: "0.1.0" }]));
@@ -902,10 +1017,10 @@ describe("account deletion keeps the catalogue and orphans it", () => {
     await deleteAccount();
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM developers").first<{ n: number }>())!.n).toBe(0);
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM catalogue_fts").first<{ n: number }>())!.n).toBe(before);
-    for (const [table, n] of [["recipes", 1], ["recipe_versions", 1], ["recipe_components", 5], ["components", 2], ["component_versions", 2], ["component_interfaces", 3], ["component_dependencies", 1]] as const) {
+    for (const [table, n] of [["recipes", 1], ["recipe_versions", 1], ["recipe_slots", 5], ["components", 6], ["component_versions", 6], ["component_interfaces", 8], ["component_dependencies", 1]] as const) {
       expect((await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first<{ n: number }>())!.n, table).toBe(n);
     }
-    const rows = (await env.DB.prepare("SELECT name, developer_id, deprecated_at, deprecated_reason, replacement FROM components ORDER BY name").all<Record<string, unknown>>()).results;
+    const rows = (await env.DB.prepare("SELECT name, developer_id, deprecated_at, deprecated_reason, replacement FROM components WHERE name IN ('acme/card-deck', 'acme/random-pool') ORDER BY name").all<Record<string, unknown>>()).results;
     const at = deps.now().toISOString();
     expect(rows).toEqual([
       { name: "acme/card-deck", developer_id: null, deprecated_at: at, deprecated_reason: "owner-deleted", replacement: "acme/random-pool" },
@@ -919,16 +1034,17 @@ describe("account deletion keeps the catalogue and orphans it", () => {
     const at = deps.now().toISOString();
     const own = { name: "acme/card-deck", version: "0.1.0", status: "orphaned", reason: "owner-deleted", since: at, replacement: "acme/random-pool", via: [] };
     const list = (await (await get("/api/components")).json()) as ComponentList;
-    expect(list.total).toBe(2);
-    expect(list.components.map((c) => [c.name, c.status, c.publisher])).toEqual([["acme/card-deck", "orphaned", null], ["acme/random-pool", "orphaned", null]]);
-    expect(list.components[0].deprecations).toEqual([own, { name: "acme/random-pool", version: "0.1.0", status: "orphaned", reason: "owner-deleted", since: at, via: ["acme/card-deck"] }]);
+    expect(list.total).toBe(6);
+    expect(list.components.every((c) => c.status === "orphaned" && c.publisher === null)).toBe(true);
+    expect(list.components.find((c) => c.name === "acme/card-deck")!.deprecations).toEqual([own, { name: "acme/random-pool", version: "0.1.0", status: "orphaned", reason: "owner-deleted", since: at, via: ["acme/card-deck"] }]);
     expect(((await (await get("/api/components/search?q=pool")).json()) as ComponentSearch).components[0].status).toBe("orphaned");
-    expect(((await (await get("/api/components?deprecated=only")).json()) as ComponentList).total).toBe(2);
+    expect(((await (await get("/api/components?deprecated=only")).json()) as ComponentList).total).toBe(6);
     expect(((await (await get("/api/components?deprecated=exclude")).json()) as ComponentList).total).toBe(0);
 
     const recipe = (await (await get("/api/recipes/poker-night")).json()) as RecipeVersionView;
     expect(recipe).toMatchObject({ status: "orphaned", publisher: null });
-    expect(recipe.deprecations.map((d) => [d.name, d.status, d.via])).toEqual([["acme/poker-night", "orphaned", []], ["acme/card-deck", "orphaned", ["acme/poker-night"]], ["acme/random-pool", "orphaned", ["acme/card-deck"]]]);
+    const chain = ["acme/poker-night", "acme/card-deck", "acme/random-pool"];
+    expect(recipe.deprecations.filter((d) => chain.includes(d.name)).map((d) => [d.name, d.status, d.via])).toEqual([["acme/poker-night", "orphaned", []], ["acme/card-deck", "orphaned", ["acme/poker-night"]], ["acme/random-pool", "orphaned", ["acme/card-deck"]]]);
     expect(recipe.components.find((c) => c.id === "deck")!.deprecation).toMatchObject({ status: "orphaned" });
 
     const text = await (await get("/recipes/poker-night.txt")).text();

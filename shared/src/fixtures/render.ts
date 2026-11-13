@@ -6,7 +6,7 @@ import { OURPOKER_CATALOGUE, OURPOKER_RECIPE, type FixtureComponent } from "./ou
 
 export function ourpokerRecipeInput() {
   const byName = new Map(OURPOKER_CATALOGUE.map((c) => [c.name, c]));
-  return { ...OURPOKER_RECIPE, catalogue: OURPOKER_RECIPE.components.map((c) => byName.get(c.name) ?? null) };
+  return { ...OURPOKER_RECIPE, catalogue: OURPOKER_RECIPE.components.map((s) => byName.get(s.preferred.name) ?? null) };
 }
 
 // What the catalogue queries return for one component, answered from the fixture.

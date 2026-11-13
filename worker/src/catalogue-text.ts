@@ -1,11 +1,12 @@
 // Plain-text pages of the recipe library and component catalogue, for agents that read without a browser.
-import { COMPONENT_PACKAGE, RECIPE_PACKAGE, deprecationLine, describeCondition, type Condition, type PackageSummary, type Deprecation, type ComponentList, ComponentSearch, ComponentSummary, ComponentVersionView, Port, RecipeComponentView, RecipeList, RecipeQuestion, RecipeSearch, RecipeSummary, RecipeVersionView, Suitability, Targets } from "@my/store-shared";
+import { COMPONENT_PACKAGE, RECIPE_PACKAGE, classSettings, deprecationLine, describeCondition, kindText, type ClassInterface, type Condition, type PackageSummary, type Deprecation, type ComponentList, ComponentSearch, ComponentSummary, ComponentVersionView, Port, RecipeList, RecipeQuestion, RecipeSearch, RecipeSlotView, RecipeSummary, RecipeVersionView, SettingDeclaration, Suitability, Targets } from "@my/store-shared";
 
 const COPYRIGHT = "Copyright Level N Ltd 2026";
 
 const list = (items: readonly unknown[]): string => (items.length === 0 ? "none" : items.join(", "));
 const targets = (t: Targets): string => `client ${list(t.client)}; server ${list(t.server)}`;
 const ports = (p: Port[]): string => list(p.map((x) => `${x.id} (${x.type} ${x.version}${x.optional ? ", optional" : ""})`));
+const interfaces = (p: ClassInterface[]): string => list(p.map((x) => `${x.type} ${x.version}${x.optional ? " (optional)" : ""}`));
 
 const warnings = (deprecations: Deprecation[]): string[] => deprecations.map((d) => `DEPRECATION WARNING: ${deprecationLine(d)}`);
 const packageLines = (summary: PackageSummary): string[] => ["", "What you download", summary.headline, ...summary.parts.map(([label, text]) => `- ${label}: ${text}`), summary.where, summary.check];
@@ -14,9 +15,10 @@ const buildSteps = (v: { slug: string; version: string; instructions?: string | 
   "",
   "Build it (aepm, Python 3.12, Node.js, Graphviz)",
   "1. git clone https://github.com/ourapps-ae/aepm && export PYTHONPATH=$PWD/aepm",
-  `2. python3 -m aepm fetch ${v.slug}@${v.version} --with-dependencies --store store   (downloads the recipe and every component it names, checks each sha256 digest and the signatures)`,
+  `2. python3 -m aepm fetch ${v.slug}@${v.version} --with-dependencies --store store   (downloads the recipe and the component it prefers for each slot, checks each sha256 digest and the signatures)`,
   `3. python3 -m aepm questions ${v.slug}@${v.version} --store store   (the questions as JSON; answer from the person's description, ask the rest)`,
   `4. write answers.json (question id to answer), then: python3 -m aepm design ${v.slug}@${v.version} --store store --answers answers.json --out definition.json`,
+  `   another component of a slot's class instead of the preferred one: python3 -m aepm alternatives ${v.slug}@${v.version} SLOT --store store lists the components that fit, then python3 -m aepm design ${v.slug}@${v.version} --store store --answers answers.json --substitute SLOT=NAME@VERSION --out definition.json`,
   "5. python3 -m aepm resolve definition.json --catalogue store/catalogue.json --out lock.json",
   "6. make the owner policy: Level N's release and guardian keys from https://ourapps.app/policy/levelnpolicy.json plus your own owner key (python3 -m aepm.test_identities DIR makes a disposable one); INSTRUCTIONS.md in the recipe archive shows how",
   "7. python3 -m aepm install definition.json --lock lock.json --store store --policy policy.json --target app",
@@ -60,7 +62,7 @@ export function componentListText(l: ComponentList, origin: string): string {
   return page("ourapps component catalogue", [
     `${l.total} components; showing ${shown}.`,
     `Categories: ${counts(l.categories)}`,
-    `Filter with ?category=, ?target=, ?tag=, ?provides=, ?requires=, ?deprecated=exclude|include|only, search with ?q=. JSON: ${origin}/api/components. Recipes: ${origin}/recipes.txt`,
+    `Filter with ?category=, ?target=, ?tag=, ?provides=, ?requires= (each may repeat; a component matches every one), ?deprecated=exclude|include|only, search with ?q=. JSON: ${origin}/api/components. Recipes: ${origin}/recipes.txt`,
     "",
     ...(l.components.length === 0 ? ["No components match."] : l.components.flatMap(componentLine)),
   ]);
@@ -98,7 +100,7 @@ function jobLines(v: RecipeVersionView): string[] {
   return [
     "Choosing by suitability",
     ...(v.scale ? [`Scale question: ${v.scale.question}`, ...v.scale.bands.map((b) => `- band ${b.id}: ${b.label}; load ${list(Object.entries(b.load).map(([k, n]) => `${k} ${n}`))}`)] : []),
-    ...v.jobs.flatMap((j) => [`- job ${j.id}${j.overrideQuestion ? ` (the answer to ${j.overrideQuestion} restricts the candidates first)` : ""}: ${j.candidates.map((c) => `${c.component} (${c.profile})${c.includedWhen ? ` only when ${when(c.includedWhen)}` : ""}`).join(", ")}`]),
+    ...v.jobs.flatMap((j) => [`- job ${j.id} fills slot ${j.slot}${j.overrideQuestion ? ` (the answer to ${j.overrideQuestion} restricts the candidates first)` : ""}: ${j.candidates.map((c) => `${c.component}${c.version ? ` ${c.version}` : ""} (${c.profile})${c.includedWhen ? ` only when ${when(c.includedWhen)}` : ""}`).join(", ")}`]),
     "",
   ];
 }
@@ -115,14 +117,24 @@ function suitabilityLines(s: Suitability): string[] {
   });
 }
 
-function componentOfRecipe(c: RecipeComponentView): string[] {
-  const only = c.includedWhen ? ` (only when ${when(c.includedWhen)})` : "";
-  const out = [`- ${c.id}: ${c.name} ${c.version}${only}`];
-  if (c.deprecation) out.push(`    DEPRECATION WARNING: ${deprecationLine(c.deprecation)}`);
-  if (c.catalogue) {
-    out.push(`    catalogue: ${c.catalogue.url}.txt`, `    guardians: ${list(c.catalogue.guardians)}`, `    suitable for jobs: ${list(c.catalogue.suitability.jobs)}`, ...suitabilityLines(c.catalogue.suitability));
-  } else out.push("    not listed in the catalogue");
+// One slot: its class (interfaces and the settings the recipe writes), its preferred component, and the others of its class.
+function slotLines(s: RecipeSlotView, recipe: string): string[] {
+  const only = s.includedWhen ? ` (only when ${when(s.includedWhen)})` : "";
+  const settings = classSettings(s.class).map((p) => `${p.id} ${p.kind ? kindText(p.kind) : "unknown"}${p.required ? ", always written" : ""}`);
+  const out = [
+    `- slot ${s.id}${only}`,
+    `    class: provides ${interfaces(s.class.provides)}; requires ${interfaces(s.class.requires)}; settings ${list(settings)}`,
+    `    preferred: ${s.preferred.name} ${s.preferred.version}${s.preferred.url ? ` (${s.preferred.url}.txt)` : ", not listed in the catalogue"}`,
+  ];
+  if (s.deprecation) out.push(`    DEPRECATION WARNING: ${deprecationLine(s.deprecation)}`);
+  if (s.catalogue) out.push(`    guardians: ${list(s.catalogue.guardians)}`, `    suitable for jobs: ${list(s.catalogue.suitability.jobs)}`, ...suitabilityLines(s.catalogue.suitability));
+  out.push(`    other components of this class (${s.alternatives.count}): ${s.alternatives.url}`, `    python3 -m aepm alternatives ${recipe} ${s.id} --store store`);
   return out;
+}
+
+function settingLine(s: SettingDeclaration): string {
+  const traits = [s.required ? "required" : "optional", s.hasDefault ? "has a default" : "no default", ...(s.secret ? ["secret"] : [])];
+  return `- ${s.id}: ${kindText(s)}; ${traits.join(", ")}`;
 }
 
 function versions(v: { versions: { version: string; publishedAt: string; digest: string }[] }): string[] {
@@ -153,8 +165,8 @@ export function recipeText(v: RecipeVersionView, origin: string): string {
     `Questions (${v.questions.length})`,
     ...v.questions.flatMap(question),
     "",
-    `Components (${v.components.length})`,
-    ...v.components.flatMap(componentOfRecipe),
+    `Slots (${v.components.length}): each needs a component of its class; the preferred component fills it unless another component that fits the class is substituted`,
+    ...v.components.flatMap((s) => slotLines(s, `${v.slug}@${v.version}`)),
     "",
     ...jobLines(v),
     ...connectionLines(v),
@@ -185,6 +197,8 @@ export function componentText(v: ComponentVersionView, origin: string): string {
     "",
     `Provides: ${ports(v.provides)}`,
     `Requires: ${ports(v.requires)}`,
+    `Settings (${v.settings.length})`,
+    ...v.settings.map(settingLine),
     `Depends on components: ${list(v.dependencies.map((x) => `${x.name} ${x.version}`))}`,
     "",
     `Suitable for jobs: ${list(v.suitability.jobs)}`,
@@ -193,7 +207,7 @@ export function componentText(v: ComponentVersionView, origin: string): string {
     "",
     v.migration ? `Data migration: stores ${list(v.migration.stores.map((s) => `${s.id} (${s.schema.name} ${s.schema.version})`))}; formats ${list(v.migration.formats)}; requires stop ${v.migration.requiresStop ? "yes" : "no"}; retention ${v.migration.retentionDays ?? "unspecified"} days` : "Data migration: this component keeps no data",
     "",
-    `Used by recipes: ${list(v.usedBy.map((r) => `${r.name} ${r.version}`))}`,
+    `Used by recipes: ${list(v.usedBy.map((r) => `${r.name} ${r.version} (${r.slots.map((s) => `slot ${s.id}${s.preferred ? "" : " as a job candidate"}`).join(", ")})`))}`,
     "",
     "Versions",
     ...versions(v),

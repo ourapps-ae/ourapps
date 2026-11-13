@@ -2,12 +2,19 @@ import { describe, expect, it } from "vitest";
 import { run } from "@bufbuild/cel";
 import {
   GRAMMARS,
+  GRAMMAR_PATTERNS,
   RESERVED_NAMES,
   checkCondition,
+  classConfiguration,
+  fit,
+  exampleAlternativeEntry,
+  componentFacts,
   describeCondition,
   matchesGrammar,
   compareVersions,
+  exampleComponentEntries,
   exampleComponentEntry,
+  exampleRecipeContext,
   exampleRecipeEntry,
   isCatalogueName,
   isCatalogueSlug,
@@ -17,12 +24,18 @@ import {
   isSafeSvg,
   isVersion,
   newestVersion,
+  portId,
+  propertyKind,
+  settingSchema,
   splitName,
   summariseMigration,
   validateComponentEntry,
   validateRecipe,
   validateRecipeEntry,
   validateSuitability,
+  type ComponentClass,
+  type ComponentEntry,
+  type FitFacts,
   type RecipeContext,
 } from "./index.js";
 
@@ -32,6 +45,23 @@ function recipe(patch: (r: Mutable) => void = () => {}): unknown {
   const r = structuredClone(exampleRecipeEntry().recipe) as unknown as Mutable;
   patch(r);
   return r;
+}
+
+const slotOf = (r: Mutable, id: string) => r.components.find((s: Mutable) => s.id === id);
+
+// The ports of the example recipe's own component.
+const APPLICATION_REQUIRES = [{ id: "seating", type: "ae/seating", version: "1.0.0" }, { id: "server-host", type: "ae/server-host", version: "1.0.0" }, { id: "apple-shell", type: "ae/apple-shell", version: "1.0.0" }, { id: "guided-tour", type: "ae/guided-tour", version: "1.0.0" }];
+
+// Declares more settings on the host slot's class, each as {type, pattern} for its grammar.
+const SETTING_SCHEMAS: Record<string, Mutable> = {
+  string: { type: "string", pattern: GRAMMAR_PATTERNS.label },
+  slug: { type: "string", pattern: GRAMMAR_PATTERNS.slug },
+  address: { type: "string", pattern: GRAMMAR_PATTERNS.address },
+  integer: { type: "integer" },
+  boolean: { type: "boolean" },
+};
+function declareOnHost(r: Mutable, settings: Record<string, keyof typeof SETTING_SCHEMAS>): void {
+  for (const [id, kind] of Object.entries(settings)) slotOf(r, "host").class.configuration.properties[id] = SETTING_SCHEMAS[kind];
 }
 
 function errorsOf(result: { ok: boolean; errors?: string[] }): string {
@@ -127,18 +157,29 @@ describe("validateRecipe", () => {
     expect(validateRecipe(recipe((r) => delete r.targets.server)).ok).toBe(true);
   });
 
-  it("checks components", () => {
-    expect(errorsOf(validateRecipe(recipe((r) => (r.components = []))))).toContain("components must be");
+  it("checks slots", () => {
+    expect(errorsOf(validateRecipe(recipe((r) => (r.components = []))))).toContain("components must be a list of 1 to 100 slots");
     expect(errorsOf(validateRecipe(recipe((r) => (r.components[1].id = "deck"))))).toContain("used twice");
-    expect(errorsOf(validateRecipe(recipe((r) => (r.components[0].name = "card-deck"))))).toContain("components[0].name");
-    expect(errorsOf(validateRecipe(recipe((r) => (r.components[0].version = "latest"))))).toContain("components[0].version");
+    expect(errorsOf(validateRecipe(recipe((r) => (r.components[0].preferred.name = "card-deck"))))).toContain("components[0].preferred.name");
+    expect(errorsOf(validateRecipe(recipe((r) => (r.components[0].preferred.version = "latest"))))).toContain("components[0].preferred.version");
     expect(errorsOf(validateRecipe(recipe((r) => (r.components[0].pin = true))))).toContain("unknown field pin");
+    expect(errorsOf(validateRecipe(recipe((r) => (r.components[0].preferred.pin = true))))).toContain("components[0].preferred: unknown field pin");
+    expect(errorsOf(validateRecipe(recipe((r) => delete r.components[0].class)))).toContain("components[0].class must be an object with provides, requires and configuration");
+    expect(errorsOf(validateRecipe(recipe((r) => delete r.components[0].preferred)))).toContain("components[0].preferred must be an object with name and version");
+  });
+
+  it("has no reader for a component named without a slot", () => {
+    const text = errorsOf(validateRecipe(recipe((r) => (r.components[0] = { id: "deck", name: "acme/card-deck", version: "0.1.0", configuration: {}, includedWhen: null }))));
+    expect(text).toContain("components[0]: unknown field name");
+    expect(text).toContain("components[0]: unknown field version");
+    expect(text).toContain("components[0].class must be an object");
+    expect(text).toContain("components[0].preferred must be an object");
   });
 
   it("checks includedWhen against the recipe's questions", () => {
     const tour = (c: unknown) => recipe((r) => (r.components[4].includedWhen = c));
-    expect(errorsOf(validateRecipe(tour("nope")))).toContain("components[4].includedWhen (component tour): nope is not a question of the recipe");
-    expect(errorsOf(validateRecipe(tour("lessons &&")))).toContain("components[4].includedWhen (component tour): not valid CEL");
+    expect(errorsOf(validateRecipe(tour("nope")))).toContain("components[4].includedWhen (slot tour): nope is not a question of the recipe");
+    expect(errorsOf(validateRecipe(tour("lessons &&")))).toContain("components[4].includedWhen (slot tour): not valid CEL");
     expect(validateRecipe(tour("'ios' in targets")).ok).toBe(true);
   });
 
@@ -162,12 +203,14 @@ describe("validateRecipe", () => {
     expect(errorsOf(validateRecipe(recipe((r) => (r.tests.defaultAnswers = { serverKey: "hosting-key" }))))).toBe("");
   });
 
-  it("checks jobs, scale and connections against the components and questions", () => {
-    expect(errorsOf(validateRecipe(recipe((r) => (r.jobs[0].candidates[0].component = "acme/other"))))).toContain("is not in components");
+  it("checks jobs, scale and connections against the slots and questions", () => {
+    expect(errorsOf(validateRecipe(recipe((r) => (r.jobs[0].candidates[0].component = "acme/other"))))).toContain("jobs[0].candidates[0].version is required: acme/other is not the preferred component of slot host");
     expect(errorsOf(validateRecipe(recipe((r) => (r.jobs[0].candidates = []))))).toContain("candidates must be");
+    expect(errorsOf(validateRecipe(recipe((r) => (r.jobs[0].slot = "ghost"))))).toContain("jobs[0].slot must name one of the recipe's slots");
+    expect(errorsOf(validateRecipe(recipe((r) => r.jobs.push({ ...r.jobs[0], id: "again" }))))).toContain("jobs[1].slot host already has a job");
     expect(errorsOf(validateRecipe(recipe((r) => (r.scale.question = "nope"))))).toContain("scale.question");
     expect(errorsOf(validateRecipe(recipe((r) => (r.scale.bands[0].load = { concurrentPeople: -1 }))))).toContain("non-negative");
-    expect(errorsOf(validateRecipe(recipe((r) => (r.connections[0].target.instance = "ghost"))))).toContain("not a component id or application");
+    expect(errorsOf(validateRecipe(recipe((r) => (r.connections[0].target.instance = "ghost"))))).toContain("not a slot id or application");
     expect(errorsOf(validateRecipe(recipe((r) => (r.connections[0].source = {}))))).toContain("needs an instance and a port");
   });
 
@@ -201,14 +244,22 @@ describe("reserved instance application", () => {
     expect(errorsOf(validateRecipe(recipe(app("source"))))).toBe("");
   });
 
-  it("refuses a component whose id or name is application", () => {
+  it("refuses a slot whose id or preferred component is application", () => {
     expect(errorsOf(validateRecipe(recipe((r) => (r.components[0].id = "application"))))).toContain("application is reserved");
-    expect(errorsOf(validateRecipe(recipe((r) => (r.components[0].name = "acme/application"))))).toContain("no component is named application");
+    expect(errorsOf(validateRecipe(recipe((r) => (r.components[0].preferred.name = "acme/application"))))).toContain("no component is named application");
   });
 
-  it("names any other endpoint by a component of the recipe", () => {
-    expect(errorsOf(validateRecipe(recipe((r) => (r.connections[0].source.instance = "ghost"))))).toContain("not a component id or application");
-    expect(errorsOf(validateRecipe(recipe((r) => (r.connections[0].source.instance = "acme/card-deck"))))).toContain("not a component id or application");
+  it("names any other endpoint by a slot of the recipe", () => {
+    expect(errorsOf(validateRecipe(recipe((r) => (r.connections[0].source.instance = "ghost"))))).toContain("not a slot id or application");
+    expect(errorsOf(validateRecipe(recipe((r) => (r.connections[0].source.instance = "acme/card-deck"))))).toContain("not a slot id or application");
+  });
+
+  it("checks the recipe's own ports when its component.json is at hand", () => {
+    const application = { settings: [{ id: "startingChips", type: "integer" as const, grammar: "integer", required: false, secret: false, hasDefault: true }], provides: [], requires: APPLICATION_REQUIRES };
+    expect(errorsOf(validateRecipe(recipe(), { application }))).toBe("");
+    expect(errorsOf(validateRecipe(recipe(), { application: { ...application, requires: application.requires.slice(1) } }))).toContain("connections[1].target.port seating is not a port the recipe's own component requires");
+    const wrongType = { ...application, requires: [{ id: "seating", type: "ae/chairs", version: "1.0.0" }, ...application.requires.slice(1)] };
+    expect(errorsOf(validateRecipe(recipe(), { application: wrongType }))).toContain("connections[1] joins ae/seating 1.0.0 to ae/chairs 1.0.0");
   });
 
   it("accepts application as the owner of a setting", () => {
@@ -409,6 +460,7 @@ describe("sets value forms", () => {
   const withSets = (question: string, sets: Record<string, unknown>, extra: (r: Mutable) => void = () => {}) =>
     validateRecipe(
       recipe((r) => {
+        declareOnHost(r, { x: "string", plan: "slug", gold: "boolean", label: "string", requests: "integer", stored: "integer", prefix: "slug" });
         extra(r);
         for (const q of r.questions) q.effects = [];
         questionById(r, question).effects = [{ sets }];
@@ -452,11 +504,20 @@ describe("sets value forms", () => {
     expect(errorsOf(withSets("serverKey", { "host.x": "$answer" }))).toContain('{"ref": "serverKey"}');
   });
 
-  it("names a component of the recipe or application", () => {
-    expect(errorsOf(withSets("chips", { "release.targets": "$answer" }))).toContain("the target must be <componentId>.<settingId>");
+  it("names a slot of the recipe or application, and a setting the slot's class declares", () => {
+    expect(errorsOf(withSets("chips", { "release.targets": "$answer" }))).toContain("the target must be <slotId>.<settingId> of a slot of the recipe, or application.<settingId>");
     expect(errorsOf(withSets("chips", { startingChips: "$answer" }))).toContain("the target must be");
     expect(errorsOf(withSets("chips", { "host.": "$answer" }))).toContain("the target must be");
-    expect(errorsOf(withSets("chips", { "application.startingChips": "$answer", "tour.other": 3 }))).toBe("");
+    expect(errorsOf(withSets("chips", { "application.startingChips": "$answer", "tour.length": "brief" }))).toBe("");
+    expect(errorsOf(withSets("chips", { "tour.other": 3 }))).toContain("questions[2].effects[0].sets[tour.other]: other is not declared in the class configuration of slot tour");
+    expect(errorsOf(withSets("chips", { "deck.size": "$answer" }))).toContain("size is not declared in the class configuration of slot deck");
+  });
+
+  it("checks a value against the class property's other keywords", () => {
+    const bounded = (r: Mutable) => (slotOf(r, "host").class.configuration.properties.plan = { type: "string", pattern: GRAMMAR_PATTERNS.slug, enum: ["eco", "full"] });
+    expect(errorsOf(withSets("chips", { "host.plan": "eco" }, bounded))).toBe("");
+    expect(errorsOf(withSets("chips", { "host.plan": "gold" }, bounded))).toContain("value fails the class configuration of setting plan");
+    expect(errorsOf(withSets("server", { "host.plan": "$answer" }, bounded))).toContain('"$answer": option free fails the class configuration of setting plan');
   });
 
   it("allows an empty effect list and refuses an empty sets object", () => {
@@ -465,50 +526,45 @@ describe("sets value forms", () => {
   });
 });
 
-describe("sets checked against component settings", () => {
-  const context: RecipeContext = {
-    settings: {
-      "acme/server-host": [
-        { id: "targets", type: "string", grammar: "label" },
-        { id: "expectedPeople", type: "integer", grammar: "integer" },
-        { id: "plan", type: "string", grammar: "slug" },
-        { id: "prefix", type: "string", grammar: "slug" },
-        { id: "accountReference", type: "string", grammar: "slug", secret: true },
-        { id: "gold", type: "boolean", grammar: "boolean" },
-        { id: "address", type: "string", grammar: "address" },
-      ],
-      application: [{ id: "startingChips", type: "integer", grammar: "integer" }],
-    },
-  };
+describe("sets checked against the slot's class and the preferred component", () => {
+  // acme/server-host with the extra settings the host class declares below, and a profile that sets one of them.
+  const entries = (patch: (host: ComponentEntry) => void = () => {}) =>
+    exampleComponentEntries().map((e) => {
+      if (e.name !== "acme/server-host") return e;
+      const host = structuredClone(e);
+      host.settings.push(
+        { id: "plan", type: "string", grammar: "slug", required: false, secret: false, hasDefault: true },
+        { id: "prefix", type: "string", grammar: "slug", required: false, secret: false, hasDefault: true },
+        { id: "gold", type: "boolean", grammar: "boolean", required: false, secret: false, hasDefault: true },
+        { id: "address", type: "string", grammar: "address", required: false, secret: false, hasDefault: true },
+      );
+      host.suitability.profiles[0]!.settings = { plan: "eco" };
+      patch(host);
+      return host;
+    });
+  const context = (patch?: (host: ComponentEntry) => void): RecipeContext => ({
+    ...exampleRecipeContext(entries(patch)),
+    application: { settings: [{ id: "startingChips", type: "integer", grammar: "integer", required: false, secret: false, hasDefault: true }], provides: [], requires: APPLICATION_REQUIRES },
+  });
+  const declared = (r: Mutable) => declareOnHost(r, { plan: "slug", prefix: "slug", gold: "boolean", address: "address" });
   const check = (question: string, sets: Record<string, unknown>, extra: (r: Mutable) => void = () => {}) =>
     validateRecipe(
       recipe((r) => {
+        declared(r);
         extra(r);
         for (const q of r.questions) q.effects = [];
         questionById(r, question).effects = [{ sets }];
       }),
-      context,
+      context(),
     );
 
   it("accepts the example when every setting fits", () => {
-    const fitted = validateRecipe(
-      recipe((r) => {
-        r.components[0].configuration = {};
-        questionById(r, "tourStyle").effects = [];
-      }),
-      context,
-    );
-    expect(errorsOf(fitted)).toBe("");
+    expect(errorsOf(validateRecipe(recipe(), exampleRecipeContext()))).toBe("");
+    expect(errorsOf(validateRecipe(recipe(declared), context()))).toBe("");
   });
 
-  it("accepts what it cannot check", () => {
-    expect(errorsOf(validateRecipe(recipe(), {}))).toBe("");
-    expect(errorsOf(validateRecipe(recipe(), { settings: { "acme/other": [] } }))).toBe("");
-    expect(errorsOf(check("chips", { "tour.other": "$answer" }))).toBe("");
-  });
-
-  it("refuses a setting the component does not collect", () => {
-    expect(errorsOf(check("chips", { "host.nothing": 1 }))).toContain("nothing is not a setting of host");
+  it("refuses a setting the class does not declare, or the recipe's own component does not collect", () => {
+    expect(errorsOf(check("chips", { "host.nothing": 1 }))).toContain("nothing is not declared in the class configuration of slot host");
     expect(errorsOf(check("chips", { "application.nothing": 1 }))).toContain("nothing is not a setting of application");
   });
 
@@ -520,6 +576,7 @@ describe("sets checked against component settings", () => {
     expect(errorsOf(check("chips", { "host.plan": 4 }))).toContain("is not text");
     expect(errorsOf(check("chips", { "host.plan": "Not A Slug" }))).toContain("does not satisfy the slug grammar");
     expect(errorsOf(check("chips", { "host.address": "ftp://x.example" }))).toContain("address grammar");
+    expect(errorsOf(check("chips", { "host.address": "https://x.example:99999" }))).toContain("address grammar");
     expect(errorsOf(check("chips", { "host.plan": "eco", "host.address": "https://x.example/a", "host.gold": false, "host.expectedPeople": 4 }))).toBe("");
   });
 
@@ -545,7 +602,7 @@ describe("sets checked against component settings", () => {
     expect(errorsOf(check("server", { "host.expectedPeople": { template: "n-{{answer}}" } }))).toContain("template gives text");
   });
 
-  it("lets a secret setting take only a reference", () => {
+  it("lets a setting the preferred component keeps secret take only a reference", () => {
     expect(errorsOf(check("chips", { "host.accountReference": "hunter2" }))).toContain("is secret");
     expect(errorsOf(check("server", { "host.accountReference": "$answer" }))).toContain("is secret");
     expect(errorsOf(check("server", { "host.accountReference": { template: "x-{{answer}}" } }))).toContain("is secret");
@@ -553,32 +610,39 @@ describe("sets checked against component settings", () => {
     expect(errorsOf(check("serverKey", { "host.expectedPeople": { ref: "serverKey" } }))).toContain("reference name, but setting expectedPeople is integer");
   });
 
-  it("checks a component's configuration the same way", () => {
-    expect(errorsOf(validateRecipe(recipe((r) => (r.components[2].configuration = { plan: "eco" })), context))).toBe("");
-    expect(errorsOf(validateRecipe(recipe((r) => (r.components[2].configuration = { plan: 3 })), context))).toContain("components[2].configuration.plan is not text");
-    expect(errorsOf(validateRecipe(recipe((r) => (r.components[2].configuration = { ghost: 3 })), context))).toContain("ghost is not a setting of acme/server-host");
-    expect(errorsOf(validateRecipe(recipe((r) => (r.components[2].configuration = { accountReference: "x" })), context))).toContain("is secret: it takes its reference from a question");
+  it("checks a slot's configuration the same way", () => {
+    const configured = (configuration: Mutable) => validateRecipe(recipe((r) => (declared(r), (slotOf(r, "host").configuration = configuration))), context());
+    expect(errorsOf(configured({ plan: "eco" }))).toBe("");
+    expect(errorsOf(configured({ plan: 3 }))).toContain("components[2].configuration.plan is not text");
+    expect(errorsOf(configured({ ghost: 3 }))).toContain("components[2].configuration.ghost is not declared in the slot's class configuration");
+    expect(errorsOf(configured({ accountReference: "x" }))).toContain("components[2].configuration.accountReference is secret: it takes its reference from a question");
   });
 
-  it("checks a job's profiles against the component's suitability", () => {
-    const profiles: RecipeContext = { profiles: { "acme/server-host": [{ id: "free", settings: { plan: "eco" } }, { id: "paid" }] }, settings: context.settings };
-    expect(errorsOf(validateRecipe(recipe(), profiles))).toBe("");
-    expect(errorsOf(validateRecipe(recipe((r) => (r.jobs[0].candidates[0].profile = "gone")), profiles))).toContain("profile gone is not a profile of acme/server-host");
-    const badSetting: RecipeContext = { profiles: { "acme/server-host": [{ id: "free", settings: { plan: 7, ghost: 1 } }, { id: "paid" }] }, settings: context.settings };
-    const text = errorsOf(validateRecipe(recipe(), badSetting));
+  it("checks a job's profiles against the candidate's suitability and settings", () => {
+    expect(errorsOf(validateRecipe(recipe((r) => (r.jobs[0].candidates[0].profile = "gone")), context()))).toContain("profile gone is not a profile of acme/server-host");
+    const text = errorsOf(validateRecipe(recipe(), context((host) => (host.suitability.profiles[0]!.settings = { plan: 7, ghost: 1 }))));
     expect(text).toContain("profile free setting plan is not text");
     expect(text).toContain("sets ghost, which is not a setting");
   });
 
   it("applies to a published entry the same way", () => {
     const entry = structuredClone(exampleRecipeEntry()) as unknown as Mutable;
-    entry.recipe.questions[2].effects = [{ sets: { "host.nothing": 1 } }];
-    expect(errorsOf(validateRecipeEntry(entry, context))).toContain("recipe: questions[2]");
+    entry.recipe.questions[6].effects = [{ sets: { "host.accountReference": "plain" } }];
+    expect(errorsOf(validateRecipeEntry(entry, context()))).toContain("recipe: questions[6].effects[0].sets[host.accountReference] value is a literal, but setting accountReference is secret");
     expect(errorsOf(validateRecipeEntry(entry))).toBe("");
   });
 
-  it("knows aepm's string grammars", () => {
+  it("knows aepm's string grammars, and the anchored pattern a class property gives each", () => {
     expect(Object.keys(GRAMMARS).sort()).toEqual(["address", "environment", "identifier", "label", "qualified", "slug"]);
+    // aepm/application.py GRAMMARS, each anchored with ^ and $.
+    expect(GRAMMAR_PATTERNS).toEqual({
+      identifier: "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+      qualified: "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$",
+      slug: "^[a-z][a-z0-9-]{0,63}$",
+      label: "^[A-Za-z][A-Za-z0-9 -]{0,63}$",
+      environment: "^[A-Z][A-Z0-9_]{0,63}$",
+      address: "^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?(/[A-Za-z0-9_/-]*)?$",
+    });
     expect(matchesGrammar("slug", "a-b")).toBe(true);
     expect(matchesGrammar("slug", "A")).toBe(false);
     expect(matchesGrammar("environment", "A_B")).toBe(true);
@@ -589,9 +653,179 @@ describe("sets checked against component settings", () => {
   });
 });
 
+describe("slot classes", () => {
+  const withClass = (id: string, patch: (cls: Mutable) => void) => validateRecipe(recipe((r) => patch(slotOf(r, id).class)));
+
+  it("reads provides and requires as interface types and versions, the port id being the type's last segment", () => {
+    expect(portId("ae/card-deck")).toBe("card-deck");
+    expect(portId("acme/rooms/room-session")).toBe("room-session");
+    expect(errorsOf(withClass("deck", (c) => (c.provides = "ae/card-deck")))).toContain("components[0].class.provides must be a list of at most 50 interfaces");
+    expect(errorsOf(withClass("deck", (c) => (c.provides[0].type = "not a type")))).toContain("components[0].class.provides[0].type must be an interface type");
+    expect(errorsOf(withClass("deck", (c) => (c.provides[0].version = "1")))).toContain("components[0].class.provides[0].version must be three integers");
+    expect(errorsOf(withClass("deck", (c) => (c.provides[0].id = "card-deck")))).toContain("components[0].class.provides[0]: unknown field id");
+    expect(errorsOf(withClass("deck", (c) => (c.provides[0].optional = true)))).toContain("components[0].class.provides[0]: unknown field optional");
+    expect(errorsOf(withClass("deck", (c) => c.provides.push({ type: "other/card-deck", version: "1.0.0" })))).toContain("has the port id card-deck of another interface in the list");
+    expect(errorsOf(withClass("seats", (c) => (c.requires[0].optional = "yes")))).toContain("components[1].class.requires[0].optional must be true or false");
+    expect(errorsOf(withClass("seats", (c) => (c.requires = [{ type: "ae/seating", version: "1.0.0" }])))).toContain("components[1].class: port id seating is both provided and required");
+    const kept = validateRecipe(recipe((r) => (slotOf(r, "seats").class.requires[0].optional = true)));
+    expect(kept.ok && kept.recipe.components[1].class.requires).toEqual([{ type: "ae/card-deck", version: "1.0.0", optional: true }]);
+  });
+
+  it("connects a port the class provides to a port the class requires, of one type and version", () => {
+    expect(errorsOf(validateRecipe(recipe((r) => (r.connections[0].source.port = "deck"))))).toContain("connections[0].source.port deck is not a port the class of slot deck provides (card-deck)");
+    expect(errorsOf(validateRecipe(recipe((r) => (r.connections[0].target.port = "seating"))))).toContain("connections[0].target.port seating is not a port the class of slot seats requires (card-deck)");
+    expect(errorsOf(validateRecipe(recipe((r) => (r.connections[0] = { source: { instance: "seats", port: "seating" }, target: { instance: "seats", port: "card-deck" } }))))).toContain("connections[0] joins ae/seating 1.0.0 to ae/card-deck 1.0.0");
+    expect(errorsOf(validateRecipe(recipe((r) => (slotOf(r, "seats").class.requires[0].version = "2.0.0"))))).toContain("connections[0] joins ae/card-deck 1.0.0 to ae/card-deck 2.0.0");
+  });
+
+  it("takes a JSON Schema 2020-12 object schema as the class configuration", () => {
+    expect(errorsOf(withClass("seats", (c) => delete c.configuration))).toContain("components[1].class.configuration must be a JSON Schema 2020-12 object schema");
+    expect(errorsOf(withClass("seats", (c) => delete c.configuration.$schema))).toContain("components[1].class.configuration.$schema must be https://json-schema.org/draft/2020-12/schema");
+    expect(errorsOf(withClass("seats", (c) => (c.configuration.$schema = "http://json-schema.org/draft-07/schema#")))).toContain("$schema must be https://json-schema.org/draft/2020-12/schema");
+    expect(errorsOf(withClass("seats", (c) => (c.configuration.type = "array")))).toContain("components[1].class.configuration.type must be object");
+    expect(errorsOf(withClass("seats", (c) => (c.configuration.allOf = [{ required: ["minimumPlayers"] }])))).toContain("components[1].class.configuration: a class configuration does not use allOf");
+    expect(errorsOf(withClass("seats", (c) => (c.configuration.additionalProperties = { type: "string" })))).toContain("components[1].class.configuration.additionalProperties must be true or false");
+    expect(errorsOf(withClass("seats", (c) => (c.configuration.required = "minimumPlayers")))).toContain("components[1].class.configuration is not a valid JSON Schema 2020-12 schema: at /required: Instance type \"string\" is invalid. Expected \"array\".");
+    expect(errorsOf(withClass("seats", (c) => (c.configuration.required = ["minimumPlayers", "minimumPlayers"])))).toContain("is not a valid JSON Schema 2020-12 schema: at /required: Duplicate items");
+    expect(errorsOf(withClass("seats", (c) => (c.configuration.title = 5)))).toContain("is not a valid JSON Schema 2020-12 schema: at /title");
+    expect(errorsOf(withClass("seats", (c) => c.configuration.required.push("maximumPlayers")))).toContain("components[1].class.configuration.required names maximumPlayers, which is not one of its properties");
+    expect(errorsOf(withClass("seats", (c) => (c.configuration.properties = []))) ).toContain("components[1].class.configuration.properties must map at most 100 setting ids to schemas");
+  });
+
+  it("gives each property the setting's type and grammar, in a valid schema", () => {
+    const property = (schema: unknown) => withClass("seats", (c) => (c.configuration.properties.minimumPlayers = schema));
+    expect(errorsOf(property({ type: "integer", minimum: 2, maximum: 10, description: "players at a table" }))).toBe("");
+    expect(errorsOf(property({ type: "number" }))).toContain("components[1].class.configuration.properties.minimumPlayers must give the setting's type and grammar");
+    expect(errorsOf(property({ type: "string", pattern: "^[a-z]+$" }))).toContain("must give the setting's type and grammar");
+    expect(errorsOf(property({ type: "string" }))).toContain("must give the setting's type and grammar");
+    expect(errorsOf(property({ $ref: "#/$defs/players" }))).toContain("properties.minimumPlayers: a class property does not use $ref");
+    expect(errorsOf(property({ type: "integer", minimum: "2" }))).toContain("properties.minimumPlayers is not a valid JSON Schema 2020-12 schema: at /minimum: Instance type \"string\" is invalid. Expected \"number\".");
+    expect(errorsOf(property({ type: "string", pattern: "(" }))).toContain('properties.minimumPlayers is not a valid JSON Schema 2020-12 schema: at /pattern: String does not match format "regex".');
+    expect(errorsOf(property({ type: "intger" }))).toContain("properties.minimumPlayers is not a valid JSON Schema 2020-12 schema: at /type");
+    expect(errorsOf(property(true))).toContain("properties.minimumPlayers must be a schema object that gives the setting's type and grammar");
+    expect(errorsOf(withClass("seats", (c) => (c.configuration.properties["9lives"] = { type: "integer" })))).toContain("properties.9lives: a property name is a setting id");
+  });
+
+  it("reads a property's type and grammar back, and writes the property for a setting", () => {
+    for (const [grammar, pattern] of Object.entries(GRAMMAR_PATTERNS)) {
+      expect(propertyKind({ type: "string", pattern })).toEqual({ type: "string", grammar });
+      expect(settingSchema({ type: "string", grammar })).toEqual({ type: "string", pattern });
+    }
+    expect(propertyKind({ type: "integer", minimum: 1 })).toEqual({ type: "integer", grammar: "integer" });
+    expect(propertyKind({ type: "boolean" })).toEqual({ type: "boolean", grammar: "boolean" });
+    expect(propertyKind({ type: "string", pattern: "^x$" })).toBeNull();
+    expect(propertyKind({ type: ["string"] })).toBeNull();
+    expect(settingSchema({ type: "integer", grammar: "integer" })).toEqual({ type: "integer" });
+  });
+
+  it("checks a slot's configuration against the class configuration", () => {
+    const bounded = (value: unknown) => validateRecipe(recipe((r) => {
+      slotOf(r, "seats").class.configuration.properties.minimumPlayers = { type: "integer", minimum: 2 };
+      slotOf(r, "seats").configuration.minimumPlayers = value;
+    }));
+    expect(errorsOf(bounded(2))).toBe("");
+    expect(errorsOf(bounded(1))).toContain("components[1].configuration.minimumPlayers fails the class configuration of setting minimumPlayers: 1 is less than 2.");
+    expect(errorsOf(bounded("two"))).toContain("components[1].configuration.minimumPlayers is not a 32-bit integer");
+    expect(errorsOf(validateRecipe(recipe((r) => (slotOf(r, "seats").configuration.seats = 9))))).toContain("components[1].configuration.seats is not declared in the slot's class configuration");
+  });
+});
+
+describe("the fit rule", () => {
+  const DIGEST = `sha256:${"d".repeat(64)}`;
+  const cls = (): ComponentClass => ({
+    provides: [{ type: "ae/seating", version: "1.0.0" }],
+    requires: [{ type: "ae/card-deck", version: "1.0.0" }],
+    configuration: classConfiguration({ minimumPlayers: { type: "integer" }, label: { type: "string", pattern: GRAMMAR_PATTERNS.label } }, ["minimumPlayers"]),
+  });
+  const facts = (patch: (f: FitFacts) => void = () => {}): FitFacts => {
+    const f: FitFacts = {
+      provides: [{ id: "seating", type: "ae/seating", version: "1.0.0" }, { id: "chairs", type: "ae/chairs", version: "1.0.0" }],
+      requires: [{ id: "card-deck", type: "ae/card-deck", version: "1.0.0" }, { id: "clock", type: "ae/clock", version: "1.0.0", optional: true }],
+      settings: [
+        { id: "minimumPlayers", type: "integer", grammar: "integer", required: true, secret: false, hasDefault: false },
+        { id: "label", type: "string", grammar: "label", required: false, secret: false, hasDefault: false },
+        { id: "colour", type: "string", grammar: "label", required: true, secret: false, hasDefault: true },
+      ],
+      interfaceDigests: { "ae/seating@1.0.0": DIGEST, "ae/chairs@1.0.0": `sha256:${"e".repeat(64)}` },
+      interfaceModules: { "ae/seating@1.0.0": { web: { path: "web/index.ts", installed: true }, apple: { path: "apple/Sources", installed: true } } },
+    };
+    patch(f);
+    return f;
+  };
+  const preferred = facts();
+
+  it("fits a component that provides the class, requires nothing more and has the class's settings", () => {
+    expect(fit(cls(), facts(), preferred)).toEqual([]);
+  });
+
+  it("(1) needs every interface the class provides, at its version, with the preferred component's document", () => {
+    expect(fit(cls(), facts((f) => (f.provides = f.provides.slice(1))), preferred)).toEqual(["provides:ae/seating@1.0.0"]);
+    expect(fit(cls(), facts((f) => (f.provides[0]!.version = "2.0.0")), preferred)).toEqual(["provides:ae/seating@1.0.0"]);
+    expect(fit(cls(), facts((f) => (f.interfaceDigests["ae/seating@1.0.0"] = `sha256:${"f".repeat(64)}`)), preferred)).toEqual(["document:ae/seating@1.0.0"]);
+    expect(fit(cls(), facts(), facts((f) => (f.provides = f.provides.slice(1))))).toEqual(["document:ae/seating@1.0.0"]);
+  });
+
+  it("(2) allows no requirement the class does not connect, unless it is optional", () => {
+    expect(fit(cls(), facts((f) => f.requires.push({ id: "audit", type: "ae/audit", version: "1.0.0" })), preferred)).toEqual(["requires:ae/audit@1.0.0"]);
+    expect(fit(cls(), facts((f) => (f.requires[0]!.version = "2.0.0")), preferred)).toEqual(["requires:ae/card-deck@2.0.0"]);
+    expect(fit(cls(), facts((f) => (f.requires = [])), preferred)).toEqual([]);
+  });
+
+  it("(3) needs each class setting with the same type and grammar, and every required setting without a default always written", () => {
+    expect(fit(cls(), facts((f) => (f.settings = f.settings.filter((s) => s.id !== "label"))), preferred)).toEqual(["setting:label"]);
+    expect(fit(cls(), facts((f) => (f.settings[1]!.grammar = "slug")), preferred)).toEqual(["setting-type:label"]);
+    expect(fit(cls(), facts((f) => Object.assign(f.settings[0]!, { type: "string", grammar: "identifier" })), preferred)).toEqual(["setting-type:minimumPlayers"]);
+    expect(fit(cls(), facts((f) => f.settings.push({ id: "venue", type: "string", grammar: "slug", required: true, secret: false, hasDefault: false })), preferred)).toEqual(["unset-setting:venue"]);
+    const notAlways = cls();
+    notAlways.configuration.required = [];
+    expect(fit(notAlways, facts(), preferred)).toEqual(["unset-setting:minimumPlayers"]);
+    const bounded = cls();
+    (bounded.configuration.properties as Mutable).minimumPlayers = { type: "integer", minimum: 2 };
+    expect(fit(bounded, facts(), preferred)).toEqual([]);
+  });
+
+  it("(4) needs every entry module the class's documents declare installed", () => {
+    expect(fit(cls(), facts((f) => (f.interfaceModules["ae/seating@1.0.0"]!.web!.installed = false)), preferred)).toEqual(["module:web:web/index.ts"]);
+    expect(fit(cls(), facts((f) => (f.interfaceModules["ae/seating@1.0.0"]!.apple = { path: null, installed: false })), preferred)).toEqual(["module:apple"]);
+    expect(fit(cls(), facts((f) => (f.interfaceModules["ae/chairs@1.0.0"] = { web: { path: "web/chairs.ts", installed: false } })), preferred)).toEqual([]);
+  });
+
+  it("refuses an unfit preferred component and says why", () => {
+    const unfit = exampleComponentEntries().map((e) => (e.name === "acme/seating" ? { ...e, provides: [{ id: "chairs", type: "ae/chairs", version: "1.0.0" }], settings: [] } : e));
+    const text = errorsOf(validateRecipe(recipe(), exampleRecipeContext(unfit)));
+    expect(text).toContain("components[1].preferred: acme/seating 0.1.0 does not fit the class of slot seats: provides:ae/seating@1.0.0, setting:minimumPlayers");
+  });
+
+  it("needs the preferred component in the component source, at its version", () => {
+    expect(errorsOf(validateRecipe(recipe((r) => (slotOf(r, "tour").preferred.version = "0.2.0")), exampleRecipeContext()))).toContain("components[4].preferred acme/guided-tour 0.2.0 is not in the example catalogue");
+    const elsewhere = { components: { source: "the components directory", find: (name: string) => (name === "acme/guided-tour" ? { ...componentFacts(exampleComponentEntries()[4]!), version: "0.3.0" } : exampleRecipeContext().components!.find(name, "0.1.0")) } };
+    expect(errorsOf(validateRecipe(recipe(), elsewhere))).toContain("components[4].preferred acme/guided-tour 0.1.0 is not in the components directory, which has version 0.3.0");
+  });
+
+  it("checks a job candidate other than the preferred component against the slot's class", () => {
+    const cheap = { ...exampleComponentEntries()[2]!, name: "acme/cheap-host", source: { repository: "acme/cheap-host", tag: "v0.1.0" } };
+    const context = exampleRecipeContext([...exampleComponentEntries(), cheap]);
+    const candidate = (patch: Mutable) => validateRecipe(recipe((r) => r.jobs[0].candidates.push({ component: "acme/cheap-host", profile: "free", ...patch })), context);
+    expect(errorsOf(candidate({ version: "0.1.0" }))).toBe("");
+    const kept = candidate({ version: "0.1.0" });
+    expect(kept.ok && kept.recipe.jobs[0].candidates[2]).toEqual({ component: "acme/cheap-host", version: "0.1.0", profile: "free" });
+    expect(errorsOf(candidate({}))).toContain("jobs[0].candidates[2].version is required: acme/cheap-host is not the preferred component of slot host");
+    expect(errorsOf(candidate({ version: "0.9.0" }))).toContain("jobs[0].candidates[2].component acme/cheap-host 0.9.0 is not in the example catalogue");
+    const unfit = exampleRecipeContext([...exampleComponentEntries(), { ...cheap, settings: [], interfaceDigests: { "ae/server-host@1.0.0": `sha256:${"f".repeat(64)}` } }]);
+    expect(errorsOf(validateRecipe(recipe((r) => r.jobs[0].candidates.push({ component: "acme/cheap-host", version: "0.1.0", profile: "free" })), unfit))).toContain("jobs[0].candidates[2]: acme/cheap-host 0.1.0 does not fit the class of slot host: document:ae/server-host@1.0.0, setting:targets, setting:expectedPeople, setting:accountReference");
+  });
+
+  it("fits the example alternative to the seats slot, and not to the deck slot", () => {
+    const r = exampleRecipeEntry().recipe;
+    const own = componentFacts(exampleComponentEntries()[1]!);
+    expect(fit(r.components[1]!.class, componentFacts(exampleAlternativeEntry()), own)).toEqual([]);
+    expect(fit(r.components[0]!.class, componentFacts(exampleAlternativeEntry()), componentFacts(exampleComponentEntry()))).toEqual(["provides:ae/card-deck@1.0.0", "requires:ae/card-deck@1.0.0"]);
+  });
+});
+
 describe("conflicting sets", () => {
-  const clash = (patch: (r: Mutable) => void) => validateRecipe(recipe(patch));
-  const setting = (value: unknown) => [{ sets: { "host.plan": value } }];
+  const clash = (patch: (r: Mutable) => void) => validateRecipe(recipe((r) => (declareOnHost(r, { plan: "slug", size: "integer" }), patch(r))));
+  const setting = (value: unknown, target = "host.plan") => [{ sets: { [target]: value } }];
 
   it("refuses two questions that set one target to different values", () => {
     const text = errorsOf(clash((r) => ((questionById(r, "chips").effects = setting("a")), (questionById(r, "lessons").effects = setting("b")))));
@@ -600,7 +834,7 @@ describe("conflicting sets", () => {
 
   it("accepts the same literal from two questions", () => {
     expect(errorsOf(clash((r) => ((questionById(r, "chips").effects = setting("a")), (questionById(r, "lessons").effects = setting("a")))))).toBe("");
-    expect(errorsOf(clash((r) => ((questionById(r, "chips").effects = setting({ fromScale: "concurrentPeople" })), (questionById(r, "lessons").effects = setting({ fromScale: "concurrentPeople" })))))).toBe("");
+    expect(errorsOf(clash((r) => ((questionById(r, "chips").effects = setting({ fromScale: "concurrentPeople" }, "host.size")), (questionById(r, "lessons").effects = setting({ fromScale: "concurrentPeople" }, "host.size")))))).toBe("");
   });
 
   it("treats $answer of two questions as different values", () => {
@@ -856,6 +1090,40 @@ describe("validateComponentEntry", () => {
     expect(errorsOf(validateComponentEntry(entry((e) => (e.provides[0].path = "interfaces/a.json"))))).toContain("unknown field path");
     expect(errorsOf(validateComponentEntry(entry((e) => (e.requires = [{ ...e.provides[0] }]))))).toContain("both provided and required");
     expect(errorsOf(validateComponentEntry(entry((e) => e.provides.push({ ...e.provides[0] }))))).toContain("used twice");
+  });
+
+  it("names every port by the last segment of its type", () => {
+    expect(errorsOf(validateComponentEntry(entry((e) => (e.provides[0].id = "deck"))))).toContain("provides[0].id must be card-deck, the last segment of its type ae/card-deck");
+    expect(errorsOf(validateComponentEntry(entry((e) => (e.requires[0].id = "random"))))).toContain("requires[0].id must be random-source, the last segment of its type ae/random-source");
+  });
+
+  it("carries the component's settings, as component.json collect declares them", () => {
+    const declared = [
+      { id: "minimumPlayers", type: "integer", grammar: "integer", required: true, secret: false, hasDefault: false },
+      { id: "venue", type: "string", grammar: "label", required: false, secret: false, hasDefault: true },
+      { id: "keyReference", type: "string", grammar: "identifier", required: false, secret: true, hasDefault: false },
+      { id: "durable", type: "boolean", grammar: "boolean", required: false, secret: false, hasDefault: true },
+    ];
+    const result = validateComponentEntry(entry((e) => (e.settings = declared)));
+    expect(errorsOf(result)).toBe("");
+    expect(result.ok && result.entry.settings).toEqual(declared);
+    const bad = (setting: Mutable) => errorsOf(validateComponentEntry(entry((e) => (e.settings = [{ ...declared[1], ...setting }]))));
+    expect(errorsOf(validateComponentEntry(entry((e) => delete e.settings)))).toContain("settings must be a list of at most 100 settings");
+    expect(bad({ type: "number" })).toContain("settings[0].type must be one of string, boolean, integer");
+    expect(bad({ grammar: "colour" })).toContain("settings[0].grammar must be one of identifier, qualified, slug, label, environment, address");
+    expect(bad({ type: "integer", grammar: "label" })).toContain("settings[0].grammar must be integer");
+    expect(bad({ hasDefault: "yes" })).toContain("settings[0].hasDefault must be true or false");
+    expect(bad({ secret: true, hasDefault: true })).toContain("settings[0]: a secret setting has no default");
+    expect(bad({ default: "Main hall" })).toContain("settings[0]: unknown field default");
+    expect(errorsOf(validateComponentEntry(entry((e) => (e.settings = [declared[1], declared[1]]))))).toContain("settings[1].id venue is used twice");
+  });
+
+  it("gives a recipe check the entry's interfaces, settings and profiles", () => {
+    const e = exampleComponentEntries()[2]!;
+    const facts = componentFacts(e);
+    expect(facts).toMatchObject({ name: "acme/server-host", version: "0.1.0", provides: e.provides, requires: e.requires, settings: e.settings });
+    expect(facts.profiles.map((p) => p.id)).toEqual(["free", "paid"]);
+    for (const entry of exampleComponentEntries()) expect(errorsOf(validateComponentEntry(entry)), entry.name).toBe("");
   });
 
   it("reads the components this one builds on, empty by default", () => {

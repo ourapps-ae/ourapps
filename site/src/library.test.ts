@@ -8,7 +8,7 @@ import { html } from "./html.js";
 describe("library query", () => {
   it("reads filters, search and paging and ignores the rest", () => {
     expect(readQuery("?q=poker&category=games&target=ios&tag=cards&offset=24&x=1")).toEqual({ q: "poker", category: "games", target: "ios", tag: "cards", offset: 24 });
-    expect(readQuery("?provides=ae/card-deck&requires=ae/random-source")).toEqual({ provides: "ae/card-deck", requires: "ae/random-source" });
+    expect(readQuery("?provides=ae/card-deck&requires=ae/random-source")).toEqual({ provides: ["ae/card-deck"], requires: ["ae/random-source"] });
     expect(readQuery("")).toEqual({});
     expect(readQuery("?offset=-3&category=%20")).toEqual({});
     expect(readQuery("?offset=abc")).toEqual({});
@@ -26,7 +26,8 @@ describe("library query", () => {
   it("writes a canonical query string", () => {
     expect(queryString({})).toBe("");
     expect(queryString({ category: "games", q: "poker night", offset: 24 })).toBe("?q=poker+night&category=games&offset=24");
-    expect(queryString({ provides: "ae/card-deck" })).toBe("?provides=ae%2Fcard-deck");
+    expect(queryString({ provides: ["ae/card-deck"] })).toBe("?provides=ae%2Fcard-deck");
+    expect(queryString({ provides: ["ae/card-deck", "ae/seating"] })).toBe("?provides=ae%2Fcard-deck&provides=ae%2Fseating");
     expect(queryString({ offset: 0 })).toBe("");
   });
 
@@ -34,6 +35,9 @@ describe("library query", () => {
     expect(withFilter({ category: "games", offset: 24 }, "target", "ios")).toEqual({ category: "games", target: "ios" });
     expect(withFilter({ category: "games" }, "category", "games")).toEqual({});
     expect(withFilter({ category: "games", q: "x" }, "category", undefined)).toEqual({ q: "x" });
+    expect(withFilter({ provides: ["ae/card-deck"] }, "provides", "ae/seating")).toEqual({ provides: ["ae/card-deck", "ae/seating"] });
+    expect(withFilter({ provides: ["ae/card-deck", "ae/seating"] }, "provides", "ae/card-deck")).toEqual({ provides: ["ae/seating"] });
+    expect(readQuery("?provides=ae/card-deck&provides=ae/seating")).toEqual({ provides: ["ae/card-deck", "ae/seating"] });
   });
 
   it("picks the version from the address", () => {

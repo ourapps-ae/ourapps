@@ -3,7 +3,9 @@
 import {
   DEPRECATED_FILTERS,
   NEIGHBOURS_SHOWN,
+  fit,
   componentConnectionsSvg,
+  providersPath,
   recipeComponentsSvg,
   isCatalogueName,
   isCatalogueSlug,
@@ -16,11 +18,15 @@ import {
   type ComponentSearch,
   type ComponentSummary,
   type ComponentVersionView,
+  type ComponentFacts,
   type Deprecation,
   type DeprecatedFilter,
   type DeprecationReport,
+  type RecipeContext,
   type RecipeList,
   type RecipeSearch,
+  type RecipeSlot,
+  type RecipeSlotView,
   type RecipeSummary,
   type RecipeVersionView,
 } from "@my/store-shared";
@@ -68,14 +74,22 @@ function deprecatedParam(url: URL): DeprecatedFilter {
   return value as DeprecatedFilter;
 }
 
+// Every value of a repeated parameter: a component must match each one.
+function words(url: URL, key: string, pattern: RegExp, max: number): string[] | undefined {
+  const values = [...new Set(url.searchParams.getAll(key).map((v) => v.trim()).filter(Boolean))];
+  if (values.length > max) throw new HttpError(400, `${key} may be given at most ${max} times`);
+  for (const value of values) if (!pattern.test(value)) throw new HttpError(400, `${key} is not valid`);
+  return values.length === 0 ? undefined : values;
+}
+
 function listFilter(url: URL): ListFilter {
   const slug = /^[a-z0-9-]{1,40}$/;
   return {
     category: word(url, "category", slug),
     target: word(url, "target", slug),
     tag: word(url, "tag", slug),
-    provides: word(url, "provides", /^[A-Za-z0-9_.:/-]{1,80}$/),
-    requires: word(url, "requires", /^[A-Za-z0-9_.:/-]{1,80}$/),
+    provides: words(url, "provides", /^[A-Za-z0-9_.:/-]{1,80}$/, 10),
+    requires: words(url, "requires", /^[A-Za-z0-9_.:/-]{1,80}$/, 10),
     deprecated: deprecatedParam(url),
     limit: intParam(url, "limit", 50, 1, 100),
     offset: intParam(url, "offset", 0, 0, 100_000),
@@ -121,9 +135,25 @@ async function componentSummaries(env: Env, d: CatalogueDb, rows: ComponentRow[]
   return rows.map((r, i) => componentSummary(env, r, trees[i].notices));
 }
 
+// For each slot, the catalogue list of the components providing every interface type its class provides, and how many
+// of them, other than the preferred component, fit the class (newest listed version of each). The preferred component's
+// interface documents define the class's documents, so without it listed nothing fits; as with aepm alternatives, a
+// class that provides no interface has no alternatives.
+async function alternativesFor(env: Env, d: CatalogueDb, slots: RecipeSlot[], preferred: (ComponentFacts | null)[]): Promise<RecipeSlotView["alternatives"][]> {
+  const candidates = await d.providerFacts([...new Set(slots.flatMap((s) => s.class.provides.map((p) => p.type)))]);
+  return slots.map((s, i) => {
+    const own = preferred[i];
+    return {
+      count: s.class.provides.length === 0 || !own ? 0 : candidates.filter((c) => c.name !== s.preferred.name && fit(s.class, c, own).length === 0).length,
+      url: `${env.PUBLIC_ORIGIN}${providersPath(s.class.provides.map((p) => p.type))}`,
+    };
+  });
+}
+
 async function recipeView(env: Env, d: CatalogueDb, entry: EntryRow, r: RecipeRow): Promise<RecipeVersionView> {
   const recipe = r.recipe;
-  const [listed, [tree]] = await Promise.all([d.catalogueFor(recipe.components.map((c) => ({ name: c.name, version: c.version }))), d.deprecationsFor([subject("recipe", r)])]);
+  const [listed, [tree], preferred] = await Promise.all([d.catalogueFor(recipe.components.map((s) => s.preferred)), d.deprecationsFor([subject("recipe", r)]), d.componentFacts(recipe.components.map((s) => s.preferred))]);
+  const alternatives = await alternativesFor(env, d, recipe.components, preferred);
   return {
     ...recipeSummary(env, r, tree.notices),
     digest: r.digest,
@@ -132,11 +162,16 @@ async function recipeView(env: Env, d: CatalogueDb, entry: EntryRow, r: RecipeRo
     description: r.description,
     diagram: r.diagram ? `${env.PUBLIC_ORIGIN}/api/recipes/${r.slug}/${r.version}/diagram.svg` : null,
     screenshots: r.screenshots,
-    components: recipe.components.map((c, i) => ({
-      ...c,
-      catalogue: listed[i] ? { url: `${env.PUBLIC_ORIGIN}/components/${listed[i]!.slug}`, description: listed[i]!.description, suitability: listed[i]!.suitability, guardians: listed[i]!.guardians } : null,
-      deprecation: tree.notices.find((n) => n.name === c.name && n.version === c.version && n.via.includes(r.name)) ?? null,
-    })),
+    components: recipe.components.map((s, i) => {
+      const listedEntry = listed[i] ?? null;
+      return {
+        ...s,
+        preferred: { ...s.preferred, url: listedEntry ? `${env.PUBLIC_ORIGIN}/components/${listedEntry.slug}` : null },
+        catalogue: listedEntry ? { description: listedEntry.description, suitability: listedEntry.suitability, guardians: listedEntry.guardians } : null,
+        deprecation: tree.notices.find((n) => n.name === s.preferred.name && n.version === s.preferred.version && n.via.includes(r.name)) ?? null,
+        alternatives: alternatives[i]!,
+      };
+    }),
     jobs: recipe.jobs,
     scale: recipe.scale,
     questions: recipe.questions,
@@ -153,6 +188,9 @@ async function componentView(env: Env, d: CatalogueDb, entry: EntryRow, r: Compo
     ...componentSummary(env, r, tree.notices),
     digest: r.digest,
     guardians: r.guardians,
+    settings: r.settings,
+    interfaceDigests: r.interfaceDigests,
+    interfaceModules: r.interfaceModules,
     dependencies: r.dependencies,
     suitability: r.suitability,
     migration: r.migration,
@@ -239,13 +277,14 @@ export async function recipeDiagram(env: Env, name: string, version: string): Pr
   return new Response(found.row.diagram, { headers: { ...SVG_HEADERS, "Cache-Control": "no-store" } });
 }
 
-// GET /api/recipes/:name/:version/components.svg: the recipe's components by category and the connections between them.
+// GET /api/recipes/:name/:version/components.svg: the recipe's slots, each with its preferred component, by category
+// and the connections between them.
 export async function recipeComponentsDiagram(env: Env, name: string, version: string): Promise<Response> {
   const d = db(env);
   const found = await d.recipeVersion(slugOf(name), versionOf(version));
   if (!found) throw new HttpError(404, "no such recipe version");
   const r = found.row;
-  const listed = await d.catalogueFor(r.recipe.components.map((c) => ({ name: c.name, version: c.version })));
+  const listed = await d.catalogueFor(r.recipe.components.map((s) => s.preferred));
   const svg = recipeComponentsSvg({ name: r.name, version: r.version, title: r.title, components: r.recipe.components, connections: r.recipe.connections, catalogue: listed });
   return new Response(svg, { headers: { ...SVG_HEADERS, "Cache-Control": "public, max-age=300" } });
 }
@@ -258,7 +297,7 @@ export async function componentConnectionsDiagram(env: Env, name: string, versio
   if (!found) throw new HttpError(404, "no such component version");
   const r = found.row;
   const lookup = async (direction: "provides" | "requires", type: string) => {
-    const { rows, total } = await d.listComponents({ [direction]: type, deprecated: "include", limit: NEIGHBOURS_SHOWN + 1, offset: 0 });
+    const { rows, total } = await d.listComponents({ [direction]: [type], deprecated: "include", limit: NEIGHBOURS_SHOWN + 1, offset: 0 });
     const others = rows.filter((x) => x.name !== r.name);
     return { components: others.map((x) => ({ name: x.name, version: x.version, category: x.category })), total: total - (rows.length - others.length) };
   };
@@ -481,17 +520,34 @@ function published(env: Env, kind: Kind, status: "published" | "unchanged", name
   return json({ status, name, version, url: `${env.PUBLIC_ORIGIN}/${base}/${slug}`, api: `${env.PUBLIC_ORIGIN}/api/${base}/${slug}/${version}` }, status === "published" ? 201 : 200);
 }
 
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
+// The catalogue's stored entries for every component version a recipe body prefers or names as a job candidate, so
+// the recipe check applies the fit rule to them.
+async function catalogueContext(d: CatalogueDb, body: unknown): Promise<RecipeContext> {
+  const recipe = isObject(body) && isObject(body.recipe) ? body.recipe : {};
+  const refs: { name: string; version: string }[] = [];
+  const add = (name: unknown, version: unknown) => {
+    if (isCatalogueName(name) && isVersion(version) && refs.length < 200 && !refs.some((r) => r.name === name && r.version === version)) refs.push({ name, version });
+  };
+  for (const s of Array.isArray(recipe.components) ? recipe.components : []) if (isObject(s) && isObject(s.preferred)) add(s.preferred.name, s.preferred.version);
+  for (const j of Array.isArray(recipe.jobs) ? recipe.jobs : []) for (const c of isObject(j) && Array.isArray(j.candidates) ? j.candidates : []) if (isObject(c)) add(c.component, c.version);
+  const facts = await d.componentFacts(refs);
+  const found = new Map(refs.map((r, i) => [`${r.name} ${r.version}`, facts[i] ?? null]));
+  return { components: { source: "the catalogue", find: (name, version) => found.get(`${name} ${version}`) ?? null } };
+}
+
 // POST /api/dev/recipes
 export async function publishRecipe(request: Request, env: Env, deps: Deps, dev: AuthedDeveloper): Promise<Response> {
   const body = await readJson<unknown>(request);
-  const result = validateRecipeEntry(body);
+  const d = db(env);
+  const result = validateRecipeEntry(body, await catalogueContext(d, body));
   if (!result.ok) throw problems(result.errors);
   refuseSecrets(body);
   const e = result.entry;
   const c: Candidate = { kind: "recipe", name: e.recipe.name, version: e.recipe.version, digest: e.digest, source: e.source, bundle: e.bundle };
   const plan = await prepare(env, deps, dev, c);
   const slug = splitName(c.name)!.slug;
-  const d = db(env);
   const now = deps.now().toISOString();
   if (plan.existing === "same") {
     const wasUnlisted = (await d.versions("recipe", plan.entry!.id, true)).find((v) => v.version === c.version)?.unlistedAt;

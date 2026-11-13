@@ -81,9 +81,28 @@ describe("recipe component diagram", () => {
   });
 
   it("draws a recipe with no connections and one with an unknown category", () => {
-    const tiny = recipeComponentsSvg({ name: "acme/tiny", version: "1.0.0", title: "Tiny", components: [{ id: "x", name: "acme/x", version: "1.0.0", includedWhen: null }], connections: [], catalogue: [{ name: "acme/x", version: "1.0.0", category: "gardening", provides: [], requires: [] }] });
+    const tiny = recipeComponentsSvg({ name: "acme/tiny", version: "1.0.0", title: "Tiny", components: [{ id: "x", preferred: { name: "acme/x", version: "1.0.0" }, class: { provides: [], requires: [] }, includedWhen: null }], connections: [], catalogue: [{ name: "acme/x", version: "1.0.0", category: "gardening", provides: [], requires: [] }] });
     expect(tiny).toContain("Gardening: 1 component");
     expect(tiny).toContain(">Tiny</text>");
+    expect(tiny).toContain(">x</text>");
+    expect(tiny).not.toContain("slot x");
+  });
+
+  it("draws each slot as its preferred component, labelled with the slot id when the names differ", () => {
+    const input = ourpokerRecipeInput();
+    input.components = input.components.map((s) => (s.id === "server-host" ? { ...s, id: "server" } : s));
+    input.connections = input.connections.map((c) => ({ source: c.source.instance === "server-host" ? { ...c.source, instance: "server" } : c.source, target: c.target.instance === "server-host" ? { ...c.target, instance: "server" } : c.target }));
+    const svg = recipeComponentsSvg(input);
+    expect(svg).toContain(">server-host</text>");
+    expect(svg).toContain(">slot server</text>");
+    expect(svg).not.toContain(">slot theme</text>");
+    expect(svg.match(/<path d="M [^"]+" fill="none" stroke="#[0-9A-F]{6}" stroke-width="2" marker-end/g)!.length).toBe(OURPOKER_RECIPE.connections.length);
+  });
+
+  it("names each line by the interface type its slot's class gives the port", () => {
+    const svg = recipeComponentsSvg(ourpokerRecipeInput());
+    expect(svg).toContain(">room-session</text>");
+    expect(svg).toContain(">game-adapter</text>");
   });
 
   it("escapes names", () => {

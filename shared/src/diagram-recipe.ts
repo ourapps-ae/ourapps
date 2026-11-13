@@ -4,7 +4,7 @@
 // from top to bottom, and the gaps between rows form horizontal channels. Every line runs in channels only: out of
 // the provider's right side, along channels, into the consumer's side. Each line gets its own track in each channel
 // it uses, so lines never overlap and never cross a card.
-import type { Port } from "./catalogue.js";
+import { portId, type ClassInterface, type Port } from "./catalogue.js";
 import { describeCondition, type Condition } from "./conditions.js";
 import { COLOURS, Canvas, LINE_COLOURS, MUTED, ZTITLE, measure, pillWidth, rowY, wrap, type CardBox, type Kind, type Zone } from "./diagram-kit.js";
 
@@ -16,13 +16,14 @@ export interface DiagramPart {
   requires: Port[];
 }
 
+// A recipe's slots, each drawn as its preferred component; the class gives each port's interface type.
 export interface RecipeDiagramInput {
   name: string;
   version: string;
   title: string;
-  components: { id: string; name: string; version: string; includedWhen: Condition | null }[];
+  components: { id: string; preferred: { name: string; version: string }; class: { provides: ClassInterface[]; requires: ClassInterface[] }; includedWhen: Condition | null }[];
   connections: { source: { instance: string; port: string }; target: { instance: string; port: string } }[];
-  // The catalogue entry of each component, in the same order; null when the catalogue does not list it.
+  // The catalogue entry of each preferred component, in the same order; null when the catalogue does not list it.
   catalogue: (DiagramPart | null)[];
 }
 
@@ -204,12 +205,12 @@ interface Route {
 }
 
 function model(input: RecipeDiagramInput) {
-  const parts = new Map<string, { id: string; name: string; version: string; includedWhen: Condition | null; entry: DiagramPart | null }>();
-  input.components.forEach((c, i) => parts.set(c.id, { ...c, entry: input.catalogue[i] ?? null }));
+  const parts = new Map<string, { id: string; name: string; version: string; includedWhen: Condition | null; class: RecipeDiagramInput["components"][number]["class"]; entry: DiagramPart | null }>();
+  input.components.forEach((c, i) => parts.set(c.id, { id: c.id, name: c.preferred.name, version: c.preferred.version, includedWhen: c.includedWhen, class: c.class, entry: input.catalogue[i] ?? null }));
   const known = (instance: string) => instance === APPLICATION || parts.has(instance);
   const connections = input.connections.filter((c) => known(c.source.instance) && known(c.target.instance) && c.source.instance !== c.target.instance);
 
-  const portType = (instance: string, port: string, side: "provides" | "requires"): string | null => parts.get(instance)?.entry?.[side].find((p) => p.id === port)?.type ?? null;
+  const portType = (instance: string, port: string, side: "provides" | "requires"): string | null => parts.get(instance)?.class[side].find((p) => portId(p.type) === port)?.type ?? null;
   const typeOf = (c: (typeof connections)[number]) => portType(c.source.instance, c.source.port, "provides") ?? portType(c.target.instance, c.target.port, "requires");
   const types = [...new Set(connections.map(typeOf).filter((t): t is string => t !== null))];
   const scopes = new Set(types.map((t) => (t.includes("/") ? t.split("/")[0] : "")));
@@ -256,10 +257,12 @@ function model(input: RecipeDiagramInput) {
   for (const p of parts.values()) {
     const c = p.entry ? (p.entry.category ?? "other") : "other";
     const z = categories.indexOf(c);
-    const head = [p.name, `version ${p.version}`];
+    // The card is the preferred component; the slot id labels it when the two names differ.
+    const short = p.name.slice(p.name.indexOf("/") + 1);
+    const head = [...(p.id === short ? [] : [`slot ${p.id}`]), p.name, `version ${p.version}`];
     if (!p.entry) head.push("not in the catalogue");
     if (p.includedWhen) head.push(...wrap(`when ${describeCondition(p.includedWhen, answerWords) ?? p.includedWhen}`, 34));
-    const n = makeNode(p.id, p.id, head, styleOf.get(c)!, p.includedWhen !== null, z);
+    const n = makeNode(p.id, short, head, styleOf.get(c)!, p.includedWhen !== null, z);
     nodes.set(p.id, n);
     zones[z]!.nodes.push(n);
   }

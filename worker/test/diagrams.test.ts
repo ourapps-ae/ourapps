@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { EXAMPLE_BUNDLE_DIGEST, EXAMPLE_DIGEST, exampleRecipeEntry, type ComponentEntry, type RecipeEntry } from "@my/store-shared";
+import { EXAMPLE_BUNDLE_DIGEST, EXAMPLE_DIGEST, classConfiguration, exampleRecipeEntry, interfaceKey, type ComponentEntry, type RecipeEntry } from "@my/store-shared";
 import { OURPOKER_CATALOGUE, OURPOKER_RECIPE } from "../../shared/src/fixtures/ourpoker.js";
 import { CatalogueDb, type EntryRow } from "../src/catalogue-db.js";
 import type { Env } from "../src/env.js";
@@ -34,6 +34,9 @@ async function seed(): Promise<void> {
       guardians: [],
       provides: c.provides,
       requires: c.requires,
+      settings: [],
+      interfaceDigests: Object.fromEntries(c.provides.map((p) => [interfaceKey(p), EXAMPLE_DIGEST])),
+      interfaceModules: {},
       dependencies: [],
       suitability: { format: 1, jobs: [], profiles: c.profiles.map((p) => ({ id: p.id, load: {}, cost: "none", regions: ["any"], compliance: [], provider: null, notes: "", settings: p.settings })), notes: "" },
       migration: null,
@@ -45,7 +48,7 @@ async function seed(): Promise<void> {
   const base = exampleRecipeEntry();
   const r: RecipeEntry = {
     ...base,
-    recipe: { ...base.recipe, name: OURPOKER_RECIPE.name, version: OURPOKER_RECIPE.version, title: OURPOKER_RECIPE.title, components: OURPOKER_RECIPE.components.map((c) => ({ ...c, configuration: {} })), connections: OURPOKER_RECIPE.connections, jobs: [], scale: null, questions: [] },
+    recipe: { ...base.recipe, name: OURPOKER_RECIPE.name, version: OURPOKER_RECIPE.version, title: OURPOKER_RECIPE.title, components: OURPOKER_RECIPE.components.map((c) => ({ ...c, class: { ...c.class, configuration: classConfiguration() }, configuration: {} })), connections: OURPOKER_RECIPE.connections, jobs: [], scale: null, questions: [] },
     source: { repository: "ourapps-ae/ourpoker", tag: `v${OURPOKER_RECIPE.version}` },
   };
   await d.publishRecipe(null, entry(OURPOKER_RECIPE.name, developerId), r, now);
