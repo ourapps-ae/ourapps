@@ -1,5 +1,5 @@
 // D1 access for the recipe library and the component catalogue.
-import { newestVersion, type ComponentDependency, type ComponentEntry, type Deprecation, type DeprecationReason, type EntryStatus, type MigrationSummary, type Port, type Recipe, type RecipeEntry, type Suitability, type Targets, type VersionRef, type AppTarget, type DeprecatedFilter } from "@my/store-shared";
+import { newestVersion, type ComponentDependency, type ComponentEntry, type ComponentFacts, type Deprecation, type EntryModule, type DeprecationReason, type EntryStatus, type MigrationSummary, type Port, type Recipe, type RecipeEntry, type SettingDeclaration, type Suitability, type Targets, type VersionRef, type AppTarget, type DeprecatedFilter } from "@my/store-shared";
 
 export type Kind = "recipe" | "component";
 
@@ -96,6 +96,9 @@ export interface ComponentRow extends Common {
   guardians: string[];
   provides: Port[];
   requires: Port[];
+  settings: SettingDeclaration[];
+  interfaceDigests: Record<string, string>;
+  interfaceModules: Record<string, Record<string, EntryModule>>;
   dependencies: ComponentDependency[];
   suitability: Suitability;
   migration: MigrationSummary | null;
@@ -136,18 +139,22 @@ function componentRow(r: Raw): ComponentRow {
     guardians: parse<string[]>(r.guardians, []),
     provides: parse<Port[]>(r.provides, []),
     requires: parse<Port[]>(r.requires, []),
+    settings: parse<SettingDeclaration[]>(r.settings, []),
+    interfaceDigests: parse<Record<string, string>>(r.interface_digests, {}),
+    interfaceModules: parse<Record<string, Record<string, EntryModule>>>(r.interface_modules, {}),
     dependencies: parse<ComponentDependency[]>(r.dependencies, []),
     suitability: parse<Suitability>(r.suitability, null as unknown as Suitability),
     migration: parse<MigrationSummary | null>(r.migration, null),
   };
 }
 
+// `provides` and `requires` list interface types or port ids; a component matches when it has every one.
 export interface ListFilter {
   category?: string;
   target?: string;
   tag?: string;
-  provides?: string;
-  requires?: string;
+  provides?: string[];
+  requires?: string[];
   deprecated: DeprecatedFilter;
   limit: number;
   offset: number;
@@ -156,7 +163,7 @@ export interface ListFilter {
 const RECIPE_COLUMNS = `e.id, e.developer_id, e.deprecated_at, e.deprecated_reason, e.replacement, e.name, e.slug, e.repo, v.version, v.digest, v.title, v.summary, v.category, v.tags, v.targets_client, v.targets_server, v.recipe, v.description, v.diagram, v.screenshots,
   v.source_repo, v.source_tag, v.bundle_asset, v.bundle_digest, v.published_at, v.unlisted_at, d.slug AS publisher_slug, d.display_name AS publisher_name`;
 
-const COMPONENT_COLUMNS = `e.id, e.developer_id, e.deprecated_at, e.deprecated_reason, e.replacement, e.name, e.slug, e.repo, v.version, v.digest, v.description, v.category, v.tags, v.targets_client, v.targets_server, v.guardians, v.provides, v.requires, v.dependencies, v.suitability, v.migration,
+const COMPONENT_COLUMNS = `e.id, e.developer_id, e.deprecated_at, e.deprecated_reason, e.replacement, e.name, e.slug, e.repo, v.version, v.digest, v.description, v.category, v.tags, v.targets_client, v.targets_server, v.guardians, v.provides, v.requires, v.settings, v.interface_digests, v.interface_modules, v.dependencies, v.suitability, v.migration,
   v.source_repo, v.source_tag, v.bundle_asset, v.bundle_digest, v.published_at, v.unlisted_at, d.slug AS publisher_slug, d.display_name AS publisher_name`;
 
 // Characters that FTS5 treats as syntax never reach it: every word is quoted, with a prefix star.
@@ -220,9 +227,9 @@ export class CatalogueDb {
         )
         .bind(target.id, r.version, e.digest, r.title, r.summary, r.category, JSON.stringify(r.tags), JSON.stringify(r.targets.client), JSON.stringify(r.targets.server), JSON.stringify(r), e.page.description, e.page.diagram, JSON.stringify(e.page.screenshots), e.source.repository, e.source.tag, e.bundle.asset, e.bundle.digest, now),
     );
-    for (const c of r.components) {
+    for (const ref of slotComponents(r)) {
       statements.push(
-        this.d1.prepare("INSERT INTO recipe_components (recipe_id, version, instance_id, component_name, component_version, included_when) VALUES (?, ?, ?, ?, ?, ?)").bind(target.id, r.version, c.id, c.name, c.version, c.includedWhen),
+        this.d1.prepare("INSERT INTO recipe_slots (recipe_id, version, slot_id, component_name, component_version, preferred, included_when) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(target.id, r.version, ref.slot, ref.name, ref.version, ref.preferred ? 1 : 0, ref.includedWhen),
       );
     }
     statements.push(...(await this.refreshStatements("recipe", target.id, now, r.version)));
@@ -236,10 +243,10 @@ export class CatalogueDb {
     statements.push(
       this.d1
         .prepare(
-          `INSERT INTO component_versions (component_id, version, digest, description, category, tags, targets_client, targets_server, guardians, provides, requires, dependencies, suitability, migration, source_repo, source_tag, bundle_asset, bundle_digest, published_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO component_versions (component_id, version, digest, description, category, tags, targets_client, targets_server, guardians, provides, requires, settings, interface_digests, interface_modules, dependencies, suitability, migration, source_repo, source_tag, bundle_asset, bundle_digest, published_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .bind(target.id, e.version, e.digest, e.description, e.category, JSON.stringify(e.tags), JSON.stringify(e.targets.client), JSON.stringify(e.targets.server), JSON.stringify(e.guardians), JSON.stringify(e.provides), JSON.stringify(e.requires), JSON.stringify(e.dependencies), JSON.stringify(e.suitability), e.migration ? JSON.stringify(e.migration) : null, e.source.repository, e.source.tag, e.bundle.asset, e.bundle.digest, now),
+        .bind(target.id, e.version, e.digest, e.description, e.category, JSON.stringify(e.tags), JSON.stringify(e.targets.client), JSON.stringify(e.targets.server), JSON.stringify(e.guardians), JSON.stringify(e.provides), JSON.stringify(e.requires), JSON.stringify(e.settings), JSON.stringify(e.interfaceDigests), JSON.stringify(e.interfaceModules), JSON.stringify(e.dependencies), JSON.stringify(e.suitability), e.migration ? JSON.stringify(e.migration) : null, e.source.repository, e.source.tag, e.bundle.asset, e.bundle.digest, now),
     );
     for (const [direction, ports] of [["provides", e.provides], ["requires", e.requires]] as const) {
       for (const p of ports) {
@@ -363,10 +370,11 @@ export class CatalogueDb {
       binds.push(f.tag);
     }
     if (kind === "component") {
-      for (const [direction, value] of [["provides", f.provides], ["requires", f.requires]] as const) {
-        if (!value) continue;
-        where += ` AND EXISTS (SELECT 1 FROM component_interfaces i WHERE i.component_id = e.id AND i.version = e.latest_version AND i.direction = '${direction}' AND (i.type = ? OR i.port_id = ?))`;
-        binds.push(value, value);
+      for (const [direction, values] of [["provides", f.provides], ["requires", f.requires]] as const) {
+        for (const value of values ?? []) {
+          where += ` AND EXISTS (SELECT 1 FROM component_interfaces i WHERE i.component_id = e.id AND i.version = e.latest_version AND i.direction = '${direction}' AND (i.type = ? OR i.port_id = ?))`;
+          binds.push(value, value);
+        }
       }
     }
     return { where, binds };
@@ -418,14 +426,15 @@ export class CatalogueDb {
     await this.d1.prepare(`UPDATE ${TABLES[kind].entries} SET deprecated_at = NULL, deprecated_reason = NULL, replacement = NULL WHERE id = ? AND developer_id IS NOT NULL`).bind(entryId).run();
   }
 
-  // Flagged entries under one version: what a recipe names, or what a component depends on, followed through dependencies.
+  // Flagged entries under one version: the components that may fill a recipe's slots (preferred components and job
+  // candidates), or what a component depends on, followed through dependencies.
   // `checked` counts the distinct components examined, whether or not the catalogue lists them. One result per request, in order.
   async deprecationsFor(items: { kind: Kind; entryId: string; name: string; version: string; developerId: string | null; flag: Flag | null }[]): Promise<{ notices: Deprecation[]; checked: number }[]> {
     if (items.length === 0) return [];
     const statements = items.map((i) => {
       const seed =
         i.kind === "recipe"
-          ? "SELECT component_name, component_version, ?1, 1 FROM recipe_components WHERE recipe_id = ?2 AND version = ?3"
+          ? "SELECT component_name, component_version, ?1, 1 FROM recipe_slots WHERE recipe_id = ?2 AND version = ?3"
           : "SELECT dependency_name, dependency_version, ?1, 1 FROM component_dependencies WHERE component_id = ?2 AND version = ?3";
       return this.d1
         .prepare(
@@ -461,7 +470,7 @@ export class CatalogueDb {
     });
   }
 
-  // What the catalogue lists for the components a recipe names; null where a name and version are not listed.
+  // What the catalogue lists for the components a recipe prefers; null where a name and version are not listed.
   async catalogueFor(refs: { name: string; version: string }[]): Promise<(ComponentRow | null)[]> {
     if (refs.length === 0) return [];
     const statements = refs.map((ref) =>
@@ -473,15 +482,92 @@ export class CatalogueDb {
     return results.map((res) => (res.results[0] ? componentRow(res.results[0]) : null));
   }
 
-  // Listed recipes whose newest version names the component.
-  async recipesUsing(componentName: string): Promise<{ name: string; slug: string; title: string; version: string }[]> {
+  // The fit and profile facts of listed component versions, in request order; null where the catalogue does not list one.
+  async componentFacts(refs: { name: string; version: string }[]): Promise<(ComponentFacts | null)[]> {
+    if (refs.length === 0) return [];
+    const statements = refs.map((ref) =>
+      this.d1.prepare(`SELECT ${FACT_COLUMNS}, v.suitability FROM components e JOIN component_versions v ON v.component_id = e.id AND v.version = ? AND v.unlisted_at IS NULL WHERE e.name = ?`).bind(ref.version, ref.name),
+    );
+    const results = await this.d1.batch<Raw>(statements);
+    return results.map((res) => {
+      const r = res.results[0];
+      if (!r) return null;
+      const suitability = parse<Suitability | null>(r.suitability, null);
+      return { ...fitFacts(r), profiles: (suitability?.profiles ?? []).map((p) => ({ id: p.id, ...(p.settings ? { settings: p.settings } : {}) })) };
+    });
+  }
+
+  // The newest listed version of every component that provides at least one of `types`: the candidates a slot's
+  // alternatives are counted from. A query takes at most 100 bound values, so the types go in groups of 90.
+  async providerFacts(types: string[]): Promise<Omit<ComponentFacts, "profiles">[]> {
+    if (types.length === 0) return [];
+    const groups = Array.from({ length: Math.ceil(types.length / 90) }, (_, i) => types.slice(i * 90, i * 90 + 90));
+    const statements = groups.map((group) =>
+      this.d1
+        .prepare(
+          `SELECT ${FACT_COLUMNS} FROM components e JOIN component_versions v ON v.component_id = e.id AND v.version = e.latest_version
+           WHERE e.latest_version IS NOT NULL AND EXISTS (SELECT 1 FROM component_interfaces i WHERE i.component_id = e.id AND i.version = e.latest_version AND i.direction = 'provides' AND i.type IN (${group.map(() => "?").join(", ")}))`,
+        )
+        .bind(...group),
+    );
+    const seen = new Map<string, Omit<ComponentFacts, "profiles">>();
+    for (const res of await this.d1.batch<Raw>(statements)) for (const r of res.results) seen.set(r.name as string, fitFacts(r));
+    return [...seen.values()];
+  }
+
+  // Listed recipes whose newest version names the component in a slot, as the preferred component or a job candidate.
+  async recipesUsing(componentName: string): Promise<RecipeUse[]> {
     const res = await this.d1
       .prepare(
-        `SELECT DISTINCT e.name, e.slug, v.title, v.version FROM recipe_components rc JOIN recipes e ON e.id = rc.recipe_id AND e.latest_version = rc.version
-         JOIN recipe_versions v ON v.recipe_id = e.id AND v.version = e.latest_version WHERE rc.component_name = ? ORDER BY e.name`,
+        `SELECT e.name, e.slug, v.title, v.version, rs.slot_id, MAX(rs.preferred) AS preferred FROM recipe_slots rs JOIN recipes e ON e.id = rs.recipe_id AND e.latest_version = rs.version
+         JOIN recipe_versions v ON v.recipe_id = e.id AND v.version = e.latest_version WHERE rs.component_name = ? GROUP BY e.id, rs.slot_id ORDER BY e.name, rs.slot_id`,
       )
       .bind(componentName)
       .all<Raw>();
-    return res.results.map((r) => ({ name: r.name as string, slug: r.slug as string, title: r.title as string, version: r.version as string }));
+    const out: RecipeUse[] = [];
+    for (const r of res.results) {
+      const slot = { id: r.slot_id as string, preferred: r.preferred === 1 };
+      const known = out.find((u) => u.name === r.name);
+      if (known) known.slots.push(slot);
+      else out.push({ name: r.name as string, slug: r.slug as string, title: r.title as string, version: r.version as string, slots: [slot] });
+    }
+    return out;
   }
+}
+
+export interface RecipeUse {
+  name: string;
+  slug: string;
+  title: string;
+  version: string;
+  slots: { id: string; preferred: boolean }[];
+}
+
+const FACT_COLUMNS = "e.name, v.version, v.provides, v.requires, v.settings, v.interface_digests, v.interface_modules";
+
+function fitFacts(r: Raw): Omit<ComponentFacts, "profiles"> {
+  return {
+    name: r.name as string,
+    version: r.version as string,
+    provides: parse<Port[]>(r.provides, []),
+    requires: parse<Port[]>(r.requires, []),
+    settings: parse<SettingDeclaration[]>(r.settings, []),
+    interfaceDigests: parse<Record<string, string>>(r.interface_digests, {}),
+    interfaceModules: parse<Record<string, Record<string, EntryModule>>>(r.interface_modules, {}),
+  };
+}
+
+// Every component version that may fill a slot of the recipe: each slot's preferred component, then its job's
+// candidates (a candidate without a version is the preferred component at the preferred version).
+export function slotComponents(r: Recipe): { slot: string; name: string; version: string; preferred: boolean; includedWhen: string | null }[] {
+  const out: { slot: string; name: string; version: string; preferred: boolean; includedWhen: string | null }[] = r.components.map((s) => ({ slot: s.id, name: s.preferred.name, version: s.preferred.version, preferred: true, includedWhen: s.includedWhen }));
+  for (const job of r.jobs) {
+    const slot = r.components.find((s) => s.id === job.slot);
+    if (!slot) continue;
+    for (const c of job.candidates) {
+      const version = c.version ?? slot.preferred.version;
+      if (!out.some((o) => o.slot === slot.id && o.name === c.component && o.version === version)) out.push({ slot: slot.id, name: c.component, version, preferred: false, includedWhen: c.includedWhen ?? null });
+    }
+  }
+  return out;
 }

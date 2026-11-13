@@ -30,7 +30,13 @@ function recipeView(patch: Partial<RecipeVersionView> = {}): RecipeVersionView {
     description: e.page.description,
     diagram: `${origin}/api/recipes/poker-night/0.1.0/diagram.svg`,
     screenshots: [],
-    components: r.components.map((c) => ({ ...c, catalogue: c.id === "deck" ? { url: `${origin}/components/card-deck`, description: "A shuffled deck.", suitability, guardians: ["Example Guardian Ltd"] } : null, deprecation: null })),
+    components: r.components.map((c) => ({
+      ...c,
+      preferred: { ...c.preferred, url: c.id === "deck" ? `${origin}/components/card-deck` : null },
+      catalogue: c.id === "deck" ? { description: "A shuffled deck.", suitability, guardians: ["Example Guardian Ltd"] } : null,
+      deprecation: null,
+      alternatives: { count: c.id === "seats" ? 1 : 0, url: `${origin}/components?provides=${encodeURIComponent(c.class.provides[0]!.type)}` },
+    })),
     jobs: r.jobs,
     scale: r.scale,
     questions: r.questions,
@@ -62,18 +68,32 @@ function componentView(patch: Partial<ComponentVersionView> = {}): ComponentVers
     deprecations: [],
     digest: e.digest,
     guardians: e.guardians,
+    settings: e.settings,
+    interfaceDigests: e.interfaceDigests,
+    interfaceModules: e.interfaceModules,
     dependencies: [],
     suitability: e.suitability,
     migration: null,
     source: e.source,
     bundle: { ...e.bundle, url: `${origin}/api/components/card-deck/0.1.0/bundle` },
     versions: [{ version: e.version, digest: e.digest, publishedAt: "2026-10-16T10:00:00.000Z" }],
-    usedBy: [{ name: "acme/poker-night", slug: "poker-night", title: "Poker Night", version: "0.1.0", url: `${origin}/recipes/poker-night` }],
+    usedBy: [{ name: "acme/poker-night", slug: "poker-night", title: "Poker Night", version: "0.1.0", url: `${origin}/recipes/poker-night`, slots: [{ id: "deck", preferred: true }, { id: "spare", preferred: false }] }],
     ...patch,
   };
 }
 
 describe("recipe page", () => {
+  it("lists each slot with its class, preferred component and the other components of its class", () => {
+    const html = recipeBody(recipeView(), "latest").html;
+    expect(html).toContain("<th>Slot</th><th>Class</th><th>Preferred component</th><th>Alternatives</th>");
+    expect(html).toContain("<code>seats</code>");
+    expect(html).toContain("provides <code>ae/seating</code> 1.0.0<br />requires <code>ae/card-deck</code> 1.0.0");
+    expect(html).toContain('<a href="/components/card-deck">acme/card-deck</a>');
+    expect(html).toContain("version 0.1.0");
+    expect(html).toContain('<a href="/components?provides=ae%2Fseating">Other components of this class (1)</a>');
+    expect(html).toContain('<a href="/components?provides=ae%2Fcard-deck">Other components of this class (0)</a>');
+  });
+
   it("shows description, diagram, questions, components with suitability and guardians, targets, answer sets and versions", () => {
     const html = recipeBody(recipeView(), "latest").html;
     expect(html).toContain("Poker Night");
@@ -138,6 +158,11 @@ describe("recipe page", () => {
 });
 
 describe("component page", () => {
+  it("names the recipes that use it and the slot in each", () => {
+    const html = componentBody(componentView(), "latest").html;
+    expect(html).toContain('<a href="/recipes/poker-night">Poker Night</a> 0.1.0: slot <code>deck</code>, slot <code>spare</code> as a job candidate');
+  });
+
   it("shows interfaces, suitability, guardians, migration, recipes that use it and versions", () => {
     const html = componentBody(componentView(), "latest").html;
     expect(html).toContain("acme/card-deck");
@@ -230,6 +255,6 @@ describe("cards", () => {
     const c: ComponentSummary = { ...componentView() };
     const html = componentCard(c).html;
     expect(html).toContain('href="/components/card-deck"');
-    expect(html).toContain("Provides card-deck. Requires random-source.");
+    expect(html).toContain("Provides card-deck. Requires random-source (optional).");
   });
 });

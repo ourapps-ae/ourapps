@@ -1,5 +1,5 @@
 // Pure helpers for the recipe library and component catalogue pages.
-import { describeCondition, type Condition, type Deprecation, type EntryStatus, type Profile, type RecipeComponent } from "@my/store-shared";
+import { describeCondition, type Condition, type Deprecation, type EntryStatus, type Profile, type RecipeSlot } from "@my/store-shared";
 import { html, type Raw } from "./html.js";
 
 export const CLIENT_TARGET_LABEL: Record<string, string> = {
@@ -21,23 +21,31 @@ export function targetLabel(target: string): string {
   return CLIENT_TARGET_LABEL[target] ?? SERVER_TARGET_LABEL[target] ?? target;
 }
 
+// `provides` and `requires` may repeat: a component matches every interface listed.
 export interface LibraryQuery {
   q?: string;
   category?: string;
   target?: string;
   tag?: string;
-  provides?: string;
-  requires?: string;
+  provides?: string[];
+  requires?: string[];
   deprecated?: "exclude" | "only";
   offset?: number;
 }
 
-const FILTER_KEYS = ["q", "category", "target", "tag", "provides", "requires", "deprecated"] as const;
+export const FILTER_KEYS = ["q", "category", "target", "tag", "provides", "requires", "deprecated"] as const;
+export type FilterKey = (typeof FILTER_KEYS)[number];
+const LIST_KEYS: readonly FilterKey[] = ["provides", "requires"];
 
 export function readQuery(search: string): LibraryQuery {
   const params = new URLSearchParams(search);
   const query: LibraryQuery = {};
   for (const key of FILTER_KEYS) {
+    if (key === "provides" || key === "requires") {
+      const values = [...new Set(params.getAll(key).map((v) => v.trim()).filter(Boolean))];
+      if (values.length > 0) query[key] = values;
+      continue;
+    }
     const value = params.get(key)?.trim();
     if (!value) continue;
     if (key === "deprecated") {
@@ -51,18 +59,38 @@ export function readQuery(search: string): LibraryQuery {
 
 export function queryString(query: LibraryQuery): string {
   const params = new URLSearchParams();
-  for (const key of FILTER_KEYS) if (query[key]) params.set(key, query[key]!);
+  for (const key of FILTER_KEYS) {
+    const value = query[key];
+    if (Array.isArray(value)) for (const v of value) params.append(key, v);
+    else if (value) params.set(key, value);
+  }
   if (query.offset && query.offset > 0) params.set("offset", String(query.offset));
   const text = params.toString();
   return text === "" ? "" : `?${text}`;
 }
 
-// The same filters with one changed; paging restarts.
-export function withFilter(query: LibraryQuery, key: (typeof FILTER_KEYS)[number], value: string | undefined): LibraryQuery {
+// The same filters with one changed; paging restarts. A repeated filter gains or loses the one value; undefined clears it.
+export function withFilter(query: LibraryQuery, key: FilterKey, value: string | undefined): LibraryQuery {
   const next: LibraryQuery = { ...query, offset: undefined };
+  if (key === "provides" || key === "requires") {
+    const current = query[key] ?? [];
+    const values = value === undefined || value === "" ? [] : current.includes(value) ? current.filter((v) => v !== value) : [...current, value];
+    if (values.length === 0) delete next[key];
+    else next[key] = values;
+    return next;
+  }
   if (value === undefined || value === "" || query[key] === value) delete next[key];
   else (next as Record<string, string | number | undefined>)[key] = value;
   return next;
+}
+
+// Each active filter value, for the pills that clear it.
+export function activeValues(query: LibraryQuery): { key: FilterKey; value: string }[] {
+  return FILTER_KEYS.flatMap((key) => {
+    const value = query[key];
+    if (LIST_KEYS.includes(key) && Array.isArray(value)) return value.map((v) => ({ key, value: v }));
+    return typeof value === "string" && value !== "" ? [{ key, value }] : [];
+  });
 }
 
 export function number(n: number): string {
@@ -98,7 +126,7 @@ export function conditionHtml(c: Condition): Raw {
   return words === null ? html`<code>${c}</code>` : html`${words}`;
 }
 
-export function includedWhenHtml(c: Pick<RecipeComponent, "includedWhen">): Raw {
+export function includedWhenHtml(c: Pick<RecipeSlot, "includedWhen">): Raw {
   return c.includedWhen ? html`when ${conditionHtml(c.includedWhen)}` : html`always`;
 }
 

@@ -3,6 +3,7 @@
 // in the workspace root.
 import { isAppTarget, type AppTarget } from "./targets.js";
 import { checkCondition, confinements, type Condition, type ConditionExpr } from "./conditions.js";
+import { DIALECT_2020_12, schemaProblem, valueProblem } from "./json-schema.js";
 
 export const CATALOGUE_FORMAT = 1;
 
@@ -32,6 +33,8 @@ export const LIMITS = {
   title: 80,
   componentDescription: 500,
   components: 100,
+  classConfiguration: 20_000,
+  settings: 100,
   questions: 60,
   connections: 500,
   answerSets: 50,
@@ -205,18 +208,43 @@ export type SetLiteral = string | number | boolean;
 // The value a question effect gives a setting: a literal, "$answer", or one of the object forms.
 export type SetValue = SetLiteral | { map: Record<string, SetLiteral> } | { fromScale: ScaleKey } | { template: string } | { ref: string };
 
-export interface RecipeComponent {
-  id: string;
-  name: string;
+// An interface a class provides or requires. Its port id is the last segment of the type.
+export interface ClassInterface {
+  type: string;
   version: string;
+  // Only requirements carry it: the preferred component may leave this requirement unconnected.
+  optional?: boolean;
+}
+
+// The class of component a slot needs: the interfaces the recipe connects to it and a JSON Schema 2020-12 object schema
+// of the settings the recipe writes on it.
+export interface ComponentClass {
+  provides: ClassInterface[];
+  requires: ClassInterface[];
+  configuration: Rec;
+}
+
+// One entry of recipe.json `components`: a slot, filled by the preferred component or any other that fits the class.
+export interface RecipeSlot {
+  id: string;
+  class: ComponentClass;
+  preferred: { name: string; version: string };
   configuration: Rec;
   includedWhen: Condition | null;
 }
 
+// A candidate names a component and one of its suitability profiles; `version` is required when the component is not
+// the slot's preferred one (the preferred one is at the preferred version).
 export interface RecipeJob {
   id: string;
-  candidates: { component: string; profile: string; includedWhen?: Condition }[];
+  slot: string;
+  candidates: { component: string; version?: string; profile: string; includedWhen?: Condition }[];
   overrideQuestion?: string;
+}
+
+// The port id of an interface type: its last segment (ae/card-deck -> card-deck).
+export function portId(type: string): string {
+  return type.slice(type.lastIndexOf("/") + 1);
 }
 
 export interface RecipeQuestion {
@@ -234,31 +262,65 @@ export interface RecipeQuestion {
 
 export type SettingValues = Record<string, SetLiteral>;
 
-// A setting a component collects (component.json `collect`).
-export interface SettingDeclaration {
+export const SETTING_TYPES = ["string", "boolean", "integer"] as const;
+export type SettingType = typeof SETTING_TYPES[number];
+
+// A setting's type and grammar: one of GRAMMARS for a string, the type name for boolean and integer.
+export interface SettingKind {
   id: string;
-  type: "string" | "boolean" | "integer";
+  type: SettingType;
   grammar: string;
-  required?: boolean;
   secret?: boolean;
 }
 
-// What the recipe check can also verify when the component data is at hand. Anything absent is accepted unchecked.
-// Keys are component names (`scope/name`); `application` holds the recipe's own component.
-export interface RecipeContext {
-  settings?: Record<string, SettingDeclaration[]>;
-  profiles?: Record<string, { id: string; settings?: SettingValues }[]>;
+// A setting a component collects (component.json `collect`), as its catalogue entry records it.
+export interface SettingDeclaration extends SettingKind {
+  required: boolean;
+  secret: boolean;
+  hasDefault: boolean;
 }
 
-// aepm's string grammars (aepm/application.py).
-export const GRAMMARS: Readonly<Record<string, RegExp>> = {
-  identifier: /^[A-Za-z][A-Za-z0-9_]{0,63}$/,
-  qualified: /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/,
-  slug: /^[a-z][a-z0-9-]{0,63}$/,
-  label: /^[A-Za-z][A-Za-z0-9 -]{0,63}$/,
-  environment: /^[A-Z][A-Z0-9_]{0,63}$/,
-  address: /^https?:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?(\/[A-Za-z0-9_/-]*)?$/,
+// An entry module an interface document declares in "x-ourapps-modules": its path (null when the document gives no
+// text), and whether the component installs it (aepm's rule 4: the artefact destination components/<short name>/<path>,
+// or for the native platforms apple and android a destination inside that folder).
+export interface EntryModule {
+  path: string | null;
+  installed: boolean;
+}
+
+// What a component source (the catalogue, or a directory of components) records for one component version.
+// `interfaceDigests` maps type@version of each provided interface to the sha256 of its document; `interfaceModules`
+// maps it to the document's entry modules by platform.
+export interface ComponentFacts {
+  name: string;
+  version: string;
+  provides: Port[];
+  requires: Port[];
+  settings: SettingDeclaration[];
+  interfaceDigests: Record<string, string>;
+  interfaceModules: Record<string, Record<string, EntryModule>>;
+  profiles: { id: string; settings?: SettingValues }[];
+}
+
+// Component data the recipe check also verifies. Without `components` nothing about the components is checked; with it,
+// every preferred component and job candidate must be found at its version. `find` may answer with another version of
+// the name, which the check reports. `application` is the recipe's own component (its component.json).
+export interface RecipeContext {
+  components?: { source: string; find: (name: string, version: string) => ComponentFacts | null };
+  application?: { settings: SettingDeclaration[]; provides: Port[]; requires: Port[] };
+}
+
+// aepm's string grammars (aepm/application.py), anchored: the pattern a class configuration gives a string setting.
+export const GRAMMAR_PATTERNS: Readonly<Record<string, string>> = {
+  identifier: "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+  qualified: "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$",
+  slug: "^[a-z][a-z0-9-]{0,63}$",
+  label: "^[A-Za-z][A-Za-z0-9 -]{0,63}$",
+  environment: "^[A-Z][A-Z0-9_]{0,63}$",
+  address: "^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?(/[A-Za-z0-9_/-]*)?$",
 };
+
+export const GRAMMARS: Readonly<Record<string, RegExp>> = Object.fromEntries(Object.entries(GRAMMAR_PATTERNS).map(([grammar, pattern]) => [grammar, new RegExp(pattern)]));
 
 const SECRET_REFERENCE = /^[A-Za-z][A-Za-z0-9_./-]{0,127}$/;
 const INT32_MIN = -(2 ** 31);
@@ -285,7 +347,7 @@ export interface Recipe {
   category: string;
   tags: string[];
   targets: Targets;
-  components: RecipeComponent[];
+  components: RecipeSlot[];
   jobs: RecipeJob[];
   scale: { question: string; bands: { id: string; label: string; load: Record<string, number> }[] } | null;
   questions: RecipeQuestion[];
@@ -355,25 +417,184 @@ function checkAnswer(q: RecipeQuestion, value: unknown, where: string, errors: s
 
 // ---------------------------------------------------------------- settings
 
-// Why a literal cannot be the value of a setting, or null when it can.
-function literalProblem(value: unknown, s: SettingDeclaration): string | null {
+// Why a literal cannot be the value of a setting, or null when it can. `schema` is the class property that declares the
+// setting, whose other keywords (enum, minimum and the like) the value must also meet.
+function literalProblem(value: unknown, s: SettingKind, schema?: Rec): string | null {
   if (!isLiteral(value)) return "is not a string, number or boolean";
-  if (s.type === "boolean") return typeof value === "boolean" ? null : `is not a boolean, which setting ${s.id} takes`;
-  if (s.type === "integer") return typeof value === "number" && Number.isInteger(value) && value >= INT32_MIN && value <= INT32_MAX ? null : `is not a 32-bit integer, which setting ${s.id} takes`;
-  if (typeof value !== "string") return `is not text, which setting ${s.id} takes`;
-  if (GRAMMARS[s.grammar] && !matchesGrammar(s.grammar, value)) return `does not satisfy the ${s.grammar} grammar of setting ${s.id}`;
-  return null;
+  if (s.type === "boolean") {
+    if (typeof value !== "boolean") return `is not a boolean, which setting ${s.id} takes`;
+  } else if (s.type === "integer") {
+    if (!(typeof value === "number" && Number.isInteger(value) && value >= INT32_MIN && value <= INT32_MAX)) return `is not a 32-bit integer, which setting ${s.id} takes`;
+  } else if (typeof value !== "string") return `is not text, which setting ${s.id} takes`;
+  else if (GRAMMARS[s.grammar] && !matchesGrammar(s.grammar, value)) return `does not satisfy the ${s.grammar} grammar of setting ${s.id}`;
+  const failed = schema ? valueProblem(schema, value) : null;
+  return failed ? `fails the class configuration of setting ${s.id}: ${failed}` : null;
+}
+
+// ---------------------------------------------------------------- slots and classes
+
+// The type and grammar a class property gives its setting, or null when it is none of the three forms
+// {"type": "string", "pattern": <a GRAMMAR_PATTERNS value>}, {"type": "integer"} and {"type": "boolean"}.
+export function propertyKind(schema: unknown): { type: SettingType; grammar: string } | null {
+  if (!isRecord(schema)) return null;
+  if (schema.type === "integer" || schema.type === "boolean") return { type: schema.type, grammar: schema.type };
+  if (schema.type !== "string" || typeof schema.pattern !== "string") return null;
+  const grammar = Object.keys(GRAMMAR_PATTERNS).find((g) => GRAMMAR_PATTERNS[g] === schema.pattern);
+  return grammar ? { type: "string", grammar } : null;
+}
+
+// The class property that declares a setting of this type and grammar.
+export function settingSchema(s: { type: SettingType; grammar: string }): Rec {
+  return s.type === "string" ? { type: "string", pattern: GRAMMAR_PATTERNS[s.grammar] } : { type: s.type };
+}
+
+export function kindText(s: { type: SettingType; grammar: string }): string {
+  return s.type === "string" ? `string (${s.grammar})` : s.type;
+}
+
+// The settings a class configuration declares, by id, with the property schema of each and whether it is always written.
+export function classSettings(cls: Pick<ComponentClass, "configuration">): { id: string; kind: { type: SettingType; grammar: string } | null; schema: Rec; required: boolean }[] {
+  const properties = isRecord(cls.configuration.properties) ? cls.configuration.properties : {};
+  const required = Array.isArray(cls.configuration.required) ? cls.configuration.required : [];
+  return Object.entries(properties).map(([id, schema]) => ({ id, kind: propertyKind(schema), schema: isRecord(schema) ? schema : {}, required: required.includes(id) }));
+}
+
+// The key of an interface in `interfaceDigests` and `interfaceModules`: type@version.
+export function interfaceKey(p: { type: string; version: string }): string {
+  return `${p.type}@${p.version}`;
+}
+
+// What the fit rule reads from a component version: its ports, settings, the digest of each provided interface
+// document, and the entry modules each document declares with whether this component installs them.
+export type FitFacts = Pick<ComponentFacts, "provides" | "requires" | "settings" | "interfaceDigests" | "interfaceModules">;
+
+// Why component `c` does not fit `cls`, or [] when it fits: aepm.recipe.fit applied to catalogue facts, with aepm's
+// reasons provides:T@V, document:T@V, requires:T@V, setting:S, setting-type:S, unset-setting:S, module:P and
+// module:P:PATH. `preferred` is the slot's preferred component, whose interface documents are the class's documents.
+export function fit(cls: ComponentClass, c: FitFacts, preferred: FitFacts): string[] {
+  const reasons: string[] = [];
+  const documents: string[] = [];
+  for (const p of cls.provides) {
+    const key = interfaceKey(p);
+    if (!c.provides.some((x) => interfaceKey(x) === key)) {
+      reasons.push(`provides:${key}`);
+      continue;
+    }
+    const expected = preferred.provides.some((x) => interfaceKey(x) === key) ? preferred.interfaceDigests[key] : undefined;
+    if (expected === undefined || c.interfaceDigests[key] !== expected) {
+      reasons.push(`document:${key}`);
+      continue;
+    }
+    documents.push(key);
+  }
+  for (const r of c.requires) if (!r.optional && !cls.requires.some((x) => interfaceKey(x) === interfaceKey(r))) reasons.push(`requires:${interfaceKey(r)}`);
+  const properties = isRecord(cls.configuration.properties) ? cls.configuration.properties : {};
+  for (const [id, wanted] of Object.entries(properties)) {
+    const s = c.settings.find((x) => x.id === id);
+    if (!s) reasons.push(`setting:${id}`);
+    else if (!isRecord(wanted) || Object.entries(settingSchema(s)).some(([k, v]) => wanted[k] !== v)) reasons.push(`setting-type:${id}`);
+  }
+  const required = Array.isArray(cls.configuration.required) ? cls.configuration.required : [];
+  for (const s of c.settings) if (s.required && !s.hasDefault && !required.includes(s.id)) reasons.push(`unset-setting:${s.id}`);
+  for (const key of documents)
+    for (const [platform, m] of Object.entries(c.interfaceModules[key] ?? {})) {
+      if (m.path === null) reasons.push(`module:${platform}`);
+      else if (!m.installed) reasons.push(`module:${platform}:${m.path}`);
+    }
+  return reasons;
+}
+
+const CLASS_KEYWORDS = ["$schema", "$comment", "title", "description", "type", "properties", "required", "additionalProperties"];
+const PROPERTY_KEYWORDS = ["type", "pattern", "enum", "const", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "minLength", "maxLength", "title", "description", "$comment", "default", "examples"];
+
+function readClassInterfaces(value: unknown, where: string, errors: string[], allowOptional: boolean): ClassInterface[] {
+  if (!Array.isArray(value) || value.length > 50) {
+    errors.push(`${where} must be a list of at most 50 interfaces`);
+    return [];
+  }
+  const out: ClassInterface[] = [];
+  value.forEach((p, i) => {
+    const at = `${where}[${i}]`;
+    if (!isRecord(p)) return void errors.push(`${at} must be an object with type and version`);
+    unknownKeys(p, allowOptional ? ["type", "version", "optional"] : ["type", "version"], at, errors);
+    if (typeof p.type !== "string" || !PORT_TYPE.test(p.type) || !IDENTIFIER.test(portId(p.type))) errors.push(`${at}.type must be an interface type such as ae/card-deck`);
+    else if (out.some((o) => portId(o.type) === portId(p.type as string))) errors.push(`${at}.type ${p.type} has the port id ${portId(p.type)} of another interface in the list`);
+    if (!isVersion(p.version)) errors.push(`${at}.version must be three integers`);
+    if (allowOptional && p.optional !== undefined && typeof p.optional !== "boolean") errors.push(`${at}.optional must be true or false`);
+    out.push({ type: String(p.type), version: String(p.version), ...(allowOptional && p.optional === true ? { optional: true } : {}) });
+  });
+  return out;
+}
+
+// A class configuration: a JSON Schema 2020-12 object schema whose properties are settings, each giving its type and
+// grammar. Returns the settings it declares.
+function readClassConfiguration(value: unknown, where: string, errors: string[]): Map<string, SettingKind & { schema: Rec }> {
+  const kinds = new Map<string, SettingKind & { schema: Rec }>();
+  if (!isRecord(value)) {
+    errors.push(`${where} must be a JSON Schema 2020-12 object schema`);
+    return kinds;
+  }
+  if (JSON.stringify(value).length > LIMITS.classConfiguration) {
+    errors.push(`${where} is larger than ${LIMITS.classConfiguration} characters`);
+    return kinds;
+  }
+  const before = errors.length;
+  for (const key of Object.keys(value)) if (!CLASS_KEYWORDS.includes(key)) errors.push(`${where}: a class configuration does not use ${key.slice(0, 40)} (it uses ${CLASS_KEYWORDS.join(", ")})`);
+  if (value.$schema !== DIALECT_2020_12) errors.push(`${where}.$schema must be ${DIALECT_2020_12}`);
+  if (value.type !== "object") errors.push(`${where}.type must be object`);
+  if (value.additionalProperties !== undefined && typeof value.additionalProperties !== "boolean") errors.push(`${where}.additionalProperties must be true or false`);
+  const properties = value.properties ?? {};
+  if (!isRecord(properties) || Object.keys(properties).length > LIMITS.settings) {
+    errors.push(`${where}.properties must map at most ${LIMITS.settings} setting ids to schemas`);
+    return kinds;
+  }
+  // The root and each property are checked against the meta-schema apart, so a property schema that recurs in many
+  // classes is checked once.
+  if (errors.length === before) {
+    const problem = schemaProblem({ ...value, properties: {} });
+    if (problem) errors.push(`${where} is not a valid JSON Schema 2020-12 schema: ${problem}`);
+  }
+  for (const [id, schema] of Object.entries(properties)) {
+    const at = `${where}.properties.${id.slice(0, 64)}`;
+    if (!IDENTIFIER.test(id)) {
+      errors.push(`${at}: a property name is a setting id`);
+      continue;
+    }
+    if (!isRecord(schema)) {
+      errors.push(`${at} must be a schema object that gives the setting's type and grammar`);
+      continue;
+    }
+    const unused = Object.keys(schema).find((k) => !PROPERTY_KEYWORDS.includes(k));
+    if (unused !== undefined) {
+      errors.push(`${at}: a class property does not use ${unused.slice(0, 40)} (it uses ${PROPERTY_KEYWORDS.join(", ")})`);
+      continue;
+    }
+    const problem = schemaProblem(schema);
+    if (problem) {
+      errors.push(`${at} is not a valid JSON Schema 2020-12 schema: ${problem}`);
+      continue;
+    }
+    const kind = propertyKind(schema);
+    if (!kind) {
+      errors.push(`${at} must give the setting's type and grammar: {"type": "string", "pattern": <the anchored pattern of an aepm grammar>}, {"type": "integer"} or {"type": "boolean"}`);
+      continue;
+    }
+    kinds.set(id, { id, ...kind, schema });
+  }
+  if (Array.isArray(value.required)) for (const name of value.required) if (typeof name === "string" && !(name in properties)) errors.push(`${where}.required names ${name.slice(0, 64)}, which is not one of its properties`);
+  return kinds;
 }
 
 const TEMPLATE_TOKEN = /\{\{([^{}]*)\}\}/g;
 
-function checkSetValue(value: unknown, q: RecipeQuestion, at: string, decl: SettingDeclaration | undefined, byId: ReadonlyMap<string, RecipeQuestion>, hasScale: boolean, errors: string[]): void {
+// `decl` is the setting the target names, with `schema` its class property when the target is a slot.
+function checkSetValue(value: unknown, q: RecipeQuestion, at: string, decl: SettingKind | undefined, schema: Rec | undefined, byId: ReadonlyMap<string, RecipeQuestion>, hasScale: boolean, errors: string[]): void {
   const fail = (message: string): void => void errors.push(`${at} ${message}`);
   const literal = (v: unknown, label: string) => {
     if (!isLiteral(v) || (typeof v === "string" && v.startsWith("$"))) return fail(`${label} must be a string, number or boolean literal not starting with $`);
     if (!decl) return;
     if (decl.secret) return fail(`${label} is a literal, but setting ${decl.id} is secret; use {"ref": <secretRef question>}`);
-    const problem = literalProblem(v, decl);
+    const problem = literalProblem(v, decl, schema);
     if (problem) fail(`${label} ${problem}`);
   };
   const answerFits = (what: string) => {
@@ -388,7 +609,7 @@ function checkSetValue(value: unknown, q: RecipeQuestion, at: string, decl: Sett
       }
       case "choice":
         for (const o of q.options ?? []) {
-          const problem = literalProblem(o, decl);
+          const problem = literalProblem(o, decl, schema);
           if (problem) return fail(`${what}: option ${o} ${problem}`);
         }
         return;
@@ -570,7 +791,6 @@ export function validateRecipe(input: unknown, context: RecipeContext = {}): Res
       questions.push(read.question);
       askWhens.push(read.askWhen);
     });
-  const questionIds = new Set(questions.map((q) => q.id));
   const byId: ReadonlyMap<string, RecipeQuestion> = new Map(questions.map((q) => [q.id, q]));
   const askWhen = new Map<string, ReadCondition>();
   questions.forEach((q, i) => {
@@ -583,41 +803,89 @@ export function validateRecipe(input: unknown, context: RecipeContext = {}): Res
     if (askWhen.has(q.id) && reaches(q.id, q.id, askWhen, new Set())) errors.push(`questions[${i}].askWhen leads back to ${q.id}: questions may not wait on each other in a circle`);
   });
 
-  const components: RecipeComponent[] = [];
-  if (!Array.isArray(input.components) || input.components.length === 0 || input.components.length > LIMITS.components) errors.push(`components must be a list of 1 to ${LIMITS.components} components`);
+  const slots: RecipeSlot[] = [];
+  // The settings each slot's class declares.
+  const declared = new Map<string, Map<string, SettingKind & { schema: Rec }>>();
+  if (!Array.isArray(input.components) || input.components.length === 0 || input.components.length > LIMITS.components) errors.push(`components must be a list of 1 to ${LIMITS.components} slots`);
   else
     input.components.forEach((c, i) => {
       const where = `components[${i}]`;
-      if (!isRecord(c)) return void errors.push(`${where} must be an object`);
-      unknownKeys(c, ["id", "name", "version", "configuration", "includedWhen"], where, errors);
+      if (!isRecord(c)) return void errors.push(`${where} must be a slot: an object with id, class, preferred, configuration and includedWhen`);
+      unknownKeys(c, ["id", "class", "preferred", "configuration", "includedWhen"], where, errors);
       if (typeof c.id !== "string" || !IDENTIFIER.test(c.id)) errors.push(`${where}.id must be an identifier`);
       else if (c.id === APPLICATION_INSTANCE) errors.push(`${where}.id ${APPLICATION_INSTANCE} is reserved for the recipe's own component`);
-      else if (components.some((other) => other.id === c.id)) errors.push(`${where}.id ${c.id} is used twice`);
-      if (!isCatalogueName(c.name)) errors.push(`${where}.name must be <scope>/<name>`);
-      else if (c.name.split("/")[1] === APPLICATION_INSTANCE) errors.push(`${where}.name ${c.name} is not allowed: no component is named ${APPLICATION_INSTANCE}`);
-      if (!isVersion(c.version)) errors.push(`${where}.version must be three integers`);
+      else if (slots.some((other) => other.id === c.id)) errors.push(`${where}.id ${c.id} is used twice`);
+      const cls: ComponentClass = { provides: [], requires: [], configuration: {} };
+      let kinds = new Map<string, SettingKind & { schema: Rec }>();
+      if (!isRecord(c.class)) errors.push(`${where}.class must be an object with provides, requires and configuration`);
+      else {
+        unknownKeys(c.class, ["provides", "requires", "configuration"], `${where}.class`, errors);
+        cls.provides = readClassInterfaces(c.class.provides, `${where}.class.provides`, errors, false);
+        cls.requires = readClassInterfaces(c.class.requires, `${where}.class.requires`, errors, true);
+        for (const p of cls.provides) if (cls.requires.some((r) => portId(r.type) === portId(p.type))) errors.push(`${where}.class: port id ${portId(p.type)} is both provided and required`);
+        kinds = readClassConfiguration(c.class.configuration, `${where}.class.configuration`, errors);
+        if (isRecord(c.class.configuration)) cls.configuration = c.class.configuration;
+      }
+      const preferred = { name: "", version: "" };
+      if (!isRecord(c.preferred)) errors.push(`${where}.preferred must be an object with name and version`);
+      else {
+        unknownKeys(c.preferred, ["name", "version"], `${where}.preferred`, errors);
+        if (!isCatalogueName(c.preferred.name)) errors.push(`${where}.preferred.name must be <scope>/<name>`);
+        else if (c.preferred.name.split("/")[1] === APPLICATION_INSTANCE) errors.push(`${where}.preferred.name ${c.preferred.name} is not allowed: no component is named ${APPLICATION_INSTANCE}`);
+        else preferred.name = c.preferred.name;
+        if (!isVersion(c.preferred.version)) errors.push(`${where}.preferred.version must be three integers`);
+        else preferred.version = c.preferred.version;
+      }
       if (c.configuration !== undefined && !isRecord(c.configuration)) errors.push(`${where}.configuration must be an object`);
-      else if (isRecord(c.configuration) && typeof c.name === "string") {
-        const declared = context.settings?.[c.name];
+      else if (isRecord(c.configuration) && isRecord(c.class)) {
         for (const [setting, v] of Object.entries(c.configuration)) {
-          const decl = declared?.find((d) => d.id === setting);
-          if (declared && !decl) errors.push(`${where}.configuration.${setting.slice(0, 40)} is not a setting of ${c.name}`);
-          else if (decl) {
-            const problem = decl.secret ? "is secret: it takes its reference from a question through {\"ref\": <secretRef question>}, not from configuration" : literalProblem(v, decl);
+          const kind = kinds.get(setting);
+          if (!kind) errors.push(`${where}.configuration.${setting.slice(0, 40)} is not declared in the slot's class configuration`);
+          else {
+            const problem = literalProblem(v, kind, kind.schema);
             if (problem) errors.push(`${where}.configuration.${setting} ${problem}`);
           }
         }
       }
-      components.push({
+      if (typeof c.id === "string") declared.set(c.id, kinds);
+      slots.push({
         id: String(c.id),
-        name: String(c.name),
-        version: String(c.version),
+        class: cls,
+        preferred,
         configuration: isRecord(c.configuration) ? c.configuration : {},
-        includedWhen: readCondition(c.includedWhen, `${where}.includedWhen`, `component ${String(c.id).slice(0, 64)}`, byId, errors)?.condition ?? null,
+        includedWhen: readCondition(c.includedWhen, `${where}.includedWhen`, `slot ${String(c.id).slice(0, 64)}`, byId, errors)?.condition ?? null,
       });
     });
-  const instanceIds = new Set(components.map((c) => c.id));
-  const componentNames = new Set(components.map((c) => c.name));
+  const slotById = new Map(slots.map((s) => [s.id, s]));
+
+  // With component data at hand: what each preferred component is, and whether it fits its slot's class.
+  const components = context.components;
+  const preferredFacts = new Map<string, ComponentFacts>();
+  const lookup = (name: string, version: string, at: string): ComponentFacts | null => {
+    const facts = components!.find(name, version);
+    if (!facts) errors.push(`${at} ${name} ${version} is not in ${components!.source}`);
+    else if (facts.version !== version) errors.push(`${at} ${name} ${version} is not in ${components!.source}, which has version ${facts.version}`);
+    return facts && facts.version === version ? facts : null;
+  };
+  // The preferred component's documents are the class's documents, so a candidate is checked only once it is found.
+  const factsProblem = (facts: ComponentFacts, slot: RecipeSlot, preferred: ComponentFacts): string | null => {
+    const reasons = fit(slot.class, facts, preferred);
+    return reasons.length === 0 ? null : `${facts.name} ${facts.version} does not fit the class of slot ${slot.id}: ${reasons.join(", ")}`;
+  };
+  if (components)
+    slots.forEach((slot, i) => {
+      const { name, version } = slot.preferred;
+      if (name === "" || version === "") return;
+      const at = `components[${i}].preferred`;
+      const facts = lookup(name, version, at);
+      if (!facts) return;
+      preferredFacts.set(slot.id, facts);
+      const problem = factsProblem(facts, slot, facts);
+      if (problem) errors.push(`${at}: ${problem}`);
+      for (const setting of Object.keys(slot.configuration)) {
+        if (facts.settings.find((s) => s.id === setting)?.secret) errors.push(`components[${i}].configuration.${setting} is secret: it takes its reference from a question through {"ref": <secretRef question>}, not from configuration`);
+      }
+    });
 
   const jobs: RecipeJob[] = [];
   if (input.jobs !== undefined) {
@@ -626,9 +894,12 @@ export function validateRecipe(input: unknown, context: RecipeContext = {}): Res
       input.jobs.forEach((j, i) => {
         const where = `jobs[${i}]`;
         if (!isRecord(j)) return void errors.push(`${where} must be an object`);
-        unknownKeys(j, ["id", "candidates", "overrideQuestion"], where, errors);
+        unknownKeys(j, ["id", "slot", "candidates", "overrideQuestion"], where, errors);
         if (typeof j.id !== "string" || !IDENTIFIER.test(j.id)) errors.push(`${where}.id must be an identifier`);
         else if (jobs.some((other) => other.id === j.id)) errors.push(`${where}.id ${j.id} is used twice`);
+        const slot = typeof j.slot === "string" ? slotById.get(j.slot) : undefined;
+        if (!slot) errors.push(`${where}.slot must name one of the recipe's slots`);
+        else if (jobs.some((other) => other.slot === slot.id)) errors.push(`${where}.slot ${slot.id} already has a job`);
         let overrideQuestion: string | undefined;
         if (j.overrideQuestion !== undefined) {
           const target = typeof j.overrideQuestion === "string" ? byId.get(j.overrideQuestion) : undefined;
@@ -642,24 +913,33 @@ export function validateRecipe(input: unknown, context: RecipeContext = {}): Res
           j.candidates.forEach((c, n) => {
             if (!isRecord(c) || !isCatalogueName(c.component) || typeof c.profile !== "string" || !IDENTIFIER.test(c.profile)) return void errors.push(`${where}.candidates[${n}] needs a component name and a profile id`);
             const at = `${where}.candidates[${n}]`;
-            unknownKeys(c, ["component", "profile", "includedWhen"], at, errors);
-            if (!componentNames.has(c.component)) errors.push(`${at}.component ${c.component} is not in components`);
-            const profiles = context.profiles?.[c.component];
-            const profile = profiles?.find((p) => p.id === c.profile);
-            if (profiles && !profile) errors.push(`${at}.profile ${c.profile} is not a profile of ${c.component}`);
-            const declared = context.settings?.[c.component];
-            for (const [setting, v] of Object.entries(profile?.settings ?? {})) {
-              const decl = declared?.find((d) => d.id === setting);
-              if (declared && !decl) errors.push(`${at}.profile ${c.profile} sets ${setting.slice(0, 40)}, which is not a setting of ${c.component}`);
-              else if (decl) {
-                const problem = literalProblem(v, decl);
-                if (problem) errors.push(`${at}.profile ${c.profile} setting ${setting} ${problem}`);
+            unknownKeys(c, ["component", "version", "profile", "includedWhen"], at, errors);
+            let version: string | undefined;
+            if (c.version !== undefined && !isVersion(c.version)) errors.push(`${at}.version must be three integers`);
+            else if (typeof c.version === "string") version = c.version;
+            const preferred = slot !== undefined && c.component === slot.preferred.name && (version === undefined || version === slot.preferred.version);
+            if (slot && !preferred && version === undefined) errors.push(`${at}.version is required: ${c.component} is not the preferred component of slot ${slot.id}`);
+            if (components && slot && (preferred || version !== undefined)) {
+              // The preferred component fits by the check above; any other candidate must fit the slot's class too.
+              const facts = preferred ? preferredFacts.get(slot.id) : lookup(c.component, version!, `${at}.component`);
+              const preferredOfSlot = preferredFacts.get(slot.id);
+              const problem = !preferred && facts && preferredOfSlot ? factsProblem(facts, slot, preferredOfSlot) : null;
+              if (problem) errors.push(`${at}: ${problem}`);
+              const profile = facts?.profiles.find((p) => p.id === c.profile);
+              if (facts && !profile) errors.push(`${at}.profile ${c.profile} is not a profile of ${c.component}`);
+              for (const [setting, v] of Object.entries(profile?.settings ?? {})) {
+                const decl = facts?.settings.find((d) => d.id === setting);
+                if (facts && !decl) errors.push(`${at}.profile ${c.profile} sets ${setting.slice(0, 40)}, which is not a setting of ${c.component}`);
+                else if (decl) {
+                  const problem = literalProblem(v, decl);
+                  if (problem) errors.push(`${at}.profile ${c.profile} setting ${setting} ${problem}`);
+                }
               }
             }
             const includedWhen = readCondition(c.includedWhen, `${at}.includedWhen`, `job ${String(j.id).slice(0, 64)}, ${c.component} ${c.profile}`, byId, errors)?.condition;
-            candidates.push({ component: c.component, profile: c.profile, ...(includedWhen ? { includedWhen } : {}) });
+            candidates.push({ component: c.component, ...(version ? { version } : {}), profile: c.profile, ...(includedWhen ? { includedWhen } : {}) });
           });
-        jobs.push({ id: String(j.id), candidates, ...(overrideQuestion ? { overrideQuestion } : {}) });
+        jobs.push({ id: String(j.id), slot: String(j.slot), candidates, ...(overrideQuestion ? { overrideQuestion } : {}) });
       });
   }
 
@@ -694,32 +974,59 @@ export function validateRecipe(input: unknown, context: RecipeContext = {}): Res
       const where = `connections[${i}]`;
       if (!isRecord(c)) return void errors.push(`${where} must be an object`);
       unknownKeys(c, ["source", "target"], where, errors);
+      // A connection runs from a port its source provides to a port its target requires, both of one interface type.
       const ends = (["source", "target"] as const).map((side) => {
         const end = c[side];
         if (!isRecord(end) || typeof end.instance !== "string" || typeof end.port !== "string" || !IDENTIFIER.test(end.port)) {
           errors.push(`${where}.${side} needs an instance and a port`);
-          return { instance: "", port: "" };
+          return { end: { instance: "", port: "" }, port: undefined };
         }
-        if (end.instance !== APPLICATION_INSTANCE && !instanceIds.has(end.instance)) errors.push(`${where}.${side}.instance ${end.instance.slice(0, 40)} is not a component id or ${APPLICATION_INSTANCE}`);
-        return { instance: end.instance, port: end.port };
+        const at = `${where}.${side}`;
+        const direction = side === "source" ? "provides" : "requires";
+        let port: ClassInterface | undefined;
+        if (end.instance === APPLICATION_INSTANCE) {
+          const own = context.application?.[direction];
+          port = own?.find((p) => p.id === end.port);
+          if (own && !port) errors.push(`${at}.port ${end.port.slice(0, 64)} is not a port the recipe's own component ${direction}`);
+        } else {
+          const slot = slotById.get(end.instance);
+          if (!slot) errors.push(`${at}.instance ${end.instance.slice(0, 40)} is not a slot id or ${APPLICATION_INSTANCE}`);
+          else {
+            port = slot.class[direction].find((p) => portId(p.type) === end.port);
+            if (!port) errors.push(`${at}.port ${end.port.slice(0, 64)} is not a port the class of slot ${slot.id} ${direction} (${slot.class[direction].map((p) => portId(p.type)).join(", ") || "none"})`);
+          }
+        }
+        return { end: { instance: end.instance, port: end.port }, port };
       });
-      connections.push({ source: ends[0], target: ends[1] });
+      const [from, to] = ends as [(typeof ends)[number], (typeof ends)[number]];
+      if (from.port && to.port && (from.port.type !== to.port.type || from.port.version !== to.port.version)) errors.push(`${where} joins ${from.port.type} ${from.port.version} to ${to.port.type} ${to.port.version}; both ends must be one interface type and version`);
+      connections.push({ source: from.end, target: to.end });
     });
 
-  const instanceNames = new Map<string, string>([[APPLICATION_INSTANCE, APPLICATION_INSTANCE], ...components.map((c): [string, string] => [c.id, c.name])]);
   questions.forEach((q, i) =>
     q.effects.forEach((effect, n) => {
       for (const [target, value] of Object.entries(effect.sets)) {
         const at = `questions[${i}].effects[${n}].sets[${target.slice(0, 60)}]`;
-        const resolved = resolveTarget(target, instanceNames.keys());
+        const resolved = resolveTarget(target, [APPLICATION_INSTANCE, ...slotById.keys()]);
         if (!resolved) {
-          errors.push(`${at}: the target must be <componentId>.<settingId> of a component in the recipe, or ${APPLICATION_INSTANCE}.<settingId>`);
+          errors.push(`${at}: the target must be <slotId>.<settingId> of a slot of the recipe, or ${APPLICATION_INSTANCE}.<settingId>`);
           continue;
         }
-        const declared = context.settings?.[instanceNames.get(resolved.instance) as string];
-        const decl = declared?.find((d) => d.id === resolved.setting);
-        if (declared && !decl) errors.push(`${at}: ${resolved.setting} is not a setting of ${resolved.instance}`);
-        checkSetValue(value, q, at, decl, byId, scale !== null, errors);
+        if (resolved.instance === APPLICATION_INSTANCE) {
+          const own = context.application?.settings;
+          const decl = own?.find((d) => d.id === resolved.setting);
+          if (own && !decl) errors.push(`${at}: ${resolved.setting} is not a setting of ${APPLICATION_INSTANCE}`);
+          checkSetValue(value, q, at, decl, undefined, byId, scale !== null, errors);
+          continue;
+        }
+        const kind = declared.get(resolved.instance)?.get(resolved.setting);
+        if (!kind) {
+          errors.push(`${at}: ${resolved.setting} is not declared in the class configuration of slot ${resolved.instance}`);
+          checkSetValue(value, q, at, undefined, undefined, byId, scale !== null, errors);
+          continue;
+        }
+        const secret = preferredFacts.get(resolved.instance)?.settings.find((s) => s.id === resolved.setting)?.secret === true;
+        checkSetValue(value, q, at, { ...kind, secret }, kind.schema, byId, scale !== null, errors);
       }
     }),
   );
@@ -778,7 +1085,7 @@ export function validateRecipe(input: unknown, context: RecipeContext = {}): Res
       category: input.category as string,
       tags,
       targets,
-      components,
+      components: slots,
       jobs,
       scale,
       questions,
@@ -906,6 +1213,11 @@ export interface ComponentEntry {
   guardians: string[];
   provides: Port[];
   requires: Port[];
+  // What the fit rule reads: component.json `collect`, and for each provided interface (type@version) the sha256 of its
+  // document and the entry modules the document declares.
+  settings: SettingDeclaration[];
+  interfaceDigests: Record<string, string>;
+  interfaceModules: Record<string, Record<string, EntryModule>>;
   dependencies: ComponentDependency[];
   suitability: Suitability;
   migration: MigrationSummary | null;
@@ -913,7 +1225,7 @@ export interface ComponentEntry {
   bundle: BundlePointer;
 }
 
-const COMPONENT_FIELDS = ["format", "name", "version", "digest", "description", "category", "tags", "targets", "guardians", "provides", "requires", "dependencies", "suitability", "migration", "source", "bundle"];
+const COMPONENT_FIELDS = ["format", "name", "version", "digest", "description", "category", "tags", "targets", "guardians", "provides", "requires", "settings", "interfaceDigests", "interfaceModules", "dependencies", "suitability", "migration", "source", "bundle"];
 
 function readPorts(value: unknown, where: string, errors: string[], allowOptional = false): Port[] {
   if (!Array.isArray(value) || value.length > 50) {
@@ -928,10 +1240,83 @@ function readPorts(value: unknown, where: string, errors: string[], allowOptiona
     if (typeof p.id !== "string" || !IDENTIFIER.test(p.id)) errors.push(`${at}.id must be an identifier`);
     else if (out.some((o) => o.id === p.id)) errors.push(`${at}.id ${p.id} is used twice`);
     if (typeof p.type !== "string" || !PORT_TYPE.test(p.type)) errors.push(`${at}.type must be an interface type such as ae/card-deck`);
+    else if (typeof p.id === "string" && p.id !== portId(p.type)) errors.push(`${at}.id must be ${portId(p.type)}, the last segment of its type ${p.type}`);
     if (!isVersion(p.version)) errors.push(`${at}.version must be three integers`);
     if (allowOptional && p.optional !== undefined && typeof p.optional !== "boolean") errors.push(`${at}.optional must be true or false`);
     out.push({ id: String(p.id), type: String(p.type), version: String(p.version), ...(allowOptional && p.optional === true ? { optional: true } : {}) });
   });
+  return out;
+}
+
+// component.json `collect` as the entry carries it: { id, type, grammar, required, secret, hasDefault } per setting.
+function readSettings(value: unknown, errors: string[]): SettingDeclaration[] {
+  if (!Array.isArray(value) || value.length > LIMITS.settings) {
+    errors.push(`settings must be a list of at most ${LIMITS.settings} settings: { id, type, grammar, required, secret, hasDefault } for each entry of component.json collect`);
+    return [];
+  }
+  const out: SettingDeclaration[] = [];
+  value.forEach((s, i) => {
+    const at = `settings[${i}]`;
+    if (!isRecord(s)) return void errors.push(`${at} must be an object`);
+    unknownKeys(s, ["id", "type", "grammar", "required", "secret", "hasDefault"], at, errors);
+    if (typeof s.id !== "string" || !IDENTIFIER.test(s.id)) errors.push(`${at}.id must be an identifier`);
+    else if (out.some((o) => o.id === s.id)) errors.push(`${at}.id ${s.id} is used twice`);
+    const type = (SETTING_TYPES as readonly unknown[]).includes(s.type) ? (s.type as SettingType) : null;
+    if (!type) errors.push(`${at}.type must be one of ${SETTING_TYPES.join(", ")}`);
+    else if (type === "string" ? !(typeof s.grammar === "string" && s.grammar in GRAMMAR_PATTERNS) : s.grammar !== type) errors.push(`${at}.grammar must be ${type === "string" ? `one of ${Object.keys(GRAMMAR_PATTERNS).join(", ")}` : type}`);
+    for (const key of ["required", "secret", "hasDefault"] as const) if (typeof s[key] !== "boolean") errors.push(`${at}.${key} must be true or false`);
+    if (s.secret === true && s.hasDefault === true) errors.push(`${at}: a secret setting has no default`);
+    out.push({ id: String(s.id), type: type ?? "string", grammar: String(s.grammar), required: s.required === true, secret: s.secret === true, hasDefault: s.hasDefault === true });
+  });
+  return out;
+}
+
+const PLATFORM = /^[a-z][a-z0-9-]{0,30}$/;
+
+// interfaceDigests: exactly one sha256 digest per provided interface, keyed type@version.
+function readInterfaceDigests(value: unknown, provides: Port[], errors: string[]): Record<string, string> {
+  const keys = provides.map(interfaceKey);
+  if (!isRecord(value)) {
+    errors.push("interfaceDigests must map type@version of each provided interface to sha256:<64 lowercase hex> of its document");
+    return {};
+  }
+  for (const key of Object.keys(value)) if (!keys.includes(key)) errors.push(`interfaceDigests.${key.slice(0, 80)} is not type@version of a provided interface`);
+  for (const key of keys) if (!isDigest(value[key])) errors.push(`interfaceDigests.${key} must be sha256:<64 lowercase hex> of the interface document`);
+  return Object.fromEntries(keys.filter((k) => isDigest(value[k])).map((k) => [k, value[k] as string]));
+}
+
+// interfaceModules: for provided interfaces whose document declares x-ourapps-modules, platform to { path, installed }.
+function readInterfaceModules(value: unknown, provides: Port[], errors: string[]): Record<string, Record<string, EntryModule>> {
+  const keys = provides.map(interfaceKey);
+  if (!isRecord(value)) {
+    errors.push("interfaceModules must map type@version of a provided interface to its document's x-ourapps-modules: platform to { path, installed }");
+    return {};
+  }
+  const out: Record<string, Record<string, EntryModule>> = {};
+  for (const [key, modules] of Object.entries(value)) {
+    const at = `interfaceModules.${key.slice(0, 80)}`;
+    if (!keys.includes(key)) {
+      errors.push(`${at} is not type@version of a provided interface`);
+      continue;
+    }
+    if (!isRecord(modules) || Object.keys(modules).length > 10) {
+      errors.push(`${at} must map at most 10 platforms to { path, installed }`);
+      continue;
+    }
+    const read: Record<string, EntryModule> = {};
+    for (const [platform, m] of Object.entries(modules)) {
+      const where = `${at}.${platform.slice(0, 30)}`;
+      if (!PLATFORM.test(platform)) errors.push(`${where}: a platform is a lowercase name such as web or apple`);
+      else if (!isRecord(m)) errors.push(`${where} must be { path, installed }`);
+      else {
+        unknownKeys(m, ["path", "installed"], where, errors);
+        if (!(m.path === null || (typeof m.path === "string" && isPackagePath(m.path.replace(/\/$/, ""))))) errors.push(`${where}.path must be a path inside the component, or null when the document gives none`);
+        if (typeof m.installed !== "boolean") errors.push(`${where}.installed must be true or false`);
+        else read[platform] = { path: (m.path as string | null) ?? null, installed: m.installed };
+      }
+    }
+    out[key] = read;
+  }
   return out;
 }
 
@@ -1038,6 +1423,11 @@ export function summariseMigration(input: unknown): Result<"migration", Migratio
   return { ok: true, migration: summary };
 }
 
+// What a recipe check reads from a component entry.
+export function componentFacts(e: Pick<ComponentEntry, "name" | "version" | "provides" | "requires" | "settings" | "interfaceDigests" | "interfaceModules" | "suitability">): ComponentFacts {
+  return { name: e.name, version: e.version, provides: e.provides, requires: e.requires, settings: e.settings, interfaceDigests: e.interfaceDigests, interfaceModules: e.interfaceModules, profiles: e.suitability.profiles.map((p) => ({ id: p.id, ...(p.settings ? { settings: p.settings } : {}) })) };
+}
+
 export function validateComponentEntry(input: unknown): Result<"entry", ComponentEntry> {
   const errors: string[] = [];
   if (!isRecord(input)) return { ok: false, errors: ["the body must be a JSON object"] };
@@ -1054,6 +1444,9 @@ export function validateComponentEntry(input: unknown): Result<"entry", Componen
   const provides = readPorts(input.provides, "provides", errors);
   const requires = readPorts(input.requires, "requires", errors, true);
   for (const p of provides) if (requires.some((r) => r.id === p.id)) errors.push(`interface id ${p.id} is both provided and required`);
+  const settings = readSettings(input.settings, errors);
+  const interfaceDigests = readInterfaceDigests(input.interfaceDigests, provides, errors);
+  const interfaceModules = readInterfaceModules(input.interfaceModules, provides, errors);
   const dependencies = readDependencies(input.dependencies, input.name, errors);
   const suitability = validateSuitability(input.suitability);
   if (!suitability.ok) errors.push(...suitability.errors);
@@ -1074,6 +1467,9 @@ export function validateComponentEntry(input: unknown): Result<"entry", Componen
       guardians,
       provides,
       requires,
+      settings,
+      interfaceDigests,
+      interfaceModules,
       dependencies,
       suitability: suitability.suitability,
       migration,

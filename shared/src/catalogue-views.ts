@@ -1,5 +1,5 @@
 // What the public recipe and component routes return. Never carries tokens or credentials.
-import type { BundlePointer, ComponentDependency, MigrationSummary, Port, Recipe, RecipeComponent, ReleasePointer, Suitability, Targets } from "./catalogue.js";
+import type { BundlePointer, ComponentDependency, MigrationSummary, Port, Recipe, RecipeSlot, ReleasePointer, EntryModule, SettingDeclaration, Suitability, Targets } from "./catalogue.js";
 
 export const DEPRECATED_FILTERS = ["exclude", "include", "only"] as const;
 export type DeprecatedFilter = typeof DEPRECATED_FILTERS[number];
@@ -86,10 +86,15 @@ export interface ComponentSummary {
   deprecations: Deprecation[];
 }
 
-// A recipe's component with what the catalogue knows about the named version, if it is listed.
-export interface RecipeComponentView extends RecipeComponent {
-  catalogue: { url: string; description: string; suitability: Suitability; guardians: string[] } | null;
+// A recipe's slot with its preferred component (`url` is its catalogue page, null when that version is not listed),
+// what the catalogue says of that version, and the other catalogue components of its class: `count` of them that fit the
+// class by the fit rule (newest listed version of each), `url` the catalogue list of components providing every type the
+// class provides.
+export interface RecipeSlotView extends Omit<RecipeSlot, "preferred"> {
+  preferred: { name: string; version: string; url: string | null };
+  catalogue: { description: string; suitability: Suitability; guardians: string[] } | null;
   deprecation: Deprecation | null;
+  alternatives: { count: number; url: string };
 }
 
 export interface RecipeVersionView extends RecipeSummary {
@@ -99,7 +104,7 @@ export interface RecipeVersionView extends RecipeSummary {
   description: string;
   diagram: string | null;
   screenshots: string[];
-  components: RecipeComponentView[];
+  components: RecipeSlotView[];
   jobs: Recipe["jobs"];
   scale: Recipe["scale"];
   questions: Recipe["questions"];
@@ -109,16 +114,27 @@ export interface RecipeVersionView extends RecipeSummary {
   versions: VersionRef[];
 }
 
+// `usedBy` lists the listed recipes whose newest version names this component in a slot, with each slot and whether the
+// component is the slot's preferred one or a job candidate.
 export interface ComponentVersionView extends ComponentSummary {
   digest: string;
   guardians: string[];
+  settings: SettingDeclaration[];
+  interfaceDigests: Record<string, string>;
+  interfaceModules: Record<string, Record<string, EntryModule>>;
   dependencies: ComponentDependency[];
   suitability: Suitability;
   migration: MigrationSummary | null;
   source: ReleasePointer;
   bundle: BundlePointer & { url: string };
   versions: VersionRef[];
-  usedBy: { name: string; slug: string; title: string; version: string; url: string }[];
+  usedBy: { name: string; slug: string; title: string; version: string; url: string; slots: { id: string; preferred: boolean }[] }[];
+}
+
+// The catalogue list of components that provide every one of `types`: where a slot's alternatives are found.
+export function providersPath(types: string[]): string {
+  const query = [...new Set(types)].map((t) => `provides=${encodeURIComponent(t)}`).join("&");
+  return `/components${query ? `?${query}` : ""}`;
 }
 
 export interface CategoryCount {
@@ -189,10 +205,10 @@ export const COMPONENT_PACKAGE: PackageSummary = {
 export const RECIPE_PACKAGE: PackageSummary = {
   headline: "The recipe itself: source code and a form, in one archive file, not a link to code elsewhere.",
   parts: [
-    ["Recipe", "recipe.json holds the questions it asks, the components it names (each by exact version), the settings that connect them, the choice of providers by size, and the tested answer sets."],
+    ["Recipe", "recipe.json holds the questions it asks, its slots (for each, the class of component it needs and the component it prefers, by exact version), the settings that connect them, the choice of providers by size, and the tested answer sets."],
     ["Application code", "The recipe's own application-specific component: the screens, artwork, sounds, translated text, rules and end-to-end tests that belong to this application and to no other."],
     ["Instructions", "INSTRUCTIONS.md tells an agent how to answer the questions and what each answer changes, and tells the developer which accounts are needed."],
-    ["Not included", "The components it names. Each is a separate download, fetched by exact version and checked against its digest."],
+    ["Not included", "The components that fill its slots. Each is a separate download, fetched by exact version and checked against its digest."],
   ],
   where: "The archive is a release file on the publisher's public GitHub repository. ourapps keeps this page's details and a pointer to the release; it does not hold or run the code.",
   check: "The digest is the sha256 fingerprint of the archive. aepm checks it before anything is copied. Installing copies the listed files into your application and runs none of the package's code.",
