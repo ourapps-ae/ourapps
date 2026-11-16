@@ -31,7 +31,8 @@ are public and described below.
 - `/recipes` and `/components` list, filter (category, device, tag) and search published recipes
   and components. A recipe page shows its description, diagram, questions (with the condition that asks each), components with the condition that includes each and their
   suitability and guardians, jobs, targets, tested answer sets and versions. Every public page has
-  a plain-text and a JSON variant (`/recipes/<name>.txt`, `.json`) and the API is under
+  a plain-text and a JSON variant (`/recipes/<name>.txt`, `.json`; a recipe's bulky parts are at
+  `/recipes/<name>/details.txt`) and the API is under
   `/api/recipes` and `/api/components`.
 - Developers publish with `POST /api/dev/recipes` and `POST /api/dev/components` (signed in, or a
   `manage` key). The database stores the entry and a pointer to the publisher's GitHub release;

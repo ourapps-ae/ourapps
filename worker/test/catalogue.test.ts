@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { EXAMPLE_BUNDLE_DIGEST, EXAMPLE_INTERFACE_DIGEST, exampleComponentEntries, exampleComponentEntry, exampleRecipeEntry, type BundleLink, type ComponentList, type ComponentSearch, type ComponentVersionView, type DeprecationReport, type RecipeList, type RecipeSearch, type RecipeVersionView } from "@my/store-shared";
 import { Db } from "../src/db.js";
 import { ftsQuery } from "../src/catalogue-db.js";
+import { recipeDetailsText, recipeText } from "../src/catalogue-text.js";
 import type { Env } from "../src/env.js";
 import { handle } from "../src/index.js";
 import { BASE, GH_TOKEN, api, clearDb, fakeFetch, gh, jsonRes, signIn, testDeps, testEnv, type Call, type TestDeps } from "./helpers.js";
@@ -396,7 +397,7 @@ describe("publishing a recipe", () => {
     expect(view.components.find((s) => s.id === "seats")!.alternatives.count).toBe(0);
     const listed = ((await (await get("/api/components?provides=ae/card-deck")).json()) as ComponentList).components.map((c) => c.name);
     expect(listed).toEqual(["acme/card-deck", "acme/fancy-deck", "acme/needy-deck", "acme/old-deck", "acme/partial-deck", "acme/reworded-deck", "acme/strict-deck"]);
-    const text = await (await get("/recipes/poker-night.txt")).text();
+    const text = await (await get("/recipes/poker-night/details.txt")).text();
     expect(text).toContain(`    other components of this class (2): ${BASE}/components?provides=ae%2Fcard-deck`);
   });
 });
@@ -771,23 +772,58 @@ describe("page variants", () => {
     expect(page).toContain("python3 -m aepm fetch poker-night@0.1.0 --with-dependencies --store store");
     expect(page).toContain("- chips (integer): Starting chips?");
     expect(page).toContain("Slots (5): each needs a component of its class");
-    expect(page).toContain("class: ourapps-ae/card-deck-class 1.0.0");
-    expect(page).toContain("provides ae/seating 1.0.0; requires ae/card-deck 1.0.0; settings minimumPlayers integer, always written");
-    expect(page).toContain("provides ae/server-host 1.0.0; requires none; settings targets string (label), always written, expectedPeople integer, always written, accountReference string (slug)");
-    expect(page).toContain("- slot apple (only when (targets includes ios) or (targets includes macos))");
-    expect(page).toContain("    other components of this class (0): https://ourapps.app/components?provides=ae%2Fcard-deck\n    python3 -m aepm alternatives poker-night@0.1.0 deck --store store");
+    expect(page).toContain("- deck: class ourapps-ae/card-deck-class@1.0.0; preferred acme/card-deck@0.1.0");
+    expect(page).toContain("- apple: class ourapps-ae/apple-shell-class@1.0.0; preferred acme/apple-host@0.1.0; only when (targets includes ios) or (targets includes macos)");
     expect(page).toContain("python3 -m aepm design poker-night@0.1.0 --store store --answers answers.json --substitute SLOT=NAME@VERSION --out definition.json");
     expect(page).toContain("asked only when lessons is yes; otherwise it takes its default");
     expect(page).toContain("sets host.targets to the answer");
     expect(page).toContain("range: 100 to 1000000");
     expect(page).toContain("- job server fills slot host (the answer to server restricts the candidates first): acme/server-host (free), acme/server-host (paid)");
-    expect(page).toContain("- seats.seating -> application.seating");
-    expect(page).toContain("guardians: Example Guardian Ltd");
     expect(page).toContain("Tested answer sets: default, web-only");
+    expect(page).toContain(`- acme/card-deck@0.1.0 ${BASE}/components/card-deck.txt`);
+    expect(page).toContain(`${BASE}/recipes/poker-night/details.txt?version=0.1.0`);
+    expect(page).not.toContain("Package foundations");
     expect(page).not.toContain(GH_TOKEN);
+    // An agent reads in this order: how to build, the questions, the slots, the components, the links.
+    const order = ["Build it (aepm", "Questions (", "Slots (", "Components (", "Links"].map((h) => page.indexOf(h));
+    expect(order.every((at, i) => at > 0 && (i === 0 || at > order[i - 1]))).toBe(true);
+
+    const details = await get("/recipes/poker-night/details.txt");
+    expect(details.headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
+    const more = await details.text();
+    expect(more).toContain("Poker Night (acme/poker-night) 0.1.0: details");
+    expect(more).toContain("class: ourapps-ae/card-deck-class 1.0.0");
+    expect(more).toContain("provides ae/seating 1.0.0; requires ae/card-deck 1.0.0; settings minimumPlayers integer, always written");
+    expect(more).toContain("provides ae/server-host 1.0.0; requires none; settings targets string (label), always written, expectedPeople integer, always written, accountReference string (slug)");
+    expect(more).toContain("- slot apple (only when (targets includes ios) or (targets includes macos))");
+    expect(more).toContain("    other components of this class (0): https://ourapps.app/components?provides=ae%2Fcard-deck\n    python3 -m aepm alternatives poker-night@0.1.0 deck --store store");
+    expect(more).toContain("- seats.seating -> application.seating");
+    expect(more).toContain("guardians: Example Guardian Ltd");
+    expect(more).toContain("Package foundations (publisher-declared)");
+    expect(more).toContain("Wrapper licence: ");
+    expect(more).not.toContain(GH_TOKEN);
+    expect((await get("/recipes/poker-night/details.txt?version=0.1.0")).status).toBe(200);
+    expect((await get("/recipes/poker-night/details.txt?version=9.9.9")).status).toBe(404);
+    expect((await get("/recipes/nope/details.txt")).status).toBe(404);
 
     const json = (await (await get("/recipes/poker-night.json")).json()) as RecipeVersionView;
     expect(json).toEqual((await (await get("/api/recipes/poker-night")).json()) as RecipeVersionView);
+
+    // OurPoker 0.7.0 has 39 slots, 825 upstream records and 723 exact dependencies; its recipe page stays small.
+    const slot = json.components[0]!;
+    const upstream: RecipeVersionView["foundations"]["upstream"][number] = { name: "an-upstream-library-with-a-long-name", version: "1.0.0", revision: null, repository: "https://example.org/upstream", purl: "pkg:npm/an-upstream-library-with-a-long-name@1.0.0", licence: "MIT", notices: ["notices/npm/an-upstream-library-with-a-long-name@1.0.0/0-LICENSE"], delivery: { kind: "build-time", manager: "npm", lock: "implementation/package-lock.json", digest: "0".repeat(64), packagePath: "node_modules/an-upstream-library-with-a-long-name", integrity: `sha512-${"A".repeat(86)}==` } };
+    const large: RecipeVersionView = {
+      ...json,
+      components: Array.from({ length: 39 }, (_, i) => ({ ...slot, id: `slot-${i}`, preferred: { ...slot.preferred, name: `acme/part-${i}` } })),
+      foundations: { ...json.foundations, upstream: Array.from({ length: 825 }, () => upstream), compatibility: { ...json.foundations.compatibility, dependencies: Array.from({ length: 723 }, (_, i) => ({ isolation: "isolated", name: `pkg:npm/dependency-${i}`, version: "1.0.0" })) } },
+    };
+    const summary = recipeText(large, BASE);
+    const rest = recipeDetailsText(large, BASE);
+    expect(summary.length).toBeLessThan(60_000);
+    expect(summary).not.toContain("an-upstream-library-with-a-long-name");
+    expect(summary).toContain("- acme/part-38@0.1.0");
+    expect(rest.split("Upstream: an-upstream-library-with-a-long-name").length - 1).toBe(825);
+    expect(rest).toContain("pkg:npm/dependency-722");
     expect(((await (await get("/recipes.json?category=games")).json()) as RecipeList).total).toBe(1);
 
     const components = await (await get("/components.txt")).text();

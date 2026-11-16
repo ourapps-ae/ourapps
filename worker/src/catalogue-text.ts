@@ -146,41 +146,78 @@ function foundationLines(f: Foundations): string[] {
   return ["", "Package foundations (publisher-declared)", "Last successful verification: no verified record", `Wrapper licence: ${f.licence}`, `Platforms: ${f.platforms.join(", ")}`, `Runtime requirements: ${JSON.stringify(f.compatibility.runtimes)}`, `Framework requirements: ${JSON.stringify(f.compatibility.frameworks)}`, `Exact dependencies: ${JSON.stringify(f.compatibility.dependencies)}`, `Styles: ${JSON.stringify(f.compatibility.styles)}`, `Maintainers: ${f.maintenance.owners.join(", ")}; ${f.maintenance.contact}`, `Maintenance repository: ${f.maintenance.repository}`, `Updates: ${f.maintenance.updates.source} (${f.maintenance.updates.strategy})`, ...f.upstream.map(u => `Upstream: ${u.name} ${u.version}; revision ${u.revision ?? "not supplied"}; ${u.repository}; ${u.purl}; licence ${u.licence}; notices ${u.notices.join(", ")}; delivery ${JSON.stringify(u.delivery)}`), ...f.classes.flatMap(c => [`Class: ${c.reference.name} ${c.reference.version} ${c.reference.digest}`, `Shared behaviour suites: ${c.descriptor.verification.map(s => s.id).join(", ")}`, `Class modules: ${JSON.stringify(c.descriptor.provides.map(p => ({ type: p.type, modules: p.modules })))}`, `Class interface and test inventory: ${JSON.stringify(c.descriptor.inventory)}`])];
 }
 
+// One line per slot: its class, its preferred component and when it is included.
+function slotLine(s: RecipeSlotView): string[] {
+  const only = s.includedWhen ? `; only when ${when(s.includedWhen)}` : "";
+  return [`- ${s.id}: class ${s.class.name}@${s.class.version}; preferred ${s.preferred.name}@${s.preferred.version}${only}`, ...(s.deprecation ? [`  DEPRECATION WARNING: ${deprecationLine(s.deprecation)}`] : [])];
+}
+
+// Every component the recipe names, preferred or job candidate, once.
+function componentLines(v: RecipeVersionView): string[] {
+  const urls = new Map<string, string | null>();
+  for (const s of v.components) urls.set(`${s.preferred.name}@${s.preferred.version}`, s.preferred.url);
+  for (const j of v.jobs) for (const c of j.candidates) if (c.version && !urls.has(`${c.component}@${c.version}`)) urls.set(`${c.component}@${c.version}`, null);
+  return [...urls.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([id, url]) => `- ${id}${url ? ` ${url}.txt` : ""}`);
+}
+
+const detailsAddress = (v: RecipeVersionView, origin: string): string => `${origin}/recipes/${v.slug}/details.txt?version=${v.version}`;
+
+// The recipe page an agent reads first: what it is, how to build it, the questions, the slots and the components.
+// The bulky parts are on the details page (recipeDetailsText).
 export function recipeText(v: RecipeVersionView, origin: string): string {
+  const components = componentLines(v);
   return page(`${v.title} (${v.name}) ${v.version}`, [
     ...(v.deprecations.length > 0 ? [...warnings(v.deprecations), `Deprecation tree: ${origin}/api/recipes/${v.slug}/${v.version}/deprecations`, ""] : []),
     v.summary,
     "",
-    `Category: ${v.category}`,
-    `Tags: ${list(v.tags)}`,
     `Targets: ${targets(v.targets)}`,
+    `Category: ${v.category}; tags ${list(v.tags)}`,
     publisherLine(v.publisher),
-    `Source: ${v.source.repository} release ${v.source.tag}`,
-    `Digest: ${v.digest}`,
-    `Bundle: ${v.bundle.asset} ${v.bundle.digest}`,
+    `Source: ${v.source.repository} release ${v.source.tag}; digest ${v.digest}`,
     `Bundle download: GET ${v.bundle.url} returns a link valid for one hour${v.status === "orphaned" ? "; with no publisher the link exists only while the release is public, otherwise the status is bundle-unavailable" : ""}`,
     ...buildSteps(v),
-    `Page: ${origin}/recipes/${v.slug}; JSON: ${origin}/api/recipes/${v.slug}/${v.version}`,
-    ...packageLines(RECIPE_PACKAGE),
-    ...foundationLines(v.foundations),
-    v.diagram ? `Diagram: ${origin}/api/recipes/${v.slug}/${v.version}/diagram.svg` : "Diagram: none",
-    "",
-    "Description",
-    v.description,
     "",
     `Questions (${v.questions.length})`,
     ...v.questions.flatMap(question),
     "",
-    `Slots (${v.components.length}): each needs a component of its class; the preferred component fills it unless another component that fits the class is substituted`,
-    ...v.components.flatMap((s) => slotLines(s, `${v.slug}@${v.version}`)),
+    `Slots (${v.components.length}): each needs a component of its class; the preferred component fills it unless another component that fits the class is substituted (python3 -m aepm alternatives ${v.slug}@${v.version} SLOT --store store)`,
+    ...v.components.flatMap(slotLine),
     "",
     ...jobLines(v),
+    `Tested answer sets: default${v.tests.answerSets.length > 0 ? `, ${v.tests.answerSets.map((s) => s.id).join(", ")}` : ""}`,
+    "",
+    `Components (${components.length})`,
+    ...components,
+    "",
+    "Links",
+    `Details (description, slot classes and suitability, connections, tested answers, package foundations and upstream sources, versions): ${detailsAddress(v, origin)}`,
+    `Page: ${origin}/recipes/${v.slug}; JSON: ${origin}/api/recipes/${v.slug}/${v.version}`,
+    ...(v.diagram ? [`Diagram: ${origin}/api/recipes/${v.slug}/${v.version}/diagram.svg`] : []),
+    `Components diagram: ${origin}/api/recipes/${v.slug}/${v.version}/components.svg`,
+  ]);
+}
+
+// The rest of a recipe: what the summary page leaves out.
+export function recipeDetailsText(v: RecipeVersionView, origin: string): string {
+  return page(`${v.title} (${v.name}) ${v.version}: details`, [
+    `The recipe page, with the build steps, questions, slots and components: ${origin}/recipes/${v.slug}.txt?version=${v.version}`,
+    `Digest: ${v.digest}`,
+    `Bundle: ${v.bundle.asset} ${v.bundle.digest}`,
+    ...packageLines(RECIPE_PACKAGE),
+    "",
+    "Description",
+    v.description,
+    "",
+    `Slot details (${v.components.length})`,
+    ...v.components.flatMap((s) => slotLines(s, `${v.slug}@${v.version}`)),
+    "",
     ...connectionLines(v),
     `Tested answer sets: default${v.tests.answerSets.length > 0 ? `, ${v.tests.answerSets.map((s) => s.id).join(", ")}` : ""}`,
     ...v.tests.answerSets.map((s) => `- ${s.id}: ${JSON.stringify(s.answers)}`),
     "",
     "Versions",
     ...versions(v),
+    ...foundationLines(v.foundations),
   ]);
 }
 

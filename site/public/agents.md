@@ -291,7 +291,7 @@ A name is flagged for every version in one of two ways. `deprecated`: its publis
 
 ### Plain text and JSON for every public page
 
-Each page has the same address with `.txt` or `.json`: `/recipes.txt`, `/recipes/:name.txt`, `/recipes/:name.json?version=0.1.0`, `/components.txt`, `/components/:name.json`. Lists take the same query parameters, and `?q=` searches. `GET /sitemap.xml` lists the public pages.
+Each page has the same address with `.txt` or `.json`: `/recipes.txt`, `/recipes/:name.txt`, `/recipes/:name.json?version=0.1.0`, `/components.txt`, `/components/:name.json`. Lists take the same query parameters, and `?q=` searches. A recipe's `.txt` page gives, in this order, the summary, the build steps, the questions, the slots (class, preferred component, condition), the components and links; `/recipes/:name/details.txt?version=` holds the rest: the description, each slot's class interfaces, suitability and guardians, the connections, the tested answers, the versions and the package foundations with every upstream source. `GET /sitemap.xml` lists the public pages.
 
 ### Publishing (developer session or `manage` key)
 
