@@ -1,5 +1,6 @@
 // What the public recipe and component routes return. Never carries tokens or credentials.
 import type { BundlePointer, ComponentDependency, MigrationSummary, Port, Recipe, RecipeSlot, ReleasePointer, EntryModule, SettingDeclaration, Suitability, Targets } from "./catalogue.js";
+import type { ClassDescriptor, Foundations } from "./foundations.js";
 
 export const DEPRECATED_FILTERS = ["exclude", "include", "only"] as const;
 export type DeprecatedFilter = typeof DEPRECATED_FILTERS[number];
@@ -91,6 +92,7 @@ export interface ComponentSummary {
 // class by the fit rule (newest listed version of each), `url` the catalogue list of components providing every type the
 // class provides.
 export interface RecipeSlotView extends Omit<RecipeSlot, "preferred"> {
+  declaration: ClassDescriptor;
   preferred: { name: string; version: string; url: string | null };
   catalogue: { description: string; suitability: Suitability; guardians: string[] } | null;
   deprecation: Deprecation | null;
@@ -98,6 +100,9 @@ export interface RecipeSlotView extends Omit<RecipeSlot, "preferred"> {
 }
 
 export interface RecipeVersionView extends RecipeSummary {
+  foundations: Foundations;
+  foundationEvidence: "publisher-declared";
+  lastSuccessfulVerification: null;
   digest: string;
   source: ReleasePointer;
   bundle: BundlePointer & { url: string };
@@ -117,6 +122,9 @@ export interface RecipeVersionView extends RecipeSummary {
 // `usedBy` lists the listed recipes whose newest version names this component in a slot, with each slot and whether the
 // component is the slot's preferred one or a job candidate.
 export interface ComponentVersionView extends ComponentSummary {
+  foundations: Foundations;
+  foundationEvidence: "publisher-declared";
+  lastSuccessfulVerification: null;
   digest: string;
   guardians: string[];
   settings: SettingDeclaration[];

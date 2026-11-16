@@ -60,6 +60,7 @@ const del = (path: string, c: string | null = cookie) => handle(api(c, "DELETE",
 function component(patch: (e: Mutable) => void = () => {}): Mutable {
   const e = structuredClone(exampleComponentEntry()) as unknown as Mutable;
   patch(e);
+  for (const a of e.foundations.artefacts) a.destination = a.destination.replace("components/card-deck/", `components/${e.name.split("/")[1]}/`);
   return e;
 }
 
@@ -245,6 +246,36 @@ describe("publishing a component", () => {
 });
 
 describe("publishing a recipe", () => {
+  it("stores declared foundation facts without claiming verification", async () => {
+    await publishRecipe();
+    const r = (await (await get("/api/recipes/poker-night")).json()) as RecipeVersionView;
+    const c = (await (await get("/api/components/card-deck")).json()) as ComponentVersionView;
+    expect(r.foundations).toEqual(exampleRecipeEntry().foundations);
+    expect(c.foundations).toEqual(exampleComponentEntry().foundations);
+    for (const v of [r, c]) { expect(v.foundationEvidence).toBe("publisher-declared"); expect(v.lastSuccessfulVerification).toBeNull(); }
+    expect(await (await get("/components/card-deck.txt")).text()).toContain("Package foundations (publisher-declared)");
+  });
+
+  it("keeps absent foundation projections unavailable without manufacturing facts", async () => {
+    await publishCard();
+    await env.DB.prepare("UPDATE component_versions SET foundations = NULL").run();
+    expect((await get("/api/components/card-deck")).status).toBe(404);
+    const list = (await (await get("/api/components")).json()) as ComponentList;
+    expect(list.components).toEqual([]); expect(list.total).toBe(0); expect(list.categories).toEqual([]);
+    expect((await env.DB.prepare("SELECT digest FROM component_versions").first<{digest: string}>())!.digest).toBe(exampleComponentEntry().digest);
+  });
+
+  it.each(["platforms", "classes", "licence", "upstream", "compatibility", "maintenance"])("requires foundation field %s", async field => {
+    const response = await post("/api/dev/components", component(e => delete e.foundations[field]));
+    expect(response.status).toBe(400);
+  });
+
+  it("rejects descriptor tampering and self-reported verification dates", async () => {
+    const tamper = await post("/api/dev/components", component(e => e.foundations.classes[0].descriptor.provides[0].modules.web = ["changed.mjs"]));
+    expect(tamper.status).toBe(400); expect(((await tamper.json()) as {error: string}).error).toContain("class-digest");
+    expect((await post("/api/dev/components", component(e => e.foundations.lastSuccessfulVerification = "2026-11-15"))).status).toBe(400);
+  });
+
   it("validates recipe.json, the pointers and the diagram", async () => {
     await publishParts();
     const bad = await post("/api/dev/recipes", recipe((e) => (e.recipe.components[0].preferred.version = "x")));
@@ -309,31 +340,31 @@ describe("publishing a recipe", () => {
     expect(((await res.json()) as { error: string }).error).toContain("recipe: components[1].preferred: acme/seating 0.2.0 does not fit the class of slot seats: requires:ae/audit@1.0.0, setting:minimumPlayers");
   });
 
-  it("compares interface documents by the digests the entries record", async () => {
+  it("fits class identity independently of provider document digests", async () => {
     await publishParts();
     githubFor(release("acme/seating", "v0.2.0", "seating-0.2.0.tar", 33));
     const seating = exampleComponentEntries()[1]!;
     const reworded = { ...seating, version: "0.2.0", digest: digest("3"), interfaceDigests: { "ae/seating@1.0.0": digest("9") }, source: { repository: "acme/seating", tag: "v0.2.0" }, bundle: { ...seating.bundle, asset: "seating-0.2.0.tar" } };
     expect((await post("/api/dev/components", reworded)).status).toBe(201);
     const candidate = await post("/api/dev/recipes", recipe((e) => e.recipe.jobs.push({ id: "seats", slot: "seats", candidates: [{ component: "acme/seating", profile: "any" }, { component: "acme/seating", version: "0.2.0", profile: "any" }] })));
-    expect(candidate.status).toBe(400);
-    expect(((await candidate.json()) as { error: string }).error).toContain("recipe: jobs[1].candidates[1]: acme/seating 0.2.0 does not fit the class of slot seats: document:ae/seating@1.0.0");
+    expect(candidate.status).toBe(201);
   });
 
   it("refuses a sets target the slot's class does not declare and a class configuration that is not a valid schema", async () => {
     await publishParts();
     const unknown = await post("/api/dev/recipes", recipe((e) => (e.recipe.questions[2].effects = [{ sets: { "seats.maximumPlayers": "$answer" } }])));
     expect(((await unknown.json()) as { error: string }).error).toContain("maximumPlayers is not declared in the class configuration of slot seats");
-    const invalid = await post("/api/dev/recipes", recipe((e) => (e.recipe.components[1].class.configuration.properties.minimumPlayers = { type: "integer", minimum: "two" })));
+    const invalid = await post("/api/dev/recipes", recipe((e) => (e.foundations.classes[1].descriptor.settings.properties.minimumPlayers = { type: "integer", minimum: "two" })));
     expect(invalid.status).toBe(400);
-    expect(((await invalid.json()) as { error: string }).error).toContain("components[1].class.configuration.properties.minimumPlayers is not a valid JSON Schema 2020-12 schema");
+    expect(((await invalid.json()) as { error: string }).error).toContain("class-setting-pattern");
   });
 
   it("shows each slot's class, preferred component, guardians and suitability", async () => {
     await publishRecipe();
     const view = (await (await get("/api/recipes/poker-night")).json()) as RecipeVersionView;
     const deck = view.components.find((s) => s.id === "deck")!;
-    expect(deck.class.provides).toEqual([{ type: "ae/card-deck", version: "1.0.0" }]);
+    expect(deck.class).toEqual(exampleRecipeEntry().recipe.components[0].class);
+    expect(deck.declaration.provides[0]).toMatchObject({ type: "ae/card-deck", version: "1.0.0" });
     expect(deck.preferred).toEqual({ name: "acme/card-deck", version: "0.1.0", url: `${BASE}/components/card-deck` });
     expect(deck.catalogue).toMatchObject({ description: "A shuffled deck of 52 cards that deals and burns cards.", guardians: ["Example Guardian Ltd"] });
     expect(deck.catalogue!.suitability.profiles[0].cost).toBe("none");
@@ -358,15 +389,15 @@ describe("publishing a recipe", () => {
     expect((await other("strict-deck", 62, (e) => (e.requires = [{ id: "audit", type: "ae/audit", version: "1.0.0" }]))).status).toBe(201);
     expect((await other("old-deck", 63, (e) => ((e.provides = [{ id: "card-deck", type: "ae/card-deck", version: "0.9.0" }]), (e.interfaceDigests = { "ae/card-deck@0.9.0": EXAMPLE_INTERFACE_DIGEST }), (e.interfaceModules = {})))).status).toBe(201);
     expect((await other("reworded-deck", 65, (e) => (e.interfaceDigests = { "ae/card-deck@1.0.0": digest("9") }))).status).toBe(201);
-    expect((await other("partial-deck", 66, (e) => (e.interfaceModules["ae/card-deck@1.0.0"].web.installed = false))).status).toBe(201);
+    expect((await other("partial-deck", 66, (e) => (e.foundations.artefacts = []))).status).toBe(201);
     expect((await other("needy-deck", 64, (e) => (e.settings = [{ id: "seed", type: "string", grammar: "label", required: true, secret: false, hasDefault: false }]))).status).toBe(201);
     const view = (await (await get("/api/recipes/poker-night")).json()) as RecipeVersionView;
-    expect(view.components.find((s) => s.id === "deck")!.alternatives).toEqual({ count: 1, url: `${BASE}/components?provides=ae%2Fcard-deck` });
+    expect(view.components.find((s) => s.id === "deck")!.alternatives).toEqual({ count: 2, url: `${BASE}/components?provides=ae%2Fcard-deck` });
     expect(view.components.find((s) => s.id === "seats")!.alternatives.count).toBe(0);
     const listed = ((await (await get("/api/components?provides=ae/card-deck")).json()) as ComponentList).components.map((c) => c.name);
     expect(listed).toEqual(["acme/card-deck", "acme/fancy-deck", "acme/needy-deck", "acme/old-deck", "acme/partial-deck", "acme/reworded-deck", "acme/strict-deck"]);
     const text = await (await get("/recipes/poker-night.txt")).text();
-    expect(text).toContain(`    other components of this class (1): ${BASE}/components?provides=ae%2Fcard-deck`);
+    expect(text).toContain(`    other components of this class (2): ${BASE}/components?provides=ae%2Fcard-deck`);
   });
 });
 
@@ -374,6 +405,7 @@ describe("job candidates", () => {
   it("records each candidate in its slot: used by, and in the deprecation tree", async () => {
     await publishParts();
     const host = exampleComponentEntries()[2]!;
+    host.foundations.artefacts[0].destination = "components/cheap-host/index.mjs";
     githubFor(release("acme/cheap-host", "v0.1.0", "cheap-host-0.1.0.tar", 71));
     expect((await post("/api/dev/components", { ...host, name: "acme/cheap-host", source: { repository: "acme/cheap-host", tag: "v0.1.0" }, bundle: { ...host.bundle, asset: "cheap-host-0.1.0.tar" } })).status).toBe(201);
     await publishRecipe((e) => e.recipe.jobs[0].candidates.push({ component: "acme/cheap-host", version: "0.1.0", profile: "free" }));
@@ -404,6 +436,7 @@ describe("reading recipes", () => {
       e.recipe.category = "tools";
       e.recipe.tags = ["plants"];
       e.recipe.targets = { client: ["windows"], server: [] };
+      e.foundations.platforms.push("windows");
       e.recipe.version = "1.0.0";
       e.recipe.components = [e.recipe.components[0]];
       e.recipe.jobs = [];
@@ -738,9 +771,9 @@ describe("page variants", () => {
     expect(page).toContain("python3 -m aepm fetch poker-night@0.1.0 --with-dependencies --store store");
     expect(page).toContain("- chips (integer): Starting chips?");
     expect(page).toContain("Slots (5): each needs a component of its class");
-    expect(page).toContain("- slot deck\n    class: provides ae/card-deck 1.0.0; requires none; settings none\n    preferred: acme/card-deck 0.1.0 (https://ourapps.app/components/card-deck.txt)");
-    expect(page).toContain("- slot seats\n    class: provides ae/seating 1.0.0; requires ae/card-deck 1.0.0; settings minimumPlayers integer, always written");
-    expect(page).toContain("- slot host\n    class: provides ae/server-host 1.0.0; requires none; settings targets string (label), always written, expectedPeople integer, always written, accountReference string (slug)");
+    expect(page).toContain("class: ourapps-ae/card-deck-class 1.0.0");
+    expect(page).toContain("provides ae/seating 1.0.0; requires ae/card-deck 1.0.0; settings minimumPlayers integer, always written");
+    expect(page).toContain("provides ae/server-host 1.0.0; requires none; settings targets string (label), always written, expectedPeople integer, always written, accountReference string (slug)");
     expect(page).toContain("- slot apple (only when (targets includes ios) or (targets includes macos))");
     expect(page).toContain("    other components of this class (0): https://ourapps.app/components?provides=ae%2Fcard-deck\n    python3 -m aepm alternatives poker-night@0.1.0 deck --store store");
     expect(page).toContain("python3 -m aepm design poker-night@0.1.0 --store store --answers answers.json --substitute SLOT=NAME@VERSION --out definition.json");
@@ -1118,4 +1151,3 @@ describe("account deletion keeps the catalogue and orphans it", () => {
     await expect(env.DB.prepare("DELETE FROM developers WHERE id = ?").bind(dev).run()).rejects.toThrow();
   });
 });
-

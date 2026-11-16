@@ -1,4 +1,5 @@
 // The recipe library and the component catalogue: browse, search, and read one entry.
+import type { Foundations } from "@my/store-shared";
 import { COMPONENT_PACKAGE, RECIPE_PACKAGE, classSettings, kindText, type BundleLink, type ClassInterface, type PackageSummary, type ComponentList, type ComponentSearch, type ComponentSummary, type ComponentVersionView, type Deprecation, type EntryStatus, type Profile, type RecipeList, type RecipeSearch, type RecipeSlotView, type RecipeSummary, type RecipeVersionView, type SettingDeclaration } from "@my/store-shared";
 import { ApiError, api, whoAmI } from "../api.js";
 import { html, mount, raw, type Raw } from "../html.js";
@@ -315,10 +316,10 @@ function interfaceList(list: ClassInterface[]): Raw {
 // One slot: its id and condition, its class, the preferred component with its suitability and guardians, and the
 // catalogue components of the same class.
 function slotRow(s: RecipeSlotView): Raw {
-  const settings = classSettings(s.class);
+  const settings = classSettings(s.declaration.settings);
   return html`<tr>
     <td><code>${s.id}</code><br /><span class="small muted">${includedWhenHtml(s)}</span></td>
-    <td class="small">provides ${interfaceList(s.class.provides)}<br />requires ${interfaceList(s.class.requires)}${settings.length > 0 ? html`<br /><span class="muted">settings ${settings.map((p, i) => html`${i > 0 ? ", " : ""}<code>${p.id}</code>${p.kind ? ` ${kindText(p.kind)}` : ""}`)}</span>` : ""}</td>
+    <td class="small"><code>${s.class.name}</code> ${s.class.version}<br />provides ${interfaceList(s.declaration.provides)}<br />requires ${interfaceList(s.declaration.requires)}${settings.length > 0 ? html`<br /><span class="muted">settings ${settings.map((p, i) => html`${i > 0 ? ", " : ""}<code>${p.id}</code>${p.kind ? ` ${kindText(p.kind)}` : ""}`)}</span>` : ""}<br />Behaviour suites: ${s.declaration.verification.map(v => v.id).join(", ")}</td>
     <td>${s.preferred.url ? html`<a href="${relative(s.preferred.url)}">${s.preferred.name}</a>` : s.preferred.name}${s.deprecation ? html` ${statusPill(s.deprecation.status, [s.deprecation])}` : none}<br /><span class="small muted">version ${s.preferred.version}</span>${
       s.catalogue
         ? html`<br /><span class="small muted">${s.catalogue.description}</span>${s.catalogue.suitability.profiles.map((p) => html`<div class="small"><b>${p.id}</b>: ${costLabel(p.cost)}, ${loadText(p.load)}</div>`)}<div class="small muted mt-s">Guardians: ${s.catalogue.guardians.length > 0 ? s.catalogue.guardians.join(", ") : "none recorded"}</div>`
@@ -350,6 +351,7 @@ export function recipeBody(v: RecipeVersionView, requested: string): Raw {
           <p class="small muted mt-s">${publisherText(v.publisher)}. Source <a href="${releaseUrl(v.source.repository, v.source.tag)}" target="_blank" rel="noopener">${v.source.repository} ${v.source.tag}</a>.</p>
 
           ${packageCard(RECIPE_PACKAGE, v)}
+          ${foundationsCard(v.foundations)}
 
           <div class="card mt">
             <h2>Build it</h2>
@@ -433,6 +435,23 @@ export async function recipePage(root: HTMLElement, slug: string): Promise<void>
   wireBundle(root, v.bundle.url);
 }
 
+function foundationsCard(f: Foundations): Raw {
+  return html`<div class="card mt" id="package-foundations"><h2>Package at a glance</h2>
+    <p class="small muted">Publisher-declared package facts. Archive contents and test execution are checked by aepm. Last successful verification: no verified record.</p>
+    <dl><dt>Wrapper licence</dt><dd>${f.licence}</dd><dt>Platforms</dt><dd>${f.platforms.join(", ")}</dd>
+    <dt>Bundled package files</dt><dd>${f.files.length} files; ${f.artefacts.length} installed artefacts</dd>
+    <dt>Runtime requirements</dt><dd>${Object.entries(f.compatibility.runtimes).map(([name, range]) => `${name} ${range}`).join(", ") || "none declared"}</dd>
+    <dt>Framework requirements</dt><dd>${Object.entries(f.compatibility.frameworks).map(([role, v]) => `${role}: ${v.name} ${v.range}`).join(", ") || "none declared"}</dd>
+    <dt>Exact dependencies</dt><dd>${f.compatibility.dependencies.map(d => `${d.name} ${d.version} (${d.isolation})`).join(", ") || "none"}</dd>
+    <dt>Stylesheets</dt><dd>${f.compatibility.styles.scope}; namespaces ${f.compatibility.styles.namespaces.join(", ") || "none"}; conflicts ${f.compatibility.styles.conflicts.join(", ") || "none"}</dd>
+    <dt>Maintainers</dt><dd>${f.maintenance.owners.join(", ")} (${f.maintenance.contact})</dd>
+    <dt>Maintenance repository</dt><dd><a href="${f.maintenance.repository}">${f.maintenance.repository}</a></dd>
+    <dt>Update source</dt><dd><a href="${f.maintenance.updates.source}">${f.maintenance.updates.source}</a> (${f.maintenance.updates.strategy})</dd></dl>
+    <h3>Upstream code</h3>${f.upstream.length === 0 ? html`<p>No upstream dependencies declared.</p>` : html`<ul>${f.upstream.map(u => html`<li><b>${u.name} ${u.version}</b>, revision ${u.revision ?? "not supplied"}; licence ${u.licence}. <a href="${u.repository}">Source</a>. <code>${u.purl}</code><br />${u.delivery.kind === "bundled" ? `Bundled source: ${u.delivery.files.map(v => v.path).join(", ")}` : `Downloaded during the build using ${u.delivery.manager}, pinned by ${u.delivery.lock} (${u.delivery.digest})`}. Notices: ${u.notices.join(", ")}.</li>`)}</ul>`}
+    <h3>Independent classes and shared behaviour tests</h3>${f.classes.map(c => html`<details><summary>${c.reference.name} ${c.reference.version}</summary><p class="small"><code>${c.reference.digest}</code></p><p>Provides ${interfaceList(c.descriptor.provides)}; requires ${interfaceList(c.descriptor.requires)}.</p><p>Shared behaviour suites: ${c.descriptor.verification.map(s => `${s.id} (${s.argv.join(" ")})`).join(", ")}</p><p>Platform modules: ${c.descriptor.provides.flatMap(p => Object.entries(p.modules).map(([platform, paths]) => `${p.type} ${platform}: ${paths.join(", ")}`)).join("; ")}</p><p>Interface and test inventory: ${c.descriptor.inventory.map(v => `${v.path} (${v.digest})`).join(", ")}</p></details>`)}
+  </div>`;
+}
+
 export function componentBody(v: ComponentVersionView, requested: string): Raw {
   const ports = (list: { id: string; type: string; version: string; optional?: boolean }[], key: "provides" | "requires") =>
     list.length === 0
@@ -451,9 +470,10 @@ export function componentBody(v: ComponentVersionView, requested: string): Raw {
           <p class="small muted mt-s">${publisherText(v.publisher)}. Source <a href="${releaseUrl(v.source.repository, v.source.tag)}" target="_blank" rel="noopener">${v.source.repository} ${v.source.tag}</a>.</p>
 
           ${packageCard(COMPONENT_PACKAGE, v)}
+          ${foundationsCard(v.foundations)}
 
           <div class="card mt">
-            <h2>Reviewed by</h2>
+            <h2>Publisher-reported guardians</h2>
             <p>${v.guardians.length === 0 ? "No guardian is recorded for this version." : v.guardians.join(", ")}</p>
             <div class="row wrap"><button class="btn secondary sm" id="bundle-link" type="button">${icon("external")} Download the archive</button><span class="small faint">The link is valid for one hour.</span></div>
           </div>

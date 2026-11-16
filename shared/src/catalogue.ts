@@ -3,7 +3,8 @@
 // in the workspace root.
 import { isAppTarget, type AppTarget } from "./targets.js";
 import { checkCondition, confinements, type Condition, type ConditionExpr } from "./conditions.js";
-import { DIALECT_2020_12, schemaProblem, valueProblem } from "./json-schema.js";
+import { valueProblem } from "./json-schema.js";
+import { canonical, classDescriptor, graphProblems, isClassReference, selectedTargets, validateFoundations, type ClassReference, type Foundations } from "./foundations.js";
 
 export const CATALOGUE_FORMAT = 1;
 
@@ -216,18 +217,10 @@ export interface ClassInterface {
   optional?: boolean;
 }
 
-// The class of component a slot needs: the interfaces the recipe connects to it and a JSON Schema 2020-12 object schema
-// of the settings the recipe writes on it.
-export interface ComponentClass {
-  provides: ClassInterface[];
-  requires: ClassInterface[];
-  configuration: Rec;
-}
-
 // One entry of recipe.json `components`: a slot, filled by the preferred component or any other that fits the class.
 export interface RecipeSlot {
   id: string;
-  class: ComponentClass;
+  class: ClassReference;
   preferred: { name: string; version: string };
   configuration: Rec;
   includedWhen: Condition | null;
@@ -292,6 +285,7 @@ export interface EntryModule {
 // `interfaceDigests` maps type@version of each provided interface to the sha256 of its document; `interfaceModules`
 // maps it to the document's entry modules by platform.
 export interface ComponentFacts {
+  foundations: Foundations;
   name: string;
   version: string;
   provides: Port[];
@@ -306,11 +300,12 @@ export interface ComponentFacts {
 // every preferred component and job candidate must be found at its version. `find` may answer with another version of
 // the name, which the check reports. `application` is the recipe's own component (its component.json).
 export interface RecipeContext {
+  authority?: Foundations;
   components?: { source: string; find: (name: string, version: string) => ComponentFacts | null };
   application?: { settings: SettingDeclaration[]; provides: Port[]; requires: Port[] };
 }
 
-// aepm's string grammars (aepm/application.py), anchored: the pattern a class configuration gives a string setting.
+// Anchored setting grammars from aepm/application.py.
 export const GRAMMAR_PATTERNS: Readonly<Record<string, string>> = {
   identifier: "^[A-Za-z][A-Za-z0-9_]{0,63}$",
   qualified: "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$",
@@ -453,9 +448,9 @@ export function kindText(s: { type: SettingType; grammar: string }): string {
 }
 
 // The settings a class configuration declares, by id, with the property schema of each and whether it is always written.
-export function classSettings(cls: Pick<ComponentClass, "configuration">): { id: string; kind: { type: SettingType; grammar: string } | null; schema: Rec; required: boolean }[] {
-  const properties = isRecord(cls.configuration.properties) ? cls.configuration.properties : {};
-  const required = Array.isArray(cls.configuration.required) ? cls.configuration.required : [];
+export function classSettings(schema: Rec): { id: string; kind: { type: SettingType; grammar: string } | null; schema: Rec; required: boolean }[] {
+  const properties = isRecord(schema.properties) ? schema.properties : {};
+  const required = Array.isArray(schema.required) ? schema.required : [];
   return Object.entries(properties).map(([id, schema]) => ({ id, kind: propertyKind(schema), schema: isRecord(schema) ? schema : {}, required: required.includes(id) }));
 }
 
@@ -464,125 +459,44 @@ export function interfaceKey(p: { type: string; version: string }): string {
   return `${p.type}@${p.version}`;
 }
 
-// What the fit rule reads from a component version: its ports, settings, the digest of each provided interface
-// document, and the entry modules each document declares with whether this component installs them.
-export type FitFacts = Pick<ComponentFacts, "provides" | "requires" | "settings" | "interfaceDigests" | "interfaceModules">;
+// Candidate ports, setting declarations and package foundations used by fit.
+export type FitFacts = Pick<ComponentFacts, "name" | "foundations" | "provides" | "requires" | "settings">;
 
-// Why component `c` does not fit `cls`, or [] when it fits: aepm.recipe.fit applied to catalogue facts, with aepm's
-// reasons provides:T@V, document:T@V, requires:T@V, setting:S, setting-type:S, unset-setting:S, module:P and
-// module:P:PATH. `preferred` is the slot's preferred component, whose interface documents are the class's documents.
-export function fit(cls: ComponentClass, c: FitFacts, preferred: FitFacts): string[] {
+// aepm.recipe.fit on publisher-declared facts and independent class authority.
+export function fit(reference: ClassReference, c: FitFacts, authority: Foundations | null, targets?: string[]): string[] {
+  if (!isClassReference(reference)) return ["invalid-class-reference"];
+  if (authority === null) return [`class-unavailable:${reference.name}`];
+  const declaration = classDescriptor(reference, authority);
+  const classFailure = (f: Foundations) => `${f.classes.some(c => canonical(c.reference) === canonical(reference)) ? "class-digest" : "class-unavailable"}:${reference.name}`;
+  if (!declaration) return [classFailure(authority)];
+  if (!classDescriptor(reference, c.foundations)) return [classFailure(c.foundations)];
+  const cls = { provides: declaration.provides, requires: declaration.requires, configuration: declaration.settings };
   const reasons: string[] = [];
-  const documents: string[] = [];
+  reasons.push(...graphProblems([{ name: "authority", foundations: authority }, { name: c.name, foundations: c.foundations }]));
+  if (!c.foundations.implements.some(r => canonical(r) === canonical(reference))) reasons.push(`class-implementation:${reference.name}`);
   for (const p of cls.provides) {
     const key = interfaceKey(p);
     if (!c.provides.some((x) => interfaceKey(x) === key)) {
       reasons.push(`provides:${key}`);
-      continue;
     }
-    const expected = preferred.provides.some((x) => interfaceKey(x) === key) ? preferred.interfaceDigests[key] : undefined;
-    if (expected === undefined || c.interfaceDigests[key] !== expected) {
-      reasons.push(`document:${key}`);
-      continue;
-    }
-    documents.push(key);
   }
   for (const r of c.requires) if (!r.optional && !cls.requires.some((x) => interfaceKey(x) === interfaceKey(r))) reasons.push(`requires:${interfaceKey(r)}`);
   const properties = isRecord(cls.configuration.properties) ? cls.configuration.properties : {};
   for (const [id, wanted] of Object.entries(properties)) {
     const s = c.settings.find((x) => x.id === id);
     if (!s) reasons.push(`setting:${id}`);
-    else if (!isRecord(wanted) || Object.entries(settingSchema(s)).some(([k, v]) => wanted[k] !== v)) reasons.push(`setting-type:${id}`);
+    else if (!isRecord(wanted) || Object.entries(settingSchema(s)).some(([k, v]) => (wanted as Rec)[k] !== v)) reasons.push(`setting-type:${id}`);
   }
   const required = Array.isArray(cls.configuration.required) ? cls.configuration.required : [];
   for (const s of c.settings) if (s.required && !s.hasDefault && !required.includes(s.id)) reasons.push(`unset-setting:${s.id}`);
-  for (const key of documents)
-    for (const [platform, m] of Object.entries(c.interfaceModules[key] ?? {})) {
-      if (m.path === null) reasons.push(`module:${platform}`);
-      else if (!m.installed) reasons.push(`module:${platform}:${m.path}`);
-    }
+  const supported = [...new Set(declaration.provides.flatMap(p => Object.keys(p.modules)))].sort();
+  const short = `components/${c.name.split("/")[1]}/`;
+  for (const platform of supported.filter(p => !targets || targets.includes(p))) {
+    if (!c.foundations.platforms.includes(platform)) reasons.push(`platform:${platform}`);
+    for (const p of declaration.provides) for (const path of p.modules[platform] ?? [])
+      if (!c.foundations.artefacts.some(a => a.destination === short + path || a.destination.startsWith(short + path.replace(/\/$/, "") + "/"))) reasons.push(`module:${platform}:${path}`);
+  }
   return reasons;
-}
-
-const CLASS_KEYWORDS = ["$schema", "$comment", "title", "description", "type", "properties", "required", "additionalProperties"];
-const PROPERTY_KEYWORDS = ["type", "pattern", "enum", "const", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "minLength", "maxLength", "title", "description", "$comment", "default", "examples"];
-
-function readClassInterfaces(value: unknown, where: string, errors: string[], allowOptional: boolean): ClassInterface[] {
-  if (!Array.isArray(value) || value.length > 50) {
-    errors.push(`${where} must be a list of at most 50 interfaces`);
-    return [];
-  }
-  const out: ClassInterface[] = [];
-  value.forEach((p, i) => {
-    const at = `${where}[${i}]`;
-    if (!isRecord(p)) return void errors.push(`${at} must be an object with type and version`);
-    unknownKeys(p, allowOptional ? ["type", "version", "optional"] : ["type", "version"], at, errors);
-    if (typeof p.type !== "string" || !PORT_TYPE.test(p.type) || !IDENTIFIER.test(portId(p.type))) errors.push(`${at}.type must be an interface type such as ae/card-deck`);
-    else if (out.some((o) => portId(o.type) === portId(p.type as string))) errors.push(`${at}.type ${p.type} has the port id ${portId(p.type)} of another interface in the list`);
-    if (!isVersion(p.version)) errors.push(`${at}.version must be three integers`);
-    if (allowOptional && p.optional !== undefined && typeof p.optional !== "boolean") errors.push(`${at}.optional must be true or false`);
-    out.push({ type: String(p.type), version: String(p.version), ...(allowOptional && p.optional === true ? { optional: true } : {}) });
-  });
-  return out;
-}
-
-// A class configuration: a JSON Schema 2020-12 object schema whose properties are settings, each giving its type and
-// grammar. Returns the settings it declares.
-function readClassConfiguration(value: unknown, where: string, errors: string[]): Map<string, SettingKind & { schema: Rec }> {
-  const kinds = new Map<string, SettingKind & { schema: Rec }>();
-  if (!isRecord(value)) {
-    errors.push(`${where} must be a JSON Schema 2020-12 object schema`);
-    return kinds;
-  }
-  if (JSON.stringify(value).length > LIMITS.classConfiguration) {
-    errors.push(`${where} is larger than ${LIMITS.classConfiguration} characters`);
-    return kinds;
-  }
-  const before = errors.length;
-  for (const key of Object.keys(value)) if (!CLASS_KEYWORDS.includes(key)) errors.push(`${where}: a class configuration does not use ${key.slice(0, 40)} (it uses ${CLASS_KEYWORDS.join(", ")})`);
-  if (value.$schema !== DIALECT_2020_12) errors.push(`${where}.$schema must be ${DIALECT_2020_12}`);
-  if (value.type !== "object") errors.push(`${where}.type must be object`);
-  if (value.additionalProperties !== undefined && typeof value.additionalProperties !== "boolean") errors.push(`${where}.additionalProperties must be true or false`);
-  const properties = value.properties ?? {};
-  if (!isRecord(properties) || Object.keys(properties).length > LIMITS.settings) {
-    errors.push(`${where}.properties must map at most ${LIMITS.settings} setting ids to schemas`);
-    return kinds;
-  }
-  // The root and each property are checked against the meta-schema apart, so a property schema that recurs in many
-  // classes is checked once.
-  if (errors.length === before) {
-    const problem = schemaProblem({ ...value, properties: {} });
-    if (problem) errors.push(`${where} is not a valid JSON Schema 2020-12 schema: ${problem}`);
-  }
-  for (const [id, schema] of Object.entries(properties)) {
-    const at = `${where}.properties.${id.slice(0, 64)}`;
-    if (!IDENTIFIER.test(id)) {
-      errors.push(`${at}: a property name is a setting id`);
-      continue;
-    }
-    if (!isRecord(schema)) {
-      errors.push(`${at} must be a schema object that gives the setting's type and grammar`);
-      continue;
-    }
-    const unused = Object.keys(schema).find((k) => !PROPERTY_KEYWORDS.includes(k));
-    if (unused !== undefined) {
-      errors.push(`${at}: a class property does not use ${unused.slice(0, 40)} (it uses ${PROPERTY_KEYWORDS.join(", ")})`);
-      continue;
-    }
-    const problem = schemaProblem(schema);
-    if (problem) {
-      errors.push(`${at} is not a valid JSON Schema 2020-12 schema: ${problem}`);
-      continue;
-    }
-    const kind = propertyKind(schema);
-    if (!kind) {
-      errors.push(`${at} must give the setting's type and grammar: {"type": "string", "pattern": <the anchored pattern of an aepm grammar>}, {"type": "integer"} or {"type": "boolean"}`);
-      continue;
-    }
-    kinds.set(id, { id, ...kind, schema });
-  }
-  if (Array.isArray(value.required)) for (const name of value.required) if (typeof name === "string" && !(name in properties)) errors.push(`${where}.required names ${name.slice(0, 64)}, which is not one of its properties`);
-  return kinds;
 }
 
 const TEMPLATE_TOKEN = /\{\{([^{}]*)\}\}/g;
@@ -768,6 +682,11 @@ function checkConflicts(questions: RecipeQuestion[], askWhen: ReadonlyMap<string
 // `context` carries component data when the caller has it (settings from component.json, profiles from suitability.json); what it lacks is accepted unchecked.
 export function validateRecipe(input: unknown, context: RecipeContext = {}): Result<"recipe", Recipe> {
   const errors: string[] = [];
+  if (!context.authority) errors.push("recipe authority foundations are required");
+  else {
+    const invalid = validateFoundations(context.authority, "recipe", Object.values(GRAMMAR_PATTERNS));
+    if (invalid.length) return { ok: false, errors: invalid };
+  }
   if (!isRecord(input)) return { ok: false, errors: ["recipe.json must be a JSON object"] };
   if (JSON.stringify(input).length > LIMITS.recipeJson) return { ok: false, errors: [`recipe.json is larger than ${LIMITS.recipeJson} characters`] };
   unknownKeys(input, RECIPE_FIELDS, "recipe", errors);
@@ -779,6 +698,7 @@ export function validateRecipe(input: unknown, context: RecipeContext = {}): Res
   if (typeof input.category !== "string" || !SLUG.test(input.category) || input.category.length > 30) errors.push("category must be a lowercase slug of at most 30 characters");
   const tags = readTags(input.tags, "tags", errors);
   const targets = readTargets(input.targets, "targets", errors);
+  if (context.authority) for (const target of [...targets.client, ...(targets.server.length ? ["server"] : [])]) if (!context.authority.platforms.includes(target)) errors.push(`targets: unsupported-platform:${target}`);
 
   const questions: RecipeQuestion[] = [];
   const askWhens: unknown[] = [];
@@ -815,16 +735,19 @@ export function validateRecipe(input: unknown, context: RecipeContext = {}): Res
       if (typeof c.id !== "string" || !IDENTIFIER.test(c.id)) errors.push(`${where}.id must be an identifier`);
       else if (c.id === APPLICATION_INSTANCE) errors.push(`${where}.id ${APPLICATION_INSTANCE} is reserved for the recipe's own component`);
       else if (slots.some((other) => other.id === c.id)) errors.push(`${where}.id ${c.id} is used twice`);
-      const cls: ComponentClass = { provides: [], requires: [], configuration: {} };
+      const cls: { provides: ClassInterface[]; requires: ClassInterface[]; configuration: Rec } = { provides: [], requires: [], configuration: {} };
       let kinds = new Map<string, SettingKind & { schema: Rec }>();
-      if (!isRecord(c.class)) errors.push(`${where}.class must be an object with provides, requires and configuration`);
+      if (!isClassReference(c.class)) errors.push(`${where}.class must be exactly {name, version, digest}`);
       else {
-        unknownKeys(c.class, ["provides", "requires", "configuration"], `${where}.class`, errors);
-        cls.provides = readClassInterfaces(c.class.provides, `${where}.class.provides`, errors, false);
-        cls.requires = readClassInterfaces(c.class.requires, `${where}.class.requires`, errors, true);
+        const descriptor = context.authority ? classDescriptor(c.class, context.authority) : null;
+        if (!descriptor) errors.push(`${where}.class: class-unavailable:${c.class.name}`);
+        cls.provides = descriptor?.provides ?? [];
+        cls.requires = descriptor?.requires ?? [];
         for (const p of cls.provides) if (cls.requires.some((r) => portId(r.type) === portId(p.type))) errors.push(`${where}.class: port id ${portId(p.type)} is both provided and required`);
-        kinds = readClassConfiguration(c.class.configuration, `${where}.class.configuration`, errors);
-        if (isRecord(c.class.configuration)) cls.configuration = c.class.configuration;
+        if (descriptor) {
+          cls.configuration = descriptor.settings;
+          kinds = new Map(classSettings(descriptor.settings).flatMap(s => s.kind ? [[s.id, { id: s.id, ...s.kind, schema: s.schema }]] : []));
+        }
       }
       const preferred = { name: "", version: "" };
       if (!isRecord(c.preferred)) errors.push(`${where}.preferred must be an object with name and version`);
@@ -850,7 +773,7 @@ export function validateRecipe(input: unknown, context: RecipeContext = {}): Res
       if (typeof c.id === "string") declared.set(c.id, kinds);
       slots.push({
         id: String(c.id),
-        class: cls,
+        class: c.class as ClassReference,
         preferred,
         configuration: isRecord(c.configuration) ? c.configuration : {},
         includedWhen: readCondition(c.includedWhen, `${where}.includedWhen`, `slot ${String(c.id).slice(0, 64)}`, byId, errors)?.condition ?? null,
@@ -867,9 +790,10 @@ export function validateRecipe(input: unknown, context: RecipeContext = {}): Res
     else if (facts.version !== version) errors.push(`${at} ${name} ${version} is not in ${components!.source}, which has version ${facts.version}`);
     return facts && facts.version === version ? facts : null;
   };
-  // The preferred component's documents are the class's documents, so a candidate is checked only once it is found.
-  const factsProblem = (facts: ComponentFacts, slot: RecipeSlot, preferred: ComponentFacts): string | null => {
-    const reasons = fit(slot.class, facts, preferred);
+  // Every candidate is checked against the recipe's class declaration.
+  const factsProblem = (facts: ComponentFacts, slot: RecipeSlot): string | null => {
+    const targets = context.authority ? facts.foundations.platforms.filter(p => context.authority!.platforms.includes(p)) : [];
+    const reasons = context.authority ? [...(targets.length ? [] : [`unsupported-platform:${facts.name}`]), ...fit(slot.class, facts, context.authority, targets)] : [`class-unavailable:${slot.class.name}`];
     return reasons.length === 0 ? null : `${facts.name} ${facts.version} does not fit the class of slot ${slot.id}: ${reasons.join(", ")}`;
   };
   if (components)
@@ -880,7 +804,7 @@ export function validateRecipe(input: unknown, context: RecipeContext = {}): Res
       const facts = lookup(name, version, at);
       if (!facts) return;
       preferredFacts.set(slot.id, facts);
-      const problem = factsProblem(facts, slot, facts);
+      const problem = factsProblem(facts, slot);
       if (problem) errors.push(`${at}: ${problem}`);
       for (const setting of Object.keys(slot.configuration)) {
         if (facts.settings.find((s) => s.id === setting)?.secret) errors.push(`components[${i}].configuration.${setting} is secret: it takes its reference from a question through {"ref": <secretRef question>}, not from configuration`);
@@ -922,8 +846,7 @@ export function validateRecipe(input: unknown, context: RecipeContext = {}): Res
             if (components && slot && (preferred || version !== undefined)) {
               // The preferred component fits by the check above; any other candidate must fit the slot's class too.
               const facts = preferred ? preferredFacts.get(slot.id) : lookup(c.component, version!, `${at}.component`);
-              const preferredOfSlot = preferredFacts.get(slot.id);
-              const problem = !preferred && facts && preferredOfSlot ? factsProblem(facts, slot, preferredOfSlot) : null;
+              const problem = !preferred && facts ? factsProblem(facts, slot) : null;
               if (problem) errors.push(`${at}: ${problem}`);
               const profile = facts?.profiles.find((p) => p.id === c.profile);
               if (facts && !profile) errors.push(`${at}.profile ${c.profile} is not a profile of ${c.component}`);
@@ -992,8 +915,9 @@ export function validateRecipe(input: unknown, context: RecipeContext = {}): Res
           const slot = slotById.get(end.instance);
           if (!slot) errors.push(`${at}.instance ${end.instance.slice(0, 40)} is not a slot id or ${APPLICATION_INSTANCE}`);
           else {
-            port = slot.class[direction].find((p) => portId(p.type) === end.port);
-            if (!port) errors.push(`${at}.port ${end.port.slice(0, 64)} is not a port the class of slot ${slot.id} ${direction} (${slot.class[direction].map((p) => portId(p.type)).join(", ") || "none"})`);
+            const ports = context.authority ? classDescriptor(slot.class, context.authority)?.[direction] ?? [] : [];
+            port = ports.find((p) => portId(p.type) === end.port);
+            if (!port) errors.push(`${at}.port ${end.port.slice(0, 64)} is not a port the class of slot ${slot.id} ${direction} (${ports.map((p) => portId(p.type)).join(", ") || "none"})`);
           }
         }
         return { end: { instance: end.instance, port: end.port }, port };
@@ -1047,6 +971,7 @@ export function validateRecipe(input: unknown, context: RecipeContext = {}): Res
         if (!q) errors.push(`${where} answers ${id.slice(0, 40)}, which is not a question`);
         else checkAnswer(q, value, `${where}.${id}`, errors);
       }
+      if (context.authority) try { selectedTargets(context.authority, answers); } catch (error) { errors.push(`${where}: ${(error as Error).message}`); }
       return answers;
     };
     tests.defaultAnswers = checkAnswers(input.tests.defaultAnswers, "tests.defaultAnswers");
@@ -1073,6 +998,26 @@ export function validateRecipe(input: unknown, context: RecipeContext = {}): Res
   }
   if (!isPackagePath(input.instructions)) errors.push("instructions must be a relative path inside the package");
 
+  if (context.authority && components) {
+    const guaranteedSlots = slots.filter(s => s.includedWhen === null && !jobs.some(j => j.slot === s.id));
+    const guaranteed = guaranteedSlots.flatMap(s => {
+      const facts = preferredFacts.get(s.id);
+      return facts ? [{ name: facts.name, foundations: facts.foundations }] : [];
+    });
+    errors.push(...graphProblems([{ name: input.name as string, foundations: context.authority }, ...guaranteed]));
+    const targetQuestion = byId.get("targets");
+    const defaults = targetQuestion && !targetQuestion.askWhen && targetQuestion.default !== undefined ? { targets: targetQuestion.default } : {};
+    for (const [label, answers] of [["default", tests.defaultAnswers], ...tests.answerSets.map(s => [s.id, { ...tests.defaultAnswers, ...s.answers }] as const)] as const) {
+      try {
+        const selected = selectedTargets(context.authority, { ...defaults, ...answers });
+        errors.push(...graphProblems(guaranteed, selected).map(p => `tests.${label}: ${p}`));
+        for (const slot of guaranteedSlots) {
+          const facts = preferredFacts.get(slot.id);
+          if (facts) errors.push(...fit(slot.class, facts, context.authority, selected).map(p => `tests.${label}.${slot.id}: ${p}`));
+        }
+      } catch (error) { errors.push(`tests.${label}: ${(error as Error).message}`); }
+    }
+  }
   if (errors.length > 0) return { ok: false, errors };
   return {
     ok: true,
@@ -1114,6 +1059,7 @@ function readLoad(value: unknown, where: string, errors: string[]): Record<strin
 
 // What a developer sends to publish a recipe version: recipe.json, where the release is, and the page material.
 export interface RecipeEntry {
+  foundations: Foundations;
   format: 1;
   recipe: Recipe;
   digest: string;
@@ -1135,9 +1081,11 @@ export function isSafeSvg(svg: unknown): svg is string {
 export function validateRecipeEntry(input: unknown, context: RecipeContext = {}): Result<"entry", RecipeEntry> {
   const errors: string[] = [];
   if (!isRecord(input)) return { ok: false, errors: ["the body must be a JSON object"] };
-  unknownKeys(input, ["format", "recipe", "digest", "source", "bundle", "page"], "body", errors);
+  unknownKeys(input, ["format", "recipe", "digest", "source", "bundle", "page", "foundations"], "body", errors);
   if (input.format !== CATALOGUE_FORMAT) errors.push(`format must be ${CATALOGUE_FORMAT}`);
-  const recipe = validateRecipe(input.recipe, context);
+  const foundationErrors = validateFoundations(input.foundations, "recipe", Object.values(GRAMMAR_PATTERNS));
+  errors.push(...foundationErrors);
+  const recipe = validateRecipe(input.recipe, { ...context, ...(foundationErrors.length === 0 ? { authority: input.foundations as Foundations } : {}) });
   if (!recipe.ok) errors.push(...recipe.errors.map((e) => `recipe: ${e}`));
   if (!isDigest(input.digest)) errors.push("digest must be sha256:<64 lowercase hex>");
   const release = readRelease(input.source, input.bundle, errors);
@@ -1154,7 +1102,7 @@ export function validateRecipeEntry(input: unknown, context: RecipeContext = {})
     page.screenshots = stringList(input.page.screenshots ?? [], "page.screenshots", errors, { max: LIMITS.screenshots, item: isHttpsUrl, what: "https URLs" });
   }
   if (errors.length > 0 || !recipe.ok) return { ok: false, errors };
-  return { ok: true, entry: { format: 1, recipe: recipe.recipe, digest: input.digest as string, ...release, page } };
+  return { ok: true, entry: { format: 1, foundations: input.foundations as Foundations, recipe: recipe.recipe, digest: input.digest as string, ...release, page } };
 }
 
 // ---------------------------------------------------------------- component catalogue entry
@@ -1202,6 +1150,7 @@ export interface ComponentDependency {
 }
 
 export interface ComponentEntry {
+  foundations: Foundations;
   format: 1;
   name: string;
   version: string;
@@ -1213,8 +1162,7 @@ export interface ComponentEntry {
   guardians: string[];
   provides: Port[];
   requires: Port[];
-  // What the fit rule reads: component.json `collect`, and for each provided interface (type@version) the sha256 of its
-  // document and the entry modules the document declares.
+  // Setting declarations and descriptive interface document facts.
   settings: SettingDeclaration[];
   interfaceDigests: Record<string, string>;
   interfaceModules: Record<string, Record<string, EntryModule>>;
@@ -1225,7 +1173,7 @@ export interface ComponentEntry {
   bundle: BundlePointer;
 }
 
-const COMPONENT_FIELDS = ["format", "name", "version", "digest", "description", "category", "tags", "targets", "guardians", "provides", "requires", "settings", "interfaceDigests", "interfaceModules", "dependencies", "suitability", "migration", "source", "bundle"];
+const COMPONENT_FIELDS = ["format", "name", "version", "digest", "description", "category", "tags", "targets", "guardians", "provides", "requires", "settings", "interfaceDigests", "interfaceModules", "dependencies", "suitability", "migration", "source", "bundle", "foundations"];
 
 function readPorts(value: unknown, where: string, errors: string[], allowOptional = false): Port[] {
   if (!Array.isArray(value) || value.length > 50) {
@@ -1424,14 +1372,15 @@ export function summariseMigration(input: unknown): Result<"migration", Migratio
 }
 
 // What a recipe check reads from a component entry.
-export function componentFacts(e: Pick<ComponentEntry, "name" | "version" | "provides" | "requires" | "settings" | "interfaceDigests" | "interfaceModules" | "suitability">): ComponentFacts {
-  return { name: e.name, version: e.version, provides: e.provides, requires: e.requires, settings: e.settings, interfaceDigests: e.interfaceDigests, interfaceModules: e.interfaceModules, profiles: e.suitability.profiles.map((p) => ({ id: p.id, ...(p.settings ? { settings: p.settings } : {}) })) };
+export function componentFacts(e: Pick<ComponentEntry, "foundations" | "name" | "version" | "provides" | "requires" | "settings" | "interfaceDigests" | "interfaceModules" | "suitability">): ComponentFacts {
+  return { foundations: e.foundations, name: e.name, version: e.version, provides: e.provides, requires: e.requires, settings: e.settings, interfaceDigests: e.interfaceDigests, interfaceModules: e.interfaceModules, profiles: e.suitability.profiles.map((p) => ({ id: p.id, ...(p.settings ? { settings: p.settings } : {}) })) };
 }
 
 export function validateComponentEntry(input: unknown): Result<"entry", ComponentEntry> {
   const errors: string[] = [];
   if (!isRecord(input)) return { ok: false, errors: ["the body must be a JSON object"] };
   unknownKeys(input, COMPONENT_FIELDS, "component", errors);
+  errors.push(...validateFoundations(input.foundations, "component", Object.values(GRAMMAR_PATTERNS)));
   if (input.format !== CATALOGUE_FORMAT) errors.push(`format must be ${CATALOGUE_FORMAT}`);
   if (!isCatalogueName(input.name)) errors.push("name must be <scope>/<name>: lowercase letters, digits and single hyphens");
   if (!isVersion(input.version)) errors.push("version must be three integers, for example 0.1.0");
@@ -1456,6 +1405,7 @@ export function validateComponentEntry(input: unknown): Result<"entry", Componen
   return {
     ok: true,
     entry: {
+      foundations: input.foundations as Foundations,
       format: 1,
       name: input.name as string,
       version: input.version as string,

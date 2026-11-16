@@ -1,5 +1,6 @@
 // D1 access for the recipe library and the component catalogue.
 import { newestVersion, type ComponentDependency, type ComponentEntry, type ComponentFacts, type Deprecation, type EntryModule, type DeprecationReason, type EntryStatus, type MigrationSummary, type Port, type Recipe, type RecipeEntry, type SettingDeclaration, type Suitability, type Targets, type VersionRef, type AppTarget, type DeprecatedFilter } from "@my/store-shared";
+import type { Foundations } from "@my/store-shared";
 
 export type Kind = "recipe" | "component";
 
@@ -60,6 +61,7 @@ export function noticeFor(name: string, version: string, developerId: string | n
 }
 
 interface Common {
+  foundations: Foundations;
   entryId: string;
   name: string;
   slug: string;
@@ -106,6 +108,7 @@ export interface ComponentRow extends Common {
 
 function common(r: Raw): Common {
   return {
+    foundations: JSON.parse(r.foundations as string) as Foundations,
     entryId: r.id as string,
     name: r.name as string,
     slug: r.slug as string,
@@ -160,10 +163,10 @@ export interface ListFilter {
   offset: number;
 }
 
-const RECIPE_COLUMNS = `e.id, e.developer_id, e.deprecated_at, e.deprecated_reason, e.replacement, e.name, e.slug, e.repo, v.version, v.digest, v.title, v.summary, v.category, v.tags, v.targets_client, v.targets_server, v.recipe, v.description, v.diagram, v.screenshots,
+const RECIPE_COLUMNS = `v.foundations, e.id, e.developer_id, e.deprecated_at, e.deprecated_reason, e.replacement, e.name, e.slug, e.repo, v.version, v.digest, v.title, v.summary, v.category, v.tags, v.targets_client, v.targets_server, v.recipe, v.description, v.diagram, v.screenshots,
   v.source_repo, v.source_tag, v.bundle_asset, v.bundle_digest, v.published_at, v.unlisted_at, d.slug AS publisher_slug, d.display_name AS publisher_name`;
 
-const COMPONENT_COLUMNS = `e.id, e.developer_id, e.deprecated_at, e.deprecated_reason, e.replacement, e.name, e.slug, e.repo, v.version, v.digest, v.description, v.category, v.tags, v.targets_client, v.targets_server, v.guardians, v.provides, v.requires, v.settings, v.interface_digests, v.interface_modules, v.dependencies, v.suitability, v.migration,
+const COMPONENT_COLUMNS = `v.foundations, e.id, e.developer_id, e.deprecated_at, e.deprecated_reason, e.replacement, e.name, e.slug, e.repo, v.version, v.digest, v.description, v.category, v.tags, v.targets_client, v.targets_server, v.guardians, v.provides, v.requires, v.settings, v.interface_digests, v.interface_modules, v.dependencies, v.suitability, v.migration,
   v.source_repo, v.source_tag, v.bundle_asset, v.bundle_digest, v.published_at, v.unlisted_at, d.slug AS publisher_slug, d.display_name AS publisher_name`;
 
 // Characters that FTS5 treats as syntax never reach it: every word is quoted, with a prefix star.
@@ -205,7 +208,7 @@ export class CatalogueDb {
   // Versions of one entry, newest first. Unlisted versions are included only when asked.
   async versions(kind: Kind, entryId: string, includeUnlisted = false): Promise<(VersionRef & { unlistedAt: string | null })[]> {
     const t = TABLES[kind];
-    const res = await this.d1.prepare(`SELECT version, digest, published_at, unlisted_at FROM ${t.versions} WHERE ${t.fk} = ?${includeUnlisted ? "" : " AND unlisted_at IS NULL"}`).bind(entryId).all<Raw>();
+    const res = await this.d1.prepare(`SELECT version, digest, published_at, unlisted_at FROM ${t.versions} WHERE ${t.fk} = ?${includeUnlisted ? "" : " AND unlisted_at IS NULL AND foundations IS NOT NULL"}`).bind(entryId).all<Raw>();
     return res.results
       .map((r) => ({ version: r.version as string, digest: r.digest as string, publishedAt: r.published_at as string, unlistedAt: (r.unlisted_at as string | null) ?? null }))
       .sort((a, b) => (newestVersion([a.version, b.version]) === a.version ? -1 : 1));
@@ -222,10 +225,10 @@ export class CatalogueDb {
     statements.push(
       this.d1
         .prepare(
-          `INSERT INTO recipe_versions (recipe_id, version, digest, title, summary, category, tags, targets_client, targets_server, recipe, description, diagram, screenshots, source_repo, source_tag, bundle_asset, bundle_digest, published_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           `INSERT INTO recipe_versions (recipe_id, version, digest, title, summary, category, tags, targets_client, targets_server, recipe, description, diagram, screenshots, source_repo, source_tag, bundle_asset, bundle_digest, published_at, foundations)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .bind(target.id, r.version, e.digest, r.title, r.summary, r.category, JSON.stringify(r.tags), JSON.stringify(r.targets.client), JSON.stringify(r.targets.server), JSON.stringify(r), e.page.description, e.page.diagram, JSON.stringify(e.page.screenshots), e.source.repository, e.source.tag, e.bundle.asset, e.bundle.digest, now),
+         .bind(target.id, r.version, e.digest, r.title, r.summary, r.category, JSON.stringify(r.tags), JSON.stringify(r.targets.client), JSON.stringify(r.targets.server), JSON.stringify(r), e.page.description, e.page.diagram, JSON.stringify(e.page.screenshots), e.source.repository, e.source.tag, e.bundle.asset, e.bundle.digest, now, JSON.stringify(e.foundations)),
     );
     for (const ref of slotComponents(r)) {
       statements.push(
@@ -243,10 +246,10 @@ export class CatalogueDb {
     statements.push(
       this.d1
         .prepare(
-          `INSERT INTO component_versions (component_id, version, digest, description, category, tags, targets_client, targets_server, guardians, provides, requires, settings, interface_digests, interface_modules, dependencies, suitability, migration, source_repo, source_tag, bundle_asset, bundle_digest, published_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           `INSERT INTO component_versions (component_id, version, digest, description, category, tags, targets_client, targets_server, guardians, provides, requires, settings, interface_digests, interface_modules, dependencies, suitability, migration, source_repo, source_tag, bundle_asset, bundle_digest, published_at, foundations)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .bind(target.id, e.version, e.digest, e.description, e.category, JSON.stringify(e.tags), JSON.stringify(e.targets.client), JSON.stringify(e.targets.server), JSON.stringify(e.guardians), JSON.stringify(e.provides), JSON.stringify(e.requires), JSON.stringify(e.settings), JSON.stringify(e.interfaceDigests), JSON.stringify(e.interfaceModules), JSON.stringify(e.dependencies), JSON.stringify(e.suitability), e.migration ? JSON.stringify(e.migration) : null, e.source.repository, e.source.tag, e.bundle.asset, e.bundle.digest, now),
+         .bind(target.id, e.version, e.digest, e.description, e.category, JSON.stringify(e.tags), JSON.stringify(e.targets.client), JSON.stringify(e.targets.server), JSON.stringify(e.guardians), JSON.stringify(e.provides), JSON.stringify(e.requires), JSON.stringify(e.settings), JSON.stringify(e.interfaceDigests), JSON.stringify(e.interfaceModules), JSON.stringify(e.dependencies), JSON.stringify(e.suitability), e.migration ? JSON.stringify(e.migration) : null, e.source.repository, e.source.tag, e.bundle.asset, e.bundle.digest, now, JSON.stringify(e.foundations)),
     );
     for (const [direction, ports] of [["provides", e.provides], ["requires", e.requires]] as const) {
       for (const p of ports) {
@@ -286,7 +289,7 @@ export class CatalogueDb {
   // Newest listed version and the search row for one entry. `adding` is a version inserted by the same batch.
   private async refreshStatements(kind: Kind, entryId: string, now: string, adding?: string): Promise<D1PreparedStatement[]> {
     const t = TABLES[kind];
-    const listed = (await this.d1.prepare(`SELECT version FROM ${t.versions} WHERE ${t.fk} = ? AND unlisted_at IS NULL`).bind(entryId).all<{ version: string }>()).results.map((r) => r.version);
+    const listed = (await this.d1.prepare(`SELECT version FROM ${t.versions} WHERE ${t.fk} = ? AND unlisted_at IS NULL AND foundations IS NOT NULL`).bind(entryId).all<{ version: string }>()).results.map((r) => r.version);
     const latest = newestVersion(adding ? [...listed, adding] : listed);
     const statements = [
       this.d1.prepare(`UPDATE ${t.entries} SET latest_version = ?, updated_at = ? WHERE id = ?`).bind(latest, now, entryId),
@@ -332,7 +335,7 @@ export class CatalogueDb {
     const wanted = version === "latest" ? entry.latestVersion : version;
     if (!wanted) return null;
     const r = await this.d1
-      .prepare(`SELECT ${columns} FROM ${t.entries} e JOIN ${t.versions} v ON v.${t.fk} = e.id LEFT JOIN developers d ON d.id = e.developer_id WHERE e.id = ? AND v.version = ?${includeUnlisted ? "" : " AND v.unlisted_at IS NULL"}`)
+      .prepare(`SELECT ${columns} FROM ${t.entries} e JOIN ${t.versions} v ON v.${t.fk} = e.id LEFT JOIN developers d ON d.id = e.developer_id WHERE e.id = ? AND v.version = ? AND v.foundations IS NOT NULL${includeUnlisted ? "" : " AND v.unlisted_at IS NULL"}`)
       .bind(entry.id, wanted)
       .first<Raw>();
     return r ? { entry, row: convert(r) } : null;
@@ -355,7 +358,7 @@ export class CatalogueDb {
   }
 
   private filters(kind: Kind, f: ListFilter): { where: string; binds: string[] } {
-    let where = deprecatedClause(f.deprecated);
+    let where = " AND v.foundations IS NOT NULL" + deprecatedClause(f.deprecated);
     const binds: string[] = [];
     if (f.category) {
       where += " AND v.category = ?";
@@ -384,7 +387,7 @@ export class CatalogueDb {
   async categories(kind: Kind): Promise<{ category: string; count: number }[]> {
     const t = TABLES[kind];
     const res = await this.d1
-      .prepare(`SELECT v.category AS category, COUNT(*) AS n FROM ${t.entries} e JOIN ${t.versions} v ON v.${t.fk} = e.id AND v.version = e.latest_version WHERE e.latest_version IS NOT NULL AND v.category IS NOT NULL GROUP BY v.category ORDER BY n DESC, v.category`)
+      .prepare(`SELECT v.category AS category, COUNT(*) AS n FROM ${t.entries} e JOIN ${t.versions} v ON v.${t.fk} = e.id AND v.version = e.latest_version WHERE e.latest_version IS NOT NULL AND v.category IS NOT NULL AND v.foundations IS NOT NULL GROUP BY v.category ORDER BY n DESC, v.category`)
       .all<{ category: string; n: number }>();
     return res.results.map((r) => ({ category: r.category, count: r.n }));
   }
@@ -395,7 +398,7 @@ export class CatalogueDb {
     const res = await this.d1
       .prepare(
         `SELECT ${RECIPE_COLUMNS} FROM catalogue_fts JOIN recipes e ON e.id = catalogue_fts.entry_id JOIN recipe_versions v ON v.recipe_id = e.id AND v.version = e.latest_version LEFT JOIN developers d ON d.id = e.developer_id
-         WHERE catalogue_fts MATCH ? AND catalogue_fts.kind = 'recipe' AND e.latest_version IS NOT NULL${deprecatedClause(deprecated)} ORDER BY bm25(catalogue_fts) LIMIT ?`,
+         WHERE catalogue_fts MATCH ? AND catalogue_fts.kind = 'recipe' AND e.latest_version IS NOT NULL AND v.foundations IS NOT NULL${deprecatedClause(deprecated)} ORDER BY bm25(catalogue_fts) LIMIT ?`,
       )
       .bind(match, limit)
       .all<Raw>();
@@ -408,7 +411,7 @@ export class CatalogueDb {
     const res = await this.d1
       .prepare(
         `SELECT ${COMPONENT_COLUMNS} FROM catalogue_fts JOIN components e ON e.id = catalogue_fts.entry_id JOIN component_versions v ON v.component_id = e.id AND v.version = e.latest_version LEFT JOIN developers d ON d.id = e.developer_id
-         WHERE catalogue_fts MATCH ? AND catalogue_fts.kind = 'component' AND e.latest_version IS NOT NULL${deprecatedClause(deprecated)} ORDER BY bm25(catalogue_fts) LIMIT ?`,
+         WHERE catalogue_fts MATCH ? AND catalogue_fts.kind = 'component' AND e.latest_version IS NOT NULL AND v.foundations IS NOT NULL${deprecatedClause(deprecated)} ORDER BY bm25(catalogue_fts) LIMIT ?`,
       )
       .bind(match, limit)
       .all<Raw>();
@@ -475,7 +478,7 @@ export class CatalogueDb {
     if (refs.length === 0) return [];
     const statements = refs.map((ref) =>
       this.d1
-        .prepare(`SELECT ${COMPONENT_COLUMNS} FROM components e JOIN component_versions v ON v.component_id = e.id AND v.version = ? AND v.unlisted_at IS NULL LEFT JOIN developers d ON d.id = e.developer_id WHERE e.name = ?`)
+        .prepare(`SELECT ${COMPONENT_COLUMNS} FROM components e JOIN component_versions v ON v.component_id = e.id AND v.version = ? AND v.unlisted_at IS NULL AND v.foundations IS NOT NULL LEFT JOIN developers d ON d.id = e.developer_id WHERE e.name = ?`)
         .bind(ref.version, ref.name),
     );
     const results = await this.d1.batch<Raw>(statements);
@@ -486,7 +489,7 @@ export class CatalogueDb {
   async componentFacts(refs: { name: string; version: string }[]): Promise<(ComponentFacts | null)[]> {
     if (refs.length === 0) return [];
     const statements = refs.map((ref) =>
-      this.d1.prepare(`SELECT ${FACT_COLUMNS}, v.suitability FROM components e JOIN component_versions v ON v.component_id = e.id AND v.version = ? AND v.unlisted_at IS NULL WHERE e.name = ?`).bind(ref.version, ref.name),
+      this.d1.prepare(`SELECT ${FACT_COLUMNS}, v.suitability FROM components e JOIN component_versions v ON v.component_id = e.id AND v.version = ? AND v.unlisted_at IS NULL AND v.foundations IS NOT NULL WHERE e.name = ?`).bind(ref.version, ref.name),
     );
     const results = await this.d1.batch<Raw>(statements);
     return results.map((res) => {
@@ -506,7 +509,7 @@ export class CatalogueDb {
       this.d1
         .prepare(
           `SELECT ${FACT_COLUMNS} FROM components e JOIN component_versions v ON v.component_id = e.id AND v.version = e.latest_version
-           WHERE e.latest_version IS NOT NULL AND EXISTS (SELECT 1 FROM component_interfaces i WHERE i.component_id = e.id AND i.version = e.latest_version AND i.direction = 'provides' AND i.type IN (${group.map(() => "?").join(", ")}))`,
+           WHERE e.latest_version IS NOT NULL AND v.foundations IS NOT NULL AND EXISTS (SELECT 1 FROM component_interfaces i WHERE i.component_id = e.id AND i.version = e.latest_version AND i.direction = 'provides' AND i.type IN (${group.map(() => "?").join(", ")}))`,
         )
         .bind(...group),
     );
@@ -520,7 +523,7 @@ export class CatalogueDb {
     const res = await this.d1
       .prepare(
         `SELECT e.name, e.slug, v.title, v.version, rs.slot_id, MAX(rs.preferred) AS preferred FROM recipe_slots rs JOIN recipes e ON e.id = rs.recipe_id AND e.latest_version = rs.version
-         JOIN recipe_versions v ON v.recipe_id = e.id AND v.version = e.latest_version WHERE rs.component_name = ? GROUP BY e.id, rs.slot_id ORDER BY e.name, rs.slot_id`,
+         JOIN recipe_versions v ON v.recipe_id = e.id AND v.version = e.latest_version WHERE rs.component_name = ? AND v.foundations IS NOT NULL GROUP BY e.id, rs.slot_id ORDER BY e.name, rs.slot_id`,
       )
       .bind(componentName)
       .all<Raw>();
@@ -543,10 +546,11 @@ export interface RecipeUse {
   slots: { id: string; preferred: boolean }[];
 }
 
-const FACT_COLUMNS = "e.name, v.version, v.provides, v.requires, v.settings, v.interface_digests, v.interface_modules";
+const FACT_COLUMNS = "v.foundations, e.name, v.version, v.provides, v.requires, v.settings, v.interface_digests, v.interface_modules";
 
 function fitFacts(r: Raw): Omit<ComponentFacts, "profiles"> {
   return {
+    foundations: JSON.parse(r.foundations as string) as Foundations,
     name: r.name as string,
     version: r.version as string,
     provides: parse<Port[]>(r.provides, []),

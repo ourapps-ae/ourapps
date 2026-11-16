@@ -74,6 +74,8 @@ GET /api/recipes/poker-night/0.1.0/deprecations</code></pre>
         { id: "compose-search", title: "Search by interface" },
         { id: "compose-suitability", title: "Check suitability" },
         { id: "compose-warnings", title: "Deprecation warnings" },
+        { id: "compose-classes", title: "Classes and substitutes" },
+        { id: "compose-facts", title: "What a package declares" },
       ],
       body: html`
         <p>Open <a href="/components">/components</a>. Every component is a reviewed part with a contract. Filter by category and device, search by name, title, summary, tags and description, and read a part's page for its versions and the recipes that use it.</p>
@@ -87,6 +89,20 @@ GET /api/components/search?q=seating&amp;deprecated=exclude</code></pre>
         <p>Each component page lists the jobs the part can do and its suitability profiles: the load it carries, its cost, the regions it runs in, compliance notes and the provider. Choose the profile that fits how many people use the application and how often. The page also says how the part's data moves: the stores it keeps, the formats it exports, whether it must stop while data moves, and how many days data is kept after removal. Guardians are the parties whose signatures a part can carry; you choose which ones to trust.</p>
         <h3 id="compose-warnings">Deprecation warnings</h3>
         <p>A flagged component shows a <b>Deprecated</b> pill and a banner, and so does every component or recipe built on it. Read the banner before you choose the part. <a href="#deprecation">What an agent does with a warning</a>.</p>
+        <h3 id="compose-classes">Classes and substitutes</h3>
+        <p>Every component implements one or more <b>classes</b>. A class is an independent, versioned contract with its own fingerprint: the interfaces it provides and requires, the settings it takes, the entry modules each device needs, and a set of <b>shared behaviour tests</b>. A recipe slot names a class and a preferred component. Any component that implements the same class, on the devices you chose, can fill the slot instead, and the class's own tests run against that component's real code before it is signed. A component cannot replace the shared tests with its own.</p>
+        <pre><code>aepm alternatives ourpoker@&lt;version&gt; theme --store store
+aepm design ourpoker@&lt;version&gt; --store store --answers answers.json \
+  --substitute theme=ourapps-ae/theme-high-contrast@&lt;version&gt; --out definition.json</code></pre>
+        <h3 id="compose-facts">What a package declares</h3>
+        <ul class="bullets">
+          <li><b>Devices</b>: the targets it supports (web, server, iPhone and iPad, Mac, Apple TV, Android, Windows). A web-only part never fits a native slot.</li>
+          <li><b>Licences and sources</b>: the package's own licence, and separately each third-party source it contains or builds with, with its exact version, revision, licence and notice files.</li>
+          <li><b>Contents</b>: whether third-party code is bundled in the archive or fetched at build time from an exact lock. Installing never downloads code.</li>
+          <li><b>Compatibility</b>: runtime and framework version ranges, dependencies shared with other parts (which must agree) or kept isolated, and the stylesheet names it uses globally. Conflicts are refused before anything is installed.</li>
+          <li><b>Maintenance</b>: owners, a contact, the repository and where updates come from.</li>
+        </ul>
+        <p>These are the publisher's declarations. aepm checks them against the archive and its signed review evidence, which is where a part's last successful test time comes from. Details: <a href="/docs/package-foundations.md">package foundations</a>.</p>
         <h3>Publish your composition</h3>
         <p>Once your agent has connected the parts into an application, you can publish the result as a recipe so that others pick it from the library. <a href="#publish">Publish a recipe or component</a>.</p>
       `,

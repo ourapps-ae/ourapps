@@ -1,5 +1,6 @@
 // The recipe library and component catalogue: public reads, and publishing by a signed-in developer or a manage key.
 // D1 holds pointers and page material; the packages stay in the publisher's GitHub releases.
+import { classDescriptor, type Foundations } from "@my/store-shared";
 import {
   DEPRECATED_FILTERS,
   NEIGHBOURS_SHOWN,
@@ -135,26 +136,24 @@ async function componentSummaries(env: Env, d: CatalogueDb, rows: ComponentRow[]
   return rows.map((r, i) => componentSummary(env, r, trees[i].notices));
 }
 
-// For each slot, the catalogue list of the components providing every interface type its class provides, and how many
-// of them, other than the preferred component, fit the class (newest listed version of each). The preferred component's
-// interface documents define the class's documents, so without it listed nothing fits; as with aepm alternatives, a
-// class that provides no interface has no alternatives.
-async function alternativesFor(env: Env, d: CatalogueDb, slots: RecipeSlot[], preferred: (ComponentFacts | null)[]): Promise<RecipeSlotView["alternatives"][]> {
-  const candidates = await d.providerFacts([...new Set(slots.flatMap((s) => s.class.provides.map((p) => p.type)))]);
-  return slots.map((s, i) => {
-    const own = preferred[i];
+// Counts independent class implementations among the newest listed component versions.
+async function alternativesFor(env: Env, d: CatalogueDb, slots: RecipeSlot[], authority: Foundations): Promise<RecipeSlotView["alternatives"][]> {
+  const provides = (s: RecipeSlot) => classDescriptor(s.class, authority)!.provides;
+  const candidates = await d.providerFacts([...new Set(slots.flatMap((s) => provides(s).map((p) => p.type)))]);
+  return slots.map((s) => {
     return {
-      count: s.class.provides.length === 0 || !own ? 0 : candidates.filter((c) => c.name !== s.preferred.name && fit(s.class, c, own).length === 0).length,
-      url: `${env.PUBLIC_ORIGIN}${providersPath(s.class.provides.map((p) => p.type))}`,
+      count: provides(s).length === 0 ? 0 : candidates.filter((c) => c.name !== s.preferred.name && fit(s.class, c, authority).length === 0).length,
+      url: `${env.PUBLIC_ORIGIN}${providersPath(provides(s).map((p) => p.type))}`,
     };
   });
 }
 
 async function recipeView(env: Env, d: CatalogueDb, entry: EntryRow, r: RecipeRow): Promise<RecipeVersionView> {
   const recipe = r.recipe;
-  const [listed, [tree], preferred] = await Promise.all([d.catalogueFor(recipe.components.map((s) => s.preferred)), d.deprecationsFor([subject("recipe", r)]), d.componentFacts(recipe.components.map((s) => s.preferred))]);
-  const alternatives = await alternativesFor(env, d, recipe.components, preferred);
+  const [listed, [tree]] = await Promise.all([d.catalogueFor(recipe.components.map((s) => s.preferred)), d.deprecationsFor([subject("recipe", r)])]);
+  const alternatives = await alternativesFor(env, d, recipe.components, r.foundations);
   return {
+    foundations: r.foundations, foundationEvidence: "publisher-declared", lastSuccessfulVerification: null,
     ...recipeSummary(env, r, tree.notices),
     digest: r.digest,
     source: { repository: r.sourceRepo, tag: r.sourceTag },
@@ -166,6 +165,7 @@ async function recipeView(env: Env, d: CatalogueDb, entry: EntryRow, r: RecipeRo
       const listedEntry = listed[i] ?? null;
       return {
         ...s,
+        declaration: classDescriptor(s.class, r.foundations)!,
         preferred: { ...s.preferred, url: listedEntry ? `${env.PUBLIC_ORIGIN}/components/${listedEntry.slug}` : null },
         catalogue: listedEntry ? { description: listedEntry.description, suitability: listedEntry.suitability, guardians: listedEntry.guardians } : null,
         deprecation: tree.notices.find((n) => n.name === s.preferred.name && n.version === s.preferred.version && n.via.includes(r.name)) ?? null,
@@ -185,6 +185,7 @@ async function recipeView(env: Env, d: CatalogueDb, entry: EntryRow, r: RecipeRo
 async function componentView(env: Env, d: CatalogueDb, entry: EntryRow, r: ComponentRow): Promise<ComponentVersionView> {
   const [tree] = await d.deprecationsFor([subject("component", r)]);
   return {
+    foundations: r.foundations, foundationEvidence: "publisher-declared", lastSuccessfulVerification: null,
     ...componentSummary(env, r, tree.notices),
     digest: r.digest,
     guardians: r.guardians,
@@ -285,7 +286,7 @@ export async function recipeComponentsDiagram(env: Env, name: string, version: s
   if (!found) throw new HttpError(404, "no such recipe version");
   const r = found.row;
   const listed = await d.catalogueFor(r.recipe.components.map((s) => s.preferred));
-  const svg = recipeComponentsSvg({ name: r.name, version: r.version, title: r.title, components: r.recipe.components, connections: r.recipe.connections, catalogue: listed });
+  const svg = recipeComponentsSvg({ name: r.name, version: r.version, title: r.title, components: r.recipe.components.map(s => ({ ...s, class: classDescriptor(s.class, r.foundations)! })), connections: r.recipe.connections, catalogue: listed });
   return new Response(svg, { headers: { ...SVG_HEADERS, "Cache-Control": "public, max-age=300" } });
 }
 

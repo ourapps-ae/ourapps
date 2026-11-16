@@ -1,5 +1,6 @@
 // Plain-text pages of the recipe library and component catalogue, for agents that read without a browser.
 import { COMPONENT_PACKAGE, RECIPE_PACKAGE, classSettings, deprecationLine, describeCondition, kindText, type ClassInterface, type Condition, type PackageSummary, type Deprecation, type ComponentList, ComponentSearch, ComponentSummary, ComponentVersionView, Port, RecipeList, RecipeQuestion, RecipeSearch, RecipeSlotView, RecipeSummary, RecipeVersionView, SettingDeclaration, Suitability, Targets } from "@my/store-shared";
+import type { Foundations } from "@my/store-shared";
 
 const COPYRIGHT = "Copyright Level N Ltd 2026";
 
@@ -120,10 +121,10 @@ function suitabilityLines(s: Suitability): string[] {
 // One slot: its class (interfaces and the settings the recipe writes), its preferred component, and the others of its class.
 function slotLines(s: RecipeSlotView, recipe: string): string[] {
   const only = s.includedWhen ? ` (only when ${when(s.includedWhen)})` : "";
-  const settings = classSettings(s.class).map((p) => `${p.id} ${p.kind ? kindText(p.kind) : "unknown"}${p.required ? ", always written" : ""}`);
+  const settings = classSettings(s.declaration.settings).map((p) => `${p.id} ${p.kind ? kindText(p.kind) : "unknown"}${p.required ? ", always written" : ""}`);
   const out = [
     `- slot ${s.id}${only}`,
-    `    class: provides ${interfaces(s.class.provides)}; requires ${interfaces(s.class.requires)}; settings ${list(settings)}`,
+    `    class: ${s.class.name} ${s.class.version} ${s.class.digest}; provides ${interfaces(s.declaration.provides)}; requires ${interfaces(s.declaration.requires)}; settings ${list(settings)}`,
     `    preferred: ${s.preferred.name} ${s.preferred.version}${s.preferred.url ? ` (${s.preferred.url}.txt)` : ", not listed in the catalogue"}`,
   ];
   if (s.deprecation) out.push(`    DEPRECATION WARNING: ${deprecationLine(s.deprecation)}`);
@@ -139,6 +140,10 @@ function settingLine(s: SettingDeclaration): string {
 
 function versions(v: { versions: { version: string; publishedAt: string; digest: string }[] }): string[] {
   return v.versions.map((x) => `- ${x.version} (${x.publishedAt}) ${x.digest}`);
+}
+
+function foundationLines(f: Foundations): string[] {
+  return ["", "Package foundations (publisher-declared)", "Last successful verification: no verified record", `Wrapper licence: ${f.licence}`, `Platforms: ${f.platforms.join(", ")}`, `Runtime requirements: ${JSON.stringify(f.compatibility.runtimes)}`, `Framework requirements: ${JSON.stringify(f.compatibility.frameworks)}`, `Exact dependencies: ${JSON.stringify(f.compatibility.dependencies)}`, `Styles: ${JSON.stringify(f.compatibility.styles)}`, `Maintainers: ${f.maintenance.owners.join(", ")}; ${f.maintenance.contact}`, `Maintenance repository: ${f.maintenance.repository}`, `Updates: ${f.maintenance.updates.source} (${f.maintenance.updates.strategy})`, ...f.upstream.map(u => `Upstream: ${u.name} ${u.version}; revision ${u.revision ?? "not supplied"}; ${u.repository}; ${u.purl}; licence ${u.licence}; notices ${u.notices.join(", ")}; delivery ${JSON.stringify(u.delivery)}`), ...f.classes.flatMap(c => [`Class: ${c.reference.name} ${c.reference.version} ${c.reference.digest}`, `Shared behaviour suites: ${c.descriptor.verification.map(s => s.id).join(", ")}`, `Class modules: ${JSON.stringify(c.descriptor.provides.map(p => ({ type: p.type, modules: p.modules })))}`, `Class interface and test inventory: ${JSON.stringify(c.descriptor.inventory)}`])];
 }
 
 export function recipeText(v: RecipeVersionView, origin: string): string {
@@ -157,6 +162,7 @@ export function recipeText(v: RecipeVersionView, origin: string): string {
     ...buildSteps(v),
     `Page: ${origin}/recipes/${v.slug}; JSON: ${origin}/api/recipes/${v.slug}/${v.version}`,
     ...packageLines(RECIPE_PACKAGE),
+    ...foundationLines(v.foundations),
     v.diagram ? `Diagram: ${origin}/api/recipes/${v.slug}/${v.version}/diagram.svg` : "Diagram: none",
     "",
     "Description",
@@ -194,6 +200,7 @@ export function componentText(v: ComponentVersionView, origin: string): string {
     `Bundle download: GET ${v.bundle.url} returns a link valid for one hour${v.status === "orphaned" ? "; with no publisher the link exists only while the release is public, otherwise the status is bundle-unavailable" : ""}`,
     `Page: ${origin}/components/${v.slug}; JSON: ${origin}/api/components/${v.slug}/${v.version}`,
     ...packageLines(COMPONENT_PACKAGE),
+    ...foundationLines(v.foundations),
     "",
     `Provides: ${ports(v.provides)}`,
     `Requires: ${ports(v.requires)}`,

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { EXAMPLE_BUNDLE_DIGEST, EXAMPLE_DIGEST, classConfiguration, exampleRecipeEntry, interfaceKey, type ComponentEntry, type RecipeEntry } from "@my/store-shared";
+import { EXAMPLE_BUNDLE_DIGEST, EXAMPLE_DIGEST, descriptorDigest, exampleFoundations, exampleRecipeEntry, interfaceKey, type ComponentEntry, type RecipeEntry } from "@my/store-shared";
 import { OURPOKER_CATALOGUE, OURPOKER_RECIPE } from "../../shared/src/fixtures/ourpoker.js";
 import { CatalogueDb, type EntryRow } from "../src/catalogue-db.js";
 import type { Env } from "../src/env.js";
@@ -21,8 +21,16 @@ function entry(name: string, developerId: string): EntryRow {
 async function seed(): Promise<void> {
   const developerId = (await env.DB.prepare("SELECT id FROM developers").first<{ id: string }>())!.id;
   const d = new CatalogueDb(env.DB);
+  const classes = OURPOKER_RECIPE.components.map(c => {
+    const descriptor = exampleFoundations().classes[0].descriptor;
+    descriptor.name = `ourapps-ae/${c.id}-class`;
+    descriptor.provides = c.class.provides.map(p => ({ type: p.type, version: p.version, path: descriptor.inventory[0].path, modules: { web: ["index.mjs"] } }));
+    descriptor.requires = c.class.requires.map(p => ({ type: p.type, version: p.version }));
+    return { reference: { name: descriptor.name, version: descriptor.version, digest: descriptorDigest(descriptor) }, descriptor };
+  });
   for (const c of OURPOKER_CATALOGUE) {
     const e: ComponentEntry = {
+      foundations: { ...exampleFoundations(), classes, implements: classes.map(c => c.reference) },
       format: 1,
       name: c.name,
       version: c.version,
@@ -48,7 +56,8 @@ async function seed(): Promise<void> {
   const base = exampleRecipeEntry();
   const r: RecipeEntry = {
     ...base,
-    recipe: { ...base.recipe, name: OURPOKER_RECIPE.name, version: OURPOKER_RECIPE.version, title: OURPOKER_RECIPE.title, components: OURPOKER_RECIPE.components.map((c) => ({ ...c, class: { ...c.class, configuration: classConfiguration() }, configuration: {} })), connections: OURPOKER_RECIPE.connections, jobs: [], scale: null, questions: [] },
+    foundations: { ...exampleFoundations(), classes, implements: [] },
+    recipe: { ...base.recipe, name: OURPOKER_RECIPE.name, version: OURPOKER_RECIPE.version, title: OURPOKER_RECIPE.title, components: OURPOKER_RECIPE.components.map((c, i) => ({ ...c, class: classes[i].reference, configuration: {} })), connections: OURPOKER_RECIPE.connections, jobs: [], scale: null, questions: [] },
     source: { repository: "ourapps-ae/ourpoker", tag: `v${OURPOKER_RECIPE.version}` },
   };
   await d.publishRecipe(null, entry(OURPOKER_RECIPE.name, developerId), r, now);

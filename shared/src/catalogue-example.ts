@@ -1,21 +1,39 @@
 // An invented recipe and components for documentation and tests. Never a real application.
 import { GRAMMAR_PATTERNS, componentFacts, interfaceKey, type ComponentEntry, type Port, type RecipeContext, type RecipeEntry, type SettingDeclaration, type Suitability } from "./catalogue.js";
-import { DIALECT_2020_12 } from "./json-schema.js";
+import { descriptorDigest, type ClassDescriptor, type Foundations } from "./foundations.js";
 
 export const EXAMPLE_DIGEST = `sha256:${"a".repeat(64)}`;
 export const EXAMPLE_BUNDLE_DIGEST = `sha256:${"b".repeat(64)}`;
-// The digest of every example interface document: components that provide one interface share its document.
+// Descriptive interface document digest for catalogue examples.
 export const EXAMPLE_INTERFACE_DIGEST = `sha256:${"c".repeat(64)}`;
-
-// A class configuration: the settings a recipe writes on a slot, each with its type and grammar.
-export function classConfiguration(properties: Record<string, Record<string, unknown>> = {}, required: string[] = []): Record<string, unknown> {
-  return { $schema: DIALECT_2020_12, type: "object", properties, required, additionalProperties: true };
-}
 
 const v1 = (type: string) => ({ type, version: "1.0.0" });
 
+export function exampleFoundations(slug = "card-deck"): Foundations {
+  const type = slug === "club-seating" ? "seating" : slug === "apple-host" ? "apple-shell" : slug;
+  const properties: ClassDescriptor["settings"]["properties"] = type === "seating" ? { minimumPlayers: { type: "integer" } } : type === "server-host" ? { targets: { type: "string", pattern: GRAMMAR_PATTERNS.label }, expectedPeople: { type: "integer" }, accountReference: { type: "string", pattern: GRAMMAR_PATTERNS.slug } } : type === "guided-tour" ? { length: { type: "string", pattern: GRAMMAR_PATTERNS.slug } } : {};
+  const required = type === "seating" ? ["minimumPlayers"] : type === "server-host" ? ["targets", "expectedPeople"] : type === "guided-tour" ? ["length"] : [];
+  const descriptor: ClassDescriptor = {
+    format: 1, name: `ourapps-ae/${type}-class`, version: "1.0.0",
+    provides: [{ ...v1(`ae/${type}`), path: `classes/${type}/interface.json`, modules: { web: ["index.mjs"], server: ["index.mjs"] } }],
+    requires: type === "seating" ? [v1("ae/card-deck")] : [],
+    settings: { type: "object", properties, required, additionalProperties: false },
+    inventory: [{ path: `classes/${type}/interface.json`, digest: "c".repeat(64) }, { path: `classes/${type}/check.mjs`, digest: "d".repeat(64) }],
+    verification: [{ id: "behaviour", root: "package", argv: ["node", `classes/${type}/check.mjs`], cwd: ".", prepare: [], tools: { node: "26" }, fixtures: [`classes/${type}/check.mjs`], locks: [], network: false, timeoutSeconds: 30, expectedExit: 0, scope: "required-local", requirements: [] }],
+  };
+  const reference = { name: descriptor.name, version: descriptor.version, digest: descriptorDigest(descriptor) };
+  return { licence: "Apache-2.0", platforms: ["web", "server", "ios", "macos", "android"], classes: [{ reference, descriptor }], implements: [reference], upstream: [], compatibility: { runtimes: {}, frameworks: {}, dependencies: [], styles: { scope: "none", namespaces: [], conflicts: [] } }, maintenance: { owners: ["Example Maintainer"], contact: "mailto:maintainer@example.org", repository: "https://example.org/component", updates: { source: "https://example.org/component/releases", strategy: "manual" } }, files: [...descriptor.inventory.map(v => ({ path: v.path, executable: false })), { path: "src/index.mjs", executable: false }], artefacts: [{ source: "src/index.mjs", destination: `components/${slug}/index.mjs`, template: false, executable: false }] };
+}
+
+export function exampleRecipeFoundations(): Foundations {
+  const parts = ["card-deck", "seating", "server-host", "apple-host", "guided-tour"].map(s => exampleFoundations(s));
+  return { ...parts[0], classes: parts.flatMap(f => f.classes), implements: [], files: parts.flatMap(f => f.files.filter(v => v.path !== "src/index.mjs")), artefacts: [] };
+}
+const reference = (slug: string) => exampleFoundations(slug).classes[0].reference;
+
 export function exampleRecipeEntry(): RecipeEntry {
   return {
+    foundations: exampleRecipeFoundations(),
     format: 1,
     recipe: {
       format: 1,
@@ -27,21 +45,17 @@ export function exampleRecipeEntry(): RecipeEntry {
       tags: ["cards", "multiplayer"],
       targets: { client: ["web", "ios", "android", "macos"], server: ["hosting-provider"] },
       components: [
-        { id: "deck", class: { provides: [v1("ae/card-deck")], requires: [], configuration: classConfiguration() }, preferred: { name: "acme/card-deck", version: "0.1.0" }, configuration: {}, includedWhen: null },
-        { id: "seats", class: { provides: [v1("ae/seating")], requires: [v1("ae/card-deck")], configuration: classConfiguration({ minimumPlayers: { type: "integer" } }, ["minimumPlayers"]) }, preferred: { name: "acme/seating", version: "0.1.0" }, configuration: { minimumPlayers: 2 }, includedWhen: null },
+        { id: "deck", class: reference("card-deck"), preferred: { name: "acme/card-deck", version: "0.1.0" }, configuration: {}, includedWhen: null },
+        { id: "seats", class: reference("seating"), preferred: { name: "acme/seating", version: "0.1.0" }, configuration: { minimumPlayers: 2 }, includedWhen: null },
         {
           id: "host",
-          class: {
-            provides: [v1("ae/server-host")],
-            requires: [],
-            configuration: classConfiguration({ targets: { type: "string", pattern: GRAMMAR_PATTERNS.label }, expectedPeople: { type: "integer" }, accountReference: { type: "string", pattern: GRAMMAR_PATTERNS.slug } }, ["targets", "expectedPeople"]),
-          },
+          class: reference("server-host"),
           preferred: { name: "acme/server-host", version: "0.1.0" },
           configuration: {},
           includedWhen: null,
         },
-        { id: "apple", class: { provides: [v1("ae/apple-shell")], requires: [], configuration: classConfiguration() }, preferred: { name: "acme/apple-host", version: "0.1.0" }, configuration: {}, includedWhen: "'ios' in targets || 'macos' in targets" },
-        { id: "tour", class: { provides: [v1("ae/guided-tour")], requires: [], configuration: classConfiguration({ length: { type: "string", pattern: GRAMMAR_PATTERNS.slug } }, ["length"]) }, preferred: { name: "acme/guided-tour", version: "0.1.0" }, configuration: {}, includedWhen: "lessons" },
+        { id: "apple", class: reference("apple-host"), preferred: { name: "acme/apple-host", version: "0.1.0" }, configuration: {}, includedWhen: "'ios' in targets || 'macos' in targets" },
+        { id: "tour", class: reference("guided-tour"), preferred: { name: "acme/guided-tour", version: "0.1.0" }, configuration: {}, includedWhen: "lessons" },
       ],
       jobs: [{ id: "server", slot: "host", overrideQuestion: "server", candidates: [{ component: "acme/server-host", profile: "free" }, { component: "acme/server-host", profile: "paid" }] }],
       scale: { question: "scale", bands: [{ id: "small", label: "fewer than 10 people, occasional use", load: { concurrentPeople: 10, requestsPerDay: 2000 } }, { id: "medium", label: "up to 100 people, daily use", load: { concurrentPeople: 100, requestsPerDay: 50000 } }] },
@@ -82,6 +96,7 @@ const setting = (id: string, type: SettingDeclaration["type"], grammar: string, 
 
 function component(slug: string, description: string, provides: Port[], requires: Port[], settings: SettingDeclaration[], suitability: Suitability = LIBRARY, category: string | null = null): ComponentEntry {
   return {
+    foundations: exampleFoundations(slug),
     format: 1,
     name: `acme/${slug}`,
     version: "0.1.0",
@@ -152,5 +167,5 @@ export function exampleRecipeContext(entries: ComponentEntry[] = exampleComponen
     const entry = entries.find((e) => e.name === name && e.version === version);
     return entry ? componentFacts(entry) : null;
   };
-  return { components: { source: "the example catalogue", find } };
+  return { authority: exampleRecipeFoundations(), components: { source: "the example catalogue", find } };
 }

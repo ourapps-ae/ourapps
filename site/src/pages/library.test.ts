@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exampleComponentEntry, exampleRecipeEntry, type ComponentSummary, type ComponentVersionView, type Deprecation, type RecipeSummary, type RecipeVersionView } from "@my/store-shared";
+import { classDescriptor, exampleComponentEntry, exampleRecipeEntry, type ComponentSummary, type ComponentVersionView, type Deprecation, type RecipeSummary, type RecipeVersionView } from "@my/store-shared";
 import { componentBody, componentCard, deprecationBanner, recipeBody, recipeCard } from "./library.js";
 
 const origin = "https://ourapps.app";
@@ -10,6 +10,7 @@ function recipeView(patch: Partial<RecipeVersionView> = {}): RecipeVersionView {
   const r = e.recipe;
   const suitability = exampleComponentEntry().suitability;
   return {
+    foundations: e.foundations, foundationEvidence: "publisher-declared", lastSuccessfulVerification: null,
     name: r.name,
     slug: "poker-night",
     version: r.version,
@@ -32,10 +33,11 @@ function recipeView(patch: Partial<RecipeVersionView> = {}): RecipeVersionView {
     screenshots: [],
     components: r.components.map((c) => ({
       ...c,
+      declaration: classDescriptor(c.class, e.foundations)!,
       preferred: { ...c.preferred, url: c.id === "deck" ? `${origin}/components/card-deck` : null },
       catalogue: c.id === "deck" ? { description: "A shuffled deck.", suitability, guardians: ["Example Guardian Ltd"] } : null,
       deprecation: null,
-      alternatives: { count: c.id === "seats" ? 1 : 0, url: `${origin}/components?provides=${encodeURIComponent(c.class.provides[0]!.type)}` },
+      alternatives: { count: c.id === "seats" ? 1 : 0, url: `${origin}/components?provides=${encodeURIComponent(classDescriptor(c.class, e.foundations)!.provides[0].type)}` },
     })),
     jobs: r.jobs,
     scale: r.scale,
@@ -51,6 +53,7 @@ function recipeView(patch: Partial<RecipeVersionView> = {}): RecipeVersionView {
 function componentView(patch: Partial<ComponentVersionView> = {}): ComponentVersionView {
   const e = exampleComponentEntry();
   return {
+    foundations: e.foundations, foundationEvidence: "publisher-declared", lastSuccessfulVerification: null,
     name: e.name,
     slug: "card-deck",
     version: e.version,
@@ -83,6 +86,10 @@ function componentView(patch: Partial<ComponentVersionView> = {}): ComponentVers
 }
 
 describe("recipe page", () => {
+  it("shows independent classes, shared suites and declared evidence", () => {
+    const text = recipeBody(recipeView(), "latest").html;
+    expect(text).toContain("ourapps-ae/card-deck-class"); expect(text).toContain("Shared behaviour suites: behaviour"); expect(text).toContain("Publisher-declared package facts"); expect(text).toContain("no verified record");
+  });
   it("lists each slot with its class, preferred component and the other components of its class", () => {
     const html = recipeBody(recipeView(), "latest").html;
     expect(html).toContain("<th>Slot</th><th>Class</th><th>Preferred component</th><th>Alternatives</th>");

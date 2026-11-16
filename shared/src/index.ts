@@ -10,3 +10,4 @@ export * from "./catalogue-views.js";
 export * from "./diagram-kit.js";
 export * from "./diagram-recipe.js";
 export * from "./diagram-component.js";
+export * from "./foundations.js";

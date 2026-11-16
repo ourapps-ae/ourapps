@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@bufbuild/cel": "0.6.2",
-    "@cfworker/json-schema": "4.1.6"
+    "@cfworker/json-schema": "4.1.6",
+    "@noble/hashes": "^2.0.1"
   }
 }
