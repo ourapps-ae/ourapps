@@ -112,7 +112,7 @@ describe("public copy", () => {
 });
 
 describe("one story across the pages", () => {
-  const sources = import.meta.glob(["./pages/*.ts", "../index.html", "../public/agents.md", "../public/llms.txt"], { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+  const sources = import.meta.glob(["./pages/*.ts", "../index.html", "../public/agents.md", "../public/llms.txt", "../public/cloud-assembly.md", "../public/aepm-assemble.yml"], { query: "?raw", import: "default", eager: true }) as Record<string, string>;
   const read = (file: string) => {
     const text = sources[file];
     if (text === undefined) throw new Error(`${file} not found`);
@@ -127,7 +127,7 @@ describe("one story across the pages", () => {
   });
 
   it("no page or document tells the old story", () => {
-    const files = ["./pages/public.ts", "./pages/guide.ts", "./pages/small.ts", "./pages/example.ts", "./pages/shell.ts", "./pages/dev.ts", "./pages/prompts.ts", "./pages/reference.ts", "./pages/terms.ts", "../index.html", "../public/agents.md", "../public/llms.txt"];
+    const files = ["./pages/public.ts", "./pages/guide.ts", "./pages/small.ts", "./pages/example.ts", "./pages/shell.ts", "./pages/dev.ts", "./pages/prompts.ts", "./pages/reference.ts", "./pages/terms.ts", "../index.html", "../public/agents.md", "../public/llms.txt", "../public/cloud-assembly.md"];
     for (const file of files) {
       const text = read(file);
       for (const old of ["Built with AI agents, shared with friends", "Private by design", "a private installer", "Builds apps for friends and family", "friends and family", "For your friends", "At eight people", "private app store"]) expect(text, `${file}: ${old}`).not.toContain(old);
@@ -140,6 +140,15 @@ describe("one story across the pages", () => {
     const small = read("./pages/small.ts");
     expect(small).toContain("At a small organisation's size, the expensive parts are free");
     expect(small).toContain("Choose free or paid by size");
+  });
+
+  it("building on GitHub is linked from the guide and the agent documents and claims only what is checked", () => {
+    for (const file of ["./pages/guide.ts", "../public/agents.md", "../public/llms.txt"]) expect(read(file), file).toContain("/cloud-assembly.md");
+    const doc = read("../public/cloud-assembly.md");
+    for (const text of ["AEPM_OWNER_KEY", "AEPM_PUSH_TOKEN", "OURPOKER_CLOUDFLARE_ACCOUNT_API_TOKEN", "OURPOKER_STORE_CREDENTIALS_BUILD_TOKEN", "ci-server", "ci-web", "ci-android", "apple-builds", "release", "aepm-update", "Allow GitHub Actions to create and approve pull requests", "build only on macOS runners", "These workflows are checked with actionlint", "Copyright Level N Ltd 2026"]) expect(doc, text).toContain(text);
+    expect(doc).not.toMatch(/ran on GitHub|run on GitHub's runners|tested on GitHub/);
+    const workflow = read("../public/aepm-assemble.yml");
+    for (const step of ["aepm fetch", "aepm design", "--answers answers.json", "aepm resolve", "levelnpolicy.json", "aepm install", "secrets.AEPM_OWNER_KEY", "secrets.AEPM_PUSH_TOKEN"]) expect(workflow, step).toContain(step);
   });
 
   it("the console sidebar links the library and the catalogue", () => {

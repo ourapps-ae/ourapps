@@ -255,6 +255,21 @@ POST   /api/dev/recipes/&lt;name&gt;/undeprecate</code></pre>
       `,
     },
     {
+      id: "cloud",
+      title: "Build on GitHub, with no machine of your own",
+      body: html`
+        <p>GitHub Actions can do the whole build from a recipe: fetch, design from your answers, resolve and install with aepm, then check, release and update the application. You, or an agent with the GitHub CLI, take these steps in your repository. The full steps, with every secret name: <a href="/cloud-assembly.md">cloud-assembly.md</a>.</p>
+        <ol class="steps">
+          <li><b>Create a private repository</b> and allow GitHub Actions to create pull requests (Settings, Actions, General).</li>
+          <li><b>Add three files:</b> <code>answers.json</code> (the answers to the recipe's questions; the design must include the <code>ourapps-release</code> component, for OurPoker <code>publish</code> or <code>releases</code> yes), <code>CHANGELOG.md</code>, and <code>.github/workflows/aepm-assemble.yml</code>, a copy of <a href="/aepm-assemble.yml">/aepm-assemble.yml</a>.</li>
+          <li><b>Add the secrets:</b> <code>AEPM_OWNER_KEY</code> (your owner key, which approves updates), <code>AEPM_PUSH_TOKEN</code> (a fine-grained token for the repository with Contents and Workflows write), and for publishing the Cloudflare, Android signing and ourapps.app credentials your answers name.</li>
+          <li><b>Run aepm-assemble</b> with the recipe and version, for example <code>ourpoker@0.7.0</code>. It commits the application to main.</li>
+        </ol>
+        <p>The application then carries its workflows: <code>ci-server</code>, <code>ci-web</code> (a browser plays a hand against a server on the runner), <code>ci-android</code> (an emulator shows the room list), <code>apple-builds</code> (unsigned iPhone, iPad, Mac and Apple TV builds on a macOS runner, on a version tag or by hand), <code>release</code> (on a version tag) and <code>aepm-update</code> (weekly and by hand, it proposes the newest recipe version as a pull request; merging it approves the update with <code>AEPM_OWNER_KEY</code> and applies it).</p>
+        <p class="small muted">Apple apps build only on macOS runners. These workflows are checked with actionlint.</p>
+      `,
+    },
+    {
       id: "overview",
       title: "Delivery: how your application reaches people",
       body: html`

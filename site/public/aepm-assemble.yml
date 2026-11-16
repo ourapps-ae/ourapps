@@ -1,0 +1,64 @@
+# Assembles the application from a recipe and answers.json with aepm, then commits it to main. It runs once, in a
+# repository with no .aepm folder; the installed aepm-update workflow keeps the application up to date after that.
+# Copyright Level N Ltd 2026
+name: aepm-assemble
+
+on:
+  workflow_dispatch:
+    inputs:
+      recipe:
+        description: Recipe and version, for example ourpoker@0.7.0
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.AEPM_PUSH_TOKEN }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: git clone --depth 1 https://github.com/ourapps-ae/aepm "$RUNNER_TEMP/aepm"
+      - name: Fetch, design, resolve and install
+        env:
+          RECIPE: ${{ inputs.recipe }}
+          AEPM_OWNER_KEY: ${{ secrets.AEPM_OWNER_KEY }}
+        run: |
+          if [[ -e .aepm ]]; then
+            echo "::error::This repository holds an assembled application (.aepm); aepm-update keeps it up to date."
+            exit 1
+          fi
+          aepm() { PYTHONPATH="$RUNNER_TEMP/aepm" python3 -B -m aepm "$@"; }
+          work="$RUNNER_TEMP/work"
+          mkdir -p "$work"
+          aepm fetch "$RECIPE" --with-dependencies --store "$work/store"
+          aepm design "$RECIPE" --store "$work/store" --answers answers.json --out "$work/definition.json"
+          aepm resolve "$work/definition.json" --catalogue "$work/store/catalogue.json" --out "$work/lock.json"
+          curl -fsSL https://ourapps.app/policy/levelnpolicy.json -o "$work/levelnpolicy.json"
+          printf '%s\n' "$AEPM_OWNER_KEY" | openssl pkey -pubout -out "$work/owner.pub"
+          python3 - "$work" <<'POLICY'
+          import json, sys
+          work = sys.argv[1]
+          level_n = json.load(open(f"{work}/levelnpolicy.json"))
+          owner = open(f"{work}/owner.pub").read()
+          policy = {"format": 1, "keys": {"release": level_n["keys"]["release"], "guardian": level_n["keys"]["guardian"], "owner": [{"publicKey": owner}]}, "trustedExecution": []}
+          json.dump(policy, open(f"{work}/policy.json", "w"), indent=2)
+          POLICY
+          aepm install "$work/definition.json" --lock "$work/lock.json" --store "$work/store" --policy "$work/policy.json" --target "$work/app"
+          cp -R "$work/app/." .
+      - name: Commit the application
+        env:
+          RECIPE: ${{ inputs.recipe }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Assemble the application from $RECIPE"
+          git push origin HEAD:main

@@ -88,6 +88,7 @@ steps: `SECURITY.md`.
 | `site/`    | Vite + TypeScript site served by the worker                      |
 | `shared/`  | my-app.json validation, recipe and component validation, the terms version |
 | `site/public/agents.md` | API reference for agents, served at /agents.md            |
+| `site/public/cloud-assembly.md`, `aepm-assemble.yml` | Building from a recipe in GitHub Actions, served at /cloud-assembly.md |
 | `site/src/freeTiers.ts` | Free-service catalogue: guide section, /small, /free-tiers.md |
 | `CONTRACT.md` | what an app repository must implement                         |
 

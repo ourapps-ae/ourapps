@@ -134,7 +134,7 @@ async function publicChecks() {
   const health = await call("GET", "/api/health", { auth: "" });
   // Local runs have no GitHub sign-in configured.
   record(health.status === 200 && health.json?.ok === true && (local || health.json?.oauth) && health.json?.links && health.json?.secrets, "health reports every secret configured", JSON.stringify(health.json));
-  for (const path of ["/agents.md", "/contract.md", "/llms.txt", "/free-tiers.md", "/web/install-banner.js", "/reference", "/terms"]) {
+  for (const path of ["/agents.md", "/contract.md", "/llms.txt", "/free-tiers.md", "/cloud-assembly.md", "/aepm-assemble.yml", "/web/install-banner.js", "/reference", "/terms"]) {
     const res = await fetch(base + path);
     record(res.status === 200, `GET ${path}`, res.status === 200 ? "" : String(res.status));
   }
