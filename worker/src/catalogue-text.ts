@@ -221,26 +221,60 @@ export function recipeDetailsText(v: RecipeVersionView, origin: string): string 
   ]);
 }
 
+const requirementLines = (f: Foundations): string[] => {
+  const runtimes = Object.entries(f.compatibility.runtimes).map(([k, r]) => `${k} ${r}`);
+  const frameworks = Object.entries(f.compatibility.frameworks).map(([k, x]) => `${k}: ${x.name} ${x.range}`);
+  const styles = f.compatibility.styles;
+  return [
+    `Platforms: ${list(f.platforms)}`,
+    `Toolchains: ${list(runtimes)}`,
+    `Frameworks: ${list(frameworks)}`,
+    `Styles: scope ${styles.scope}; ${styles.namespaces.length} namespaces; ${styles.conflicts.length} conflicts`,
+    `Licence: ${f.licence}; ${f.upstream.length} upstream sources, ${f.compatibility.dependencies.length} exact dependencies, ${f.files.length} files (listed on the details page)`,
+  ];
+};
+
+// The classes the component implements, with the entry modules each provided interface declares per platform.
+function classLines(f: Foundations): string[] {
+  return f.classes.flatMap((c) => [
+    `Implements: ${c.reference.name}@${c.reference.version} ${c.reference.digest}`,
+    ...c.descriptor.provides.map((p) => `  ${p.type} ${p.version} entry modules: ${list(Object.entries(p.modules).map(([platform, m]) => `${platform} ${m.join(" ")}`))}`),
+    `  shared behaviour suites: ${list(c.descriptor.verification.map((x) => x.id))}`,
+  ]);
+}
+
+// The recipe.json slot that names this component, and the aepm commands that use it in another slot of its class.
+function recipeUseLines(v: ComponentVersionView): string[] {
+  const c = v.foundations.implements[0];
+  if (!c) return ["How to use in a recipe: this component implements no class, so no slot can name it"];
+  const slot = { id: v.slug, class: { name: c.name, version: c.version, digest: c.digest }, preferred: { name: v.name, version: v.version } };
+  return [
+    "How to use in a recipe",
+    `- as a slot in recipe.json components: ${JSON.stringify(slot)}`,
+    `- in place of another component of the class: python3 -m aepm fetch ${v.name}@${v.version} --store store --from https://ourapps.app, then python3 -m aepm design RECIPE@VERSION --store store --answers answers.json --substitute SLOT=${v.name}@${v.version} --out definition.json`,
+  ];
+}
+
+// The component page an agent reads first. Upstream sources, dependency pins, file inventories and the package
+// explanation are on the details page (componentDetailsText).
 export function componentText(v: ComponentVersionView, origin: string): string {
+  const f = v.foundations;
   return page(`${v.name} ${v.version}`, [
     ...(v.deprecations.length > 0 ? [...warnings(v.deprecations), `Deprecation tree: ${origin}/api/components/${v.slug}/${v.version}/deprecations`, ""] : []),
     v.description,
     "",
-    `Category: ${v.category ?? "none"}`,
-    `Tags: ${list(v.tags)}`,
+    `Category: ${v.category ?? "none"}; tags ${list(v.tags)}`,
     `Targets: ${targets(v.targets)}`,
     publisherLine(v.publisher),
     `Guardians: ${list(v.guardians)}`,
-    `Source: ${v.source.repository} release ${v.source.tag}`,
-    `Digest: ${v.digest}`,
-    `Bundle: ${v.bundle.asset} ${v.bundle.digest}`,
+    `Source: ${v.source.repository} release ${v.source.tag}; digest ${v.digest}`,
     `Bundle download: GET ${v.bundle.url} returns a link valid for one hour${v.status === "orphaned" ? "; with no publisher the link exists only while the release is public, otherwise the status is bundle-unavailable" : ""}`,
-    `Page: ${origin}/components/${v.slug}; JSON: ${origin}/api/components/${v.slug}/${v.version}`,
-    ...packageLines(COMPONENT_PACKAGE),
-    ...foundationLines(v.foundations),
     "",
+    ...classLines(f),
     `Provides: ${ports(v.provides)}`,
     `Requires: ${ports(v.requires)}`,
+    ...requirementLines(f),
+    "",
     `Settings (${v.settings.length})`,
     ...v.settings.map(settingLine),
     `Depends on components: ${list(v.dependencies.map((x) => `${x.name} ${x.version}`))}`,
@@ -248,12 +282,34 @@ export function componentText(v: ComponentVersionView, origin: string): string {
     `Suitable for jobs: ${list(v.suitability.jobs)}`,
     ...suitabilityLines(v.suitability),
     ...(v.suitability.notes ? [`Notes: ${v.suitability.notes}`] : []),
-    "",
     v.migration ? `Data migration: stores ${list(v.migration.stores.map((s) => `${s.id} (${s.schema.name} ${s.schema.version})`))}; formats ${list(v.migration.formats)}; requires stop ${v.migration.requiresStop ? "yes" : "no"}; retention ${v.migration.retentionDays ?? "unspecified"} days` : "Data migration: this component keeps no data",
     "",
+    ...recipeUseLines(v),
     `Used by recipes: ${list(v.usedBy.map((r) => `${r.name} ${r.version} (${r.slots.map((s) => `slot ${s.id}${s.preferred ? "" : " as a job candidate"}`).join(", ")})`))}`,
+    `Maintainers: ${f.maintenance.owners.join(", ")}; ${f.maintenance.contact}; updates ${f.maintenance.updates.source} (${f.maintenance.updates.strategy})`,
     "",
     "Versions",
     ...versions(v),
+    "",
+    "Links",
+    `Details (package foundations, upstream sources, exact dependencies, styles, class inventories, files): ${origin}/components/${v.slug}/details.txt?version=${v.version}`,
+    `Page: ${origin}/components/${v.slug}; JSON: ${origin}/api/components/${v.slug}/${v.version}; connections diagram: ${origin}/api/components/${v.slug}/${v.version}/connections.svg`,
+  ]);
+}
+
+// The rest of a component: what the summary page leaves out.
+export function componentDetailsText(v: ComponentVersionView, origin: string): string {
+  return page(`${v.name} ${v.version}: details`, [
+    `The component page, with its class, interfaces, settings and how to use it in a recipe: ${origin}/components/${v.slug}.txt?version=${v.version}`,
+    `Digest: ${v.digest}`,
+    `Bundle: ${v.bundle.asset} ${v.bundle.digest}`,
+    ...packageLines(COMPONENT_PACKAGE),
+    ...foundationLines(v.foundations),
+    "",
+    `Files (${v.foundations.files.length})`,
+    ...v.foundations.files.map((x) => `- ${x.path}${x.executable ? " (executable)" : ""}`),
+    "",
+    `Installed as (${v.foundations.artefacts.length})`,
+    ...v.foundations.artefacts.map((a) => `- ${a.source} -> ${a.destination}${a.template ? " (template)" : ""}${a.executable ? " (executable)" : ""}`),
   ]);
 }

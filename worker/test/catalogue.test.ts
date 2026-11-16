@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { EXAMPLE_BUNDLE_DIGEST, EXAMPLE_INTERFACE_DIGEST, exampleComponentEntries, exampleComponentEntry, exampleRecipeEntry, type BundleLink, type ComponentList, type ComponentSearch, type ComponentVersionView, type DeprecationReport, type RecipeList, type RecipeSearch, type RecipeVersionView } from "@my/store-shared";
 import { Db } from "../src/db.js";
 import { ftsQuery } from "../src/catalogue-db.js";
-import { recipeDetailsText, recipeText } from "../src/catalogue-text.js";
+import { componentDetailsText, componentText, recipeDetailsText, recipeText } from "../src/catalogue-text.js";
 import type { Env } from "../src/env.js";
 import { handle } from "../src/index.js";
 import { BASE, GH_TOKEN, api, clearDb, fakeFetch, gh, jsonRes, signIn, testDeps, testEnv, type Call, type TestDeps } from "./helpers.js";
@@ -254,7 +254,7 @@ describe("publishing a recipe", () => {
     expect(r.foundations).toEqual(exampleRecipeEntry().foundations);
     expect(c.foundations).toEqual(exampleComponentEntry().foundations);
     for (const v of [r, c]) { expect(v.foundationEvidence).toBe("publisher-declared"); expect(v.lastSuccessfulVerification).toBeNull(); }
-    expect(await (await get("/components/card-deck.txt")).text()).toContain("Package foundations (publisher-declared)");
+    expect(await (await get("/components/card-deck/details.txt")).text()).toContain("Package foundations (publisher-declared)");
   });
 
   it("keeps absent foundation projections unavailable without manufacturing facts", async () => {
@@ -836,6 +836,51 @@ describe("page variants", () => {
     expect(host).toContain("Settings (3)\n- targets: string (label); required, no default\n- expectedPeople: integer; optional, has a default\n- accountReference: string (slug); optional, no default, secret");
     expect(one).toContain("Data migration: this component keeps no data");
     expect(((await (await get("/components/card-deck.json")).json()) as ComponentVersionView).name).toBe("acme/card-deck");
+    {
+      expect(one).toContain("Implements: ourapps-ae/card-deck-class@1.0.0 ");
+      expect(one).toContain("Platforms: web, server, ios, macos, android");
+      expect(one).toContain('- as a slot in recipe.json components: {"id":"card-deck","class":{"name":"ourapps-ae/card-deck-class","version":"1.0.0","digest":"');
+      expect(one).toContain("--substitute SLOT=acme/card-deck@0.1.0");
+      expect(one).toContain(`${BASE}/components/card-deck/details.txt?version=0.1.0`);
+      expect(one).not.toContain("Package foundations");
+      // An agent reads in this order: the class and interfaces, settings, how to use it, versions, links.
+      const order = ["Implements:", "Provides:", "Platforms:", "Toolchains:", "Settings (", "How to use in a recipe", "Versions", "Links"].map((h) => one.indexOf(h));
+      expect(order.every((at, i) => at > 0 && (i === 0 || at > order[i - 1]))).toBe(true);
+
+      const details = await get("/components/card-deck/details.txt");
+      expect(details.headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
+      const more = await details.text();
+      expect(more).toContain("acme/card-deck 0.1.0: details");
+      expect(more).toContain("Package foundations (publisher-declared)");
+      expect(more).toContain("Class interface and test inventory: ");
+      expect(more).toContain("- src/index.mjs\n");
+      expect(more).toContain("- src/index.mjs -> components/card-deck/index.mjs");
+      expect(more).not.toContain(GH_TOKEN);
+      expect((await get("/components/card-deck/details.txt?version=0.1.0")).status).toBe(200);
+      expect((await get("/components/card-deck/details.txt?version=9.9.9")).status).toBe(404);
+      expect((await get("/components/nope/details.txt")).status).toBe(404);
+
+      // android-host 0.7.0 has 344 upstream sources, 291 exact dependencies and 468 files; its component page stays small.
+      const card = (await (await get("/components/card-deck.json")).json()) as ComponentVersionView;
+      const upstream: ComponentVersionView["foundations"]["upstream"][number] = { name: "an-upstream-library-with-a-long-name", version: "1.0.0", revision: null, repository: "https://example.org/upstream", purl: "pkg:maven/org.example/an-upstream-library-with-a-long-name@1.0.0", licence: "Apache-2.0", notices: ["notices/maven/an-upstream-library-with-a-long-name@1.0.0/0-LICENSE"], delivery: { kind: "bundled", files: [{ path: "vendor/an-upstream-library-with-a-long-name.jar", digest: "0".repeat(64) }] } };
+      const large: ComponentVersionView = {
+        ...card,
+        foundations: {
+          ...card.foundations,
+          upstream: Array.from({ length: 344 }, () => upstream),
+          compatibility: { ...card.foundations.compatibility, dependencies: Array.from({ length: 291 }, (_, i) => ({ isolation: "isolated", name: `pkg:maven/org.example/dependency-${i}`, version: "1.0.0" })) },
+          files: Array.from({ length: 468 }, (_, i) => ({ path: `android/src/main/java/app/ourapps/host/File${i}.kt`, executable: false })),
+        },
+      };
+      const summary = componentText(large, BASE);
+      const rest = componentDetailsText(large, BASE);
+      expect(summary.length).toBeLessThan(30_000);
+      expect(summary).toContain("344 upstream sources, 291 exact dependencies, 468 files");
+      expect(summary).not.toContain("an-upstream-library-with-a-long-name");
+      expect(rest.split("Upstream: an-upstream-library-with-a-long-name").length - 1).toBe(344);
+      expect(rest).toContain("pkg:maven/org.example/dependency-290");
+      expect(rest).toContain("File467.kt");
+    }
   });
 
   it("searches and filters in the text variants and picks a version", async () => {

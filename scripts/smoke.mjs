@@ -138,12 +138,35 @@ async function publicChecks() {
     const res = await fetch(base + path);
     record(res.status === 200, `GET ${path}`, res.status === 200 ? "" : String(res.status));
   }
+  await textPageChecks();
   const unknown = await call("GET", "/api/public/links/000000000000000000000000", { auth: "", pattern: "/api/public/links/:id" });
   expectStatus("an unknown share link is a 404", unknown, 404);
   const noKey = await call("GET", "/api/dev/apps", { auth: "" });
   expectStatus("the dev API needs a key", noKey, 401);
   const badKey = await call("GET", "/api/dev/me", { auth: "oa_" + "0".repeat(40) });
   expectStatus("an unknown key is refused", badKey, 401);
+}
+
+// Every listed recipe and component text page stays small (recipes under 60,000 bytes, components under 30,000) and
+// links its details page, which answers.
+async function textPageChecks() {
+  for (const [kind, limit] of [["recipes", 60_000], ["components", 30_000]]) {
+    const listed = await fetch(`${base}/api/${kind}?limit=100`);
+    const entries = listed.ok ? (await listed.json())[kind] : [];
+    record(listed.ok, `GET /api/${kind} for the text pages`, listed.ok ? "" : String(listed.status));
+    let largest = ["none", 0];
+    for (const { slug, version } of entries) {
+      const res = await fetch(`${base}/${kind}/${slug}.txt`);
+      const text = await res.text();
+      const size = new TextEncoder().encode(text).length;
+      if (size > largest[1]) largest = [slug, size];
+      const details = `${base}/${kind}/${slug}/details.txt?version=${version}`;
+      record(res.status === 200 && size < limit && text.includes(details), `/${kind}/${slug}.txt is under ${limit} bytes and links its details`, `${res.status}, ${size} bytes`);
+      const more = await fetch(details);
+      record(more.status === 200, `GET /${kind}/${slug}/details.txt`, String(more.status));
+    }
+    console.log(`     largest /${kind} text page: ${largest[0]}, ${largest[1]} bytes`);
+  }
 }
 
 async function keyedChecks() {

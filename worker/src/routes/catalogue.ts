@@ -33,7 +33,7 @@ import {
 } from "@my/store-shared";
 import { audit } from "../audit.js";
 import type { AuthedDeveloper } from "../auth.js";
-import { componentListText, componentSearchText, componentText, recipeDetailsText, recipeListText, recipeSearchText, recipeText } from "../catalogue-text.js";
+import { componentDetailsText, componentListText, componentSearchText, componentText, recipeDetailsText, recipeListText, recipeSearchText, recipeText } from "../catalogue-text.js";
 import { CatalogueDb, entryStatus, type ComponentRow, type EntryRow, type Kind, type ListFilter, type RecipeRow } from "../catalogue-db.js";
 import { randomId } from "../crypto.js";
 import type { Deps, Env } from "../env.js";
@@ -397,7 +397,7 @@ export function wantsHtml(request: Request): boolean {
   return /text\/html/i.test(request.headers.get("Accept") ?? "");
 }
 
-// /recipes.txt, /recipes.json, /recipes/:name.txt, /recipes/:name.json and the same for components, and /recipes/:name/details.txt.
+// /recipes.txt, /recipes.json, /recipes/:name.txt, /recipes/:name.json and the same for components, and /recipes/:name/details.txt and /components/:name/details.txt.
 // Returns null for any other path. ?version= picks a version; ?q= searches a list.
 export function pageVariant(env: Env, parts: string[], url: URL, request?: Request): Promise<Response> | null {
   // A client that does not ask for HTML (an agent's fetch tool, curl) gets the plain-text page at the page's own address.
@@ -407,6 +407,7 @@ export function pageVariant(env: Env, parts: string[], url: URL, request?: Reque
   const nested = parts.length === 2 && (parts[0] === "recipes" || parts[0] === "components") ? /^(.+)\.(txt|json)$/.exec(parts[1]) : null;
   if (parts.length === 1 && top) return variant(env, top[1] as "recipes" | "components", null, top[2] as "txt" | "json", url);
   if (nested) return variant(env, parts[0] as "recipes" | "components", nested[1], nested[2] as "txt" | "json", url);
+  if (parts.length === 3 && parts[0] === "components" && parts[2] === "details.txt") return componentDetailView(env, parts[1], url.searchParams.get("version") ?? "latest").then((v) => plain(componentDetailsText(v, env.PUBLIC_ORIGIN)));
   if (parts.length === 3 && parts[0] === "recipes" && parts[2] === "details.txt") return recipeDetailView(env, parts[1], url.searchParams.get("version") ?? "latest").then((v) => plain(recipeDetailsText(v, env.PUBLIC_ORIGIN)));
   return null;
 }
