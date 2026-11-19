@@ -1412,7 +1412,7 @@ export async function agents(root: HTMLElement): Promise<void> {
         <div class="card">
           <h3>Tools</h3>
           <p class="small muted"><b>aepm</b> packs, resolves, reviews, installs, verifies and updates packages, and draws the design diagram. It runs no package code during installation. Get it from <a href="https://github.com/ourapps-ae/aepm" target="_blank" rel="noopener">github.com/ourapps-ae/aepm</a>. It needs Python 3.12, Node.js and Graphviz; run <code>python3 -m aepm --help</code> from the checkout.</p>
-          <p class="small muted"><b>Coming soon, not yet available:</b> <code>aepm create</code> (the whole build in one command), and the component scaffolder and checker. Until then an agent runs <code>aepm fetch</code>, <code>questions</code>, <code>design</code>, <code>resolve</code> and <code>install</code>, as each recipe's .txt page lists.</p>
+          <p class="small muted">There is no single assembly command: an agent runs <code>aepm fetch</code>, <code>questions</code>, <code>design</code>, <code>resolve</code> and <code>install</code>, as each recipe's .txt page lists, with <code>doctor</code> to check build tools and <code>alternatives</code> to substitute a component. Updates use <code>propose-update</code>, <code>approve</code>, <code>apply</code> and <code>recover</code>.</p>
         </div>
       </div>
 

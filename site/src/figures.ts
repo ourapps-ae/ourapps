@@ -11,7 +11,7 @@ export const COOKING_FILE = "/diagrams/cooking-a-recipe.svg";
 export const COOKING_ALT =
   "How a recipe is cooked, in five parts. You and your agent: find a recipe in the library, read its questions, answer them; the agent infers what it can and asks you the rest. " +
   "Evaluation: conditions over the answers decide which components are included, the scale band chooses a provider for each job, settings are applied and connections checked, giving a design. " +
-  "aepm: resolve exact versions, download each archive from its publisher's GitHub release, check its sha256 digest and signatures, review, install by copying the listed files without running their code, and verify with the components' tests, giving the application; one-command assembly with aepm create is coming soon. " +
+  "aepm: resolve exact versions, download each archive from its publisher's GitHub release, check its sha256 digest and signatures, review, install by copying the listed files without running their code, and verify with the components' tests, giving the application. " +
   "Delivery: the application runs on your own hosting, Apple and Android accounts, and an ourapps share link brings it to your staff, members and customers. " +
   "Updates: a new component version becomes a proposal, you approve it, and aepm applies it with recovery.";
 

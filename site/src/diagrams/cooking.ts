@@ -7,8 +7,6 @@ import { COLOURS, Canvas, INK, measure, pillWidth, ZTITLE, type CardBox, type Ki
 interface Step {
   title: string;
   lines: string[];
-  dashed?: boolean;
-  apart?: boolean; // stands to the right of its row, not joined to it
 }
 
 interface Part {
@@ -69,7 +67,6 @@ const PARTS: Part[] = [
       [
         { title: "12 Install", lines: ["copy the files each package", "lists; run none of their code"] },
         { title: "13 Verify", lines: ["run the components' own", "tests on the result"] },
-        { title: "aepm create", lines: ["coming soon: one command", "that runs steps 4 to 13", "from your answers"], dashed: true, apart: true },
       ],
     ],
     then: "the application",
@@ -111,7 +108,6 @@ const SPINE = 24; // the left margin line that joins the parts
 const ZX = M + SPINE + 20;
 const ZP = 26;
 const GAP = 56;
-const APART = 90;
 const ROW_GAP = 44;
 const PART_GAP = 54;
 const FLOW = "#455A64";
@@ -126,14 +122,13 @@ export function cookingSvg(): string {
     PARTS.map((p) => [`a step by ${p.who}`, COLOURS[p.kind][1]] as [string, string]),
     [
       { text: "the next step", colour: FLOW, arrow: true },
-      { text: "dashed card: coming soon", colour: "#FB8C00", dash: "5 3", width: 1.4 },
     ],
     ["Each zone is one party that acts.", "A pill names what passes from one", "zone to the next.", "ourapps keeps the library, the catalogue", "and the share links. The building happens", "in your repository, on your computer."],
   );
 
   // Every card's size first, so every row and zone can be sized.
   const sized = PARTS.map((p) => p.rows.map((row) => row.map((s) => ({ s, ...measure(s.title, s.lines) }))));
-  const rowWidth = (row: { s: Step; w: number }[]) => row.reduce((n, x, i) => n + x.w + (i === 0 ? 0 : x.s.apart ? APART : GAP), 0);
+  const rowWidth = (row: { s: Step; w: number }[]) => row.reduce((n, x, i) => n + x.w + (i === 0 ? 0 : GAP), 0);
   const zoneW = Math.max(...sized.flatMap((rows) => rows.map(rowWidth))) + 2 * ZP;
   const width = Math.max(ZX + zoneW + M, legend.right + M);
 
@@ -152,9 +147,9 @@ export function cookingSvg(): string {
       let x = ZX + ZP;
       const placed: CardBox[] = [];
       row.forEach((x0, i) => {
-        if (i > 0) x += x0.s.apart ? APART : GAP;
-        const box = c.card(x, ry, x0.s.title, x0.s.lines, x0.s.dashed ? "poker" : p.kind, x0.s.dashed ? "file" : p.icon, { dashed: x0.s.dashed });
-        if (i > 0 && !x0.s.apart) c.hv([[placed[i - 1]!.right, ry + ARROW_Y], [box.left - 1, ry + ARROW_Y]], FLOW, 2, { arrow: true });
+        if (i > 0) x += GAP;
+        const box = c.card(x, ry, x0.s.title, x0.s.lines, p.kind, p.icon);
+        if (i > 0) c.hv([[placed[i - 1]!.right, ry + ARROW_Y], [box.left - 1, ry + ARROW_Y]], FLOW, 2, { arrow: true });
         placed.push(box);
         x = box.right;
       });
@@ -181,8 +176,7 @@ export function cookingSvg(): string {
     if (!p.then) return;
     const rows = boxes[pi]!;
     const lastRow = rows[rows.length - 1]!;
-    const steps = lastRow.filter((_, i) => !PARTS[pi]!.rows[rows.length - 1]![i]!.apart);
-    const from = steps[steps.length - 1]!;
+    const from = lastRow[lastRow.length - 1]!;
     const to = boxes[pi + 1]![0]![0]!;
     const gy = zoneTops[pi + 1]! - PART_GAP / 2;
     c.hv([[from.cx, from.bottom], [from.cx, gy], [spineX, gy], [spineX, to.top + ARROW_Y], [to.left - 1, to.top + ARROW_Y]], FLOW, 2, { arrow: true });

@@ -119,8 +119,7 @@ describe("recipe page", () => {
     const html = recipeBody(recipeView(), "latest").html;
     expect(html).toContain("Poker Night");
     expect(html).toContain("Build an application from the Poker Night recipe");
-    expect(html).toContain("coming soon");
-    expect(html).not.toContain("aepm create poker-night");
+    expect(html).not.toMatch(/coming soon|aepm create/);
     expect(html).toContain("Poker Night deals a hand");
     expect(html).toContain('src="https://ourapps.app/api/recipes/poker-night/0.1.0/diagram.svg"');
     expect(html).toContain("Publisher's diagram");

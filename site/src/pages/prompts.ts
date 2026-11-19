@@ -65,7 +65,7 @@ Finding things (no key needed):
 
 Tools:
 - aepm packs, resolves, reviews, installs, verifies and updates packages. Get it from https://github.com/ourapps-ae/aepm (needs Python 3.12, Node.js and Graphviz; run python3 -m aepm --help from the checkout, or set PYTHONPATH to it). It runs no package code during installation.
-- Not yet available, coming soon: aepm create (the steps below in one command), and the component scaffolder and checker. Do not invent them; tell me they are not available yet.
+- aepm's commands are fetch, questions, design, alternatives, doctor, resolve, install, verify, review, propose-update, approve, apply, recover, pack, inspect, bom, sign, export, execution-request and authorize-execution (python3 -m aepm --help lists them). There is no single command that assembles an application, and no published tool that scaffolds or checks a component; do not invent or claim one.
 
 Building from a recipe (the recipe's .txt page lists the same steps):
 1. git clone https://github.com/ourapps-ae/aepm and set PYTHONPATH to it. Then: python3 -m aepm fetch <recipe>@<version> --with-dependencies --store store (checks every digest and signature).
