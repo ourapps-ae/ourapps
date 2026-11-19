@@ -1,6 +1,6 @@
 // Plain-text pages of the recipe library and component catalogue, for agents that read without a browser.
-import { COMPONENT_PACKAGE, RECIPE_PACKAGE, classSettings, deprecationLine, describeCondition, kindText, type ClassInterface, type Condition, type PackageSummary, type Deprecation, type ComponentList, ComponentSearch, ComponentSummary, ComponentVersionView, Port, RecipeList, RecipeQuestion, RecipeSearch, RecipeSlotView, RecipeSummary, RecipeVersionView, SettingDeclaration, Suitability, Targets } from "@my/store-shared";
-import type { Foundations } from "@my/store-shared";
+import { COMPONENT_PACKAGE, RECIPE_PACKAGE, SIGNATURES_NOTE, classSettings, deprecationLine, describeCondition, kindText, type ClassInterface, type Condition, type PackageSummary, type Deprecation, type ComponentList, ComponentSearch, ComponentSummary, ComponentVersionView, Port, RecipeList, RecipeQuestion, RecipeSearch, RecipeSlotView, RecipeSummary, RecipeVersionView, SettingDeclaration, Suitability, Targets } from "@my/store-shared";
+import type { FoundationSummary, Foundations, PackageDetails } from "@my/store-shared";
 
 const COPYRIGHT = "Copyright Level N Ltd 2026";
 
@@ -143,7 +143,7 @@ function versions(v: { versions: { version: string; publishedAt: string; digest:
 }
 
 function foundationLines(f: Foundations): string[] {
-  return ["", "Package foundations (publisher-declared)", "Last successful verification: no verified record", `Wrapper licence: ${f.licence}`, `Platforms: ${f.platforms.join(", ")}`, `Runtime requirements: ${JSON.stringify(f.compatibility.runtimes)}`, `Framework requirements: ${JSON.stringify(f.compatibility.frameworks)}`, `Exact dependencies: ${JSON.stringify(f.compatibility.dependencies)}`, `Styles: ${JSON.stringify(f.compatibility.styles)}`, `Maintainers: ${f.maintenance.owners.join(", ")}; ${f.maintenance.contact}`, `Maintenance repository: ${f.maintenance.repository}`, `Updates: ${f.maintenance.updates.source} (${f.maintenance.updates.strategy})`, ...f.upstream.map(u => `Upstream: ${u.name} ${u.version}; revision ${u.revision ?? "not supplied"}; ${u.repository}; ${u.purl}; licence ${u.licence}; notices ${u.notices.join(", ")}; delivery ${JSON.stringify(u.delivery)}`), ...f.classes.flatMap(c => [`Class: ${c.reference.name} ${c.reference.version} ${c.reference.digest}`, `Shared behaviour suites: ${c.descriptor.verification.map(s => s.id).join(", ")}`, `Class modules: ${JSON.stringify(c.descriptor.provides.map(p => ({ type: p.type, modules: p.modules })))}`, `Class interface and test inventory: ${JSON.stringify(c.descriptor.inventory)}`])];
+  return ["", "Package foundations (publisher-declared)", `Signatures: ${SIGNATURES_NOTE}`, `Wrapper licence: ${f.licence}`, `Platforms: ${f.platforms.join(", ")}`, `Runtime requirements: ${JSON.stringify(f.compatibility.runtimes)}`, `Framework requirements: ${JSON.stringify(f.compatibility.frameworks)}`, `Exact dependencies: ${JSON.stringify(f.compatibility.dependencies)}`, `Styles: ${JSON.stringify(f.compatibility.styles)}`, `Maintainers: ${f.maintenance.owners.join(", ")}; ${f.maintenance.contact}`, `Maintenance repository: ${f.maintenance.repository}`, `Updates: ${f.maintenance.updates.source} (${f.maintenance.updates.strategy})`, ...f.upstream.map(u => `Upstream: ${u.name} ${u.version}; revision ${u.revision ?? "not supplied"}; ${u.repository}; ${u.purl}; licence ${u.licence}; notices ${u.notices.join(", ")}; delivery ${JSON.stringify(u.delivery)}`), ...f.classes.flatMap(c => [`Class: ${c.reference.name} ${c.reference.version} ${c.reference.digest}`, `Shared behaviour suites: ${c.descriptor.verification.map(s => s.id).join(", ")}`, `Class modules: ${JSON.stringify(c.descriptor.provides.map(p => ({ type: p.type, modules: p.modules })))}`, `Class interface and test inventory: ${JSON.stringify(c.descriptor.inventory)}`])];
 }
 
 // One line per slot: its class, its preferred component and when it is included.
@@ -198,7 +198,7 @@ export function recipeText(v: RecipeVersionView, origin: string): string {
 }
 
 // The rest of a recipe: what the summary page leaves out.
-export function recipeDetailsText(v: RecipeVersionView, origin: string): string {
+export function recipeDetailsText(v: RecipeVersionView, details: PackageDetails, origin: string): string {
   return page(`${v.title} (${v.name}) ${v.version}: details`, [
     `The recipe page, with the build steps, questions, slots and components: ${origin}/recipes/${v.slug}.txt?version=${v.version}`,
     `Digest: ${v.digest}`,
@@ -217,35 +217,30 @@ export function recipeDetailsText(v: RecipeVersionView, origin: string): string 
     "",
     "Versions",
     ...versions(v),
-    ...foundationLines(v.foundations),
+    ...foundationLines(details.foundations),
   ]);
 }
 
-const requirementLines = (f: Foundations): string[] => {
-  const runtimes = Object.entries(f.compatibility.runtimes).map(([k, r]) => `${k} ${r}`);
-  const frameworks = Object.entries(f.compatibility.frameworks).map(([k, x]) => `${k}: ${x.name} ${x.range}`);
-  const styles = f.compatibility.styles;
-  return [
-    `Platforms: ${list(f.platforms)}`,
-    `Toolchains: ${list(runtimes)}`,
-    `Frameworks: ${list(frameworks)}`,
-    `Styles: scope ${styles.scope}; ${styles.namespaces.length} namespaces; ${styles.conflicts.length} conflicts`,
-    `Licence: ${f.licence}; ${f.upstream.length} upstream sources, ${f.compatibility.dependencies.length} exact dependencies, ${f.files.length} files (listed on the details page)`,
-  ];
-};
+const requirementLines = (f: FoundationSummary): string[] => [
+  `Platforms: ${list(f.platforms)}`,
+  `Toolchains: ${list(Object.entries(f.runtimes).map(([k, r]) => `${k} ${r}`))}`,
+  `Frameworks: ${list(Object.entries(f.frameworks).map(([k, x]) => `${k}: ${x.name} ${x.range}`))}`,
+  `Styles: scope ${f.styles.scope}; ${f.styles.namespaces} namespaces; ${f.styles.conflicts} conflicts`,
+  `Licence: ${f.licence}; ${f.counts.upstream} upstream sources, ${f.counts.dependencies} exact dependencies, ${f.counts.files} files (listed on the details page)`,
+];
 
 // The classes the component implements, with the entry modules each provided interface declares per platform.
-function classLines(f: Foundations): string[] {
-  return f.classes.flatMap((c) => [
+function classLines(f: FoundationSummary): string[] {
+  return f.implements.flatMap((c) => [
     `Implements: ${c.reference.name}@${c.reference.version} ${c.reference.digest}`,
-    ...c.descriptor.provides.map((p) => `  ${p.type} ${p.version} entry modules: ${list(Object.entries(p.modules).map(([platform, m]) => `${platform} ${m.join(" ")}`))}`),
-    `  shared behaviour suites: ${list(c.descriptor.verification.map((x) => x.id))}`,
+    ...c.provides.map((p) => `  ${p.type} ${p.version} entry modules: ${list(Object.entries(p.modules).map(([platform, m]) => `${platform} ${m.join(" ")}`))}`),
+    `  shared behaviour suites: ${list(c.suites)}`,
   ]);
 }
 
 // The recipe.json slot that names this component, and the aepm commands that use it in another slot of its class.
 function recipeUseLines(v: ComponentVersionView): string[] {
-  const c = v.foundations.implements[0];
+  const c = v.foundations.implements[0]?.reference;
   if (!c) return ["How to use in a recipe: this component implements no class, so no slot can name it"];
   const slot = { id: v.slug, class: { name: c.name, version: c.version, digest: c.digest }, preferred: { name: v.name, version: v.version } };
   return [
@@ -298,18 +293,19 @@ export function componentText(v: ComponentVersionView, origin: string): string {
 }
 
 // The rest of a component: what the summary page leaves out.
-export function componentDetailsText(v: ComponentVersionView, origin: string): string {
+export function componentDetailsText(v: ComponentVersionView, details: PackageDetails, origin: string): string {
+  const f = details.foundations;
   return page(`${v.name} ${v.version}: details`, [
     `The component page, with its class, interfaces, settings and how to use it in a recipe: ${origin}/components/${v.slug}.txt?version=${v.version}`,
     `Digest: ${v.digest}`,
     `Bundle: ${v.bundle.asset} ${v.bundle.digest}`,
     ...packageLines(COMPONENT_PACKAGE),
-    ...foundationLines(v.foundations),
+    ...foundationLines(f),
     "",
-    `Files (${v.foundations.files.length})`,
-    ...v.foundations.files.map((x) => `- ${x.path}${x.executable ? " (executable)" : ""}`),
+    `Files (${f.files.length})`,
+    ...f.files.map((x) => `- ${x.path}${x.executable ? " (executable)" : ""}`),
     "",
-    `Installed as (${v.foundations.artefacts.length})`,
-    ...v.foundations.artefacts.map((a) => `- ${a.source} -> ${a.destination}${a.template ? " (template)" : ""}${a.executable ? " (executable)" : ""}`),
+    `Installed as (${f.artefacts.length})`,
+    ...f.artefacts.map((a) => `- ${a.source} -> ${a.destination}${a.template ? " (template)" : ""}${a.executable ? " (executable)" : ""}`),
   ]);
 }

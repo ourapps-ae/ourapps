@@ -235,7 +235,7 @@ export interface AuditEvent {
 let mePromise: Promise<Me | null> | null = null;
 export function whoAmI(force = false): Promise<Me | null> {
   if (!mePromise || force) {
-    mePromise = api<Me>("GET", "/api/dev/me").catch(() => null);
+    mePromise = api<Me | null>("GET", "/api/auth/session").catch(() => null);
   }
   return mePromise;
 }

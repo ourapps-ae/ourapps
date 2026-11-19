@@ -30,6 +30,9 @@ import {
   type RecipeSlotView,
   type RecipeSummary,
   type RecipeVersionView,
+  type PackageDetails,
+  slotClass,
+  summariseFoundations,
 } from "@my/store-shared";
 import { audit } from "../audit.js";
 import type { AuthedDeveloper } from "../auth.js";
@@ -153,7 +156,7 @@ async function recipeView(env: Env, d: CatalogueDb, entry: EntryRow, r: RecipeRo
   const [listed, [tree]] = await Promise.all([d.catalogueFor(recipe.components.map((s) => s.preferred)), d.deprecationsFor([subject("recipe", r)])]);
   const alternatives = await alternativesFor(env, d, recipe.components, r.foundations);
   return {
-    foundations: r.foundations, foundationEvidence: "publisher-declared", lastSuccessfulVerification: null,
+    foundations: summariseFoundations(r.foundations, `${env.PUBLIC_ORIGIN}/api/recipes/${r.slug}/${r.version}/details`), foundationEvidence: "publisher-declared",
     ...recipeSummary(env, r, tree.notices),
     digest: r.digest,
     source: { repository: r.sourceRepo, tag: r.sourceTag },
@@ -165,7 +168,7 @@ async function recipeView(env: Env, d: CatalogueDb, entry: EntryRow, r: RecipeRo
       const listedEntry = listed[i] ?? null;
       return {
         ...s,
-        declaration: classDescriptor(s.class, r.foundations)!,
+        declaration: slotClass(classDescriptor(s.class, r.foundations)!),
         preferred: { ...s.preferred, url: listedEntry ? `${env.PUBLIC_ORIGIN}/components/${listedEntry.slug}` : null },
         catalogue: listedEntry ? { description: listedEntry.description, suitability: listedEntry.suitability, guardians: listedEntry.guardians } : null,
         deprecation: tree.notices.find((n) => n.name === s.preferred.name && n.version === s.preferred.version && n.via.includes(r.name)) ?? null,
@@ -185,7 +188,7 @@ async function recipeView(env: Env, d: CatalogueDb, entry: EntryRow, r: RecipeRo
 async function componentView(env: Env, d: CatalogueDb, entry: EntryRow, r: ComponentRow): Promise<ComponentVersionView> {
   const [tree] = await d.deprecationsFor([subject("component", r)]);
   return {
-    foundations: r.foundations, foundationEvidence: "publisher-declared", lastSuccessfulVerification: null,
+    foundations: summariseFoundations(r.foundations, `${env.PUBLIC_ORIGIN}/api/components/${r.slug}/${r.version}/details`), foundationEvidence: "publisher-declared",
     ...componentSummary(env, r, tree.notices),
     digest: r.digest,
     guardians: r.guardians,
@@ -231,10 +234,24 @@ export async function recipeDetail(env: Env, name: string, version: string): Pro
 }
 
 async function recipeDetailView(env: Env, name: string, version: string): Promise<RecipeVersionView> {
+  return (await recipeFull(env, name, version)).view;
+}
+
+async function recipeFull(env: Env, name: string, version: string): Promise<{ view: RecipeVersionView; details: PackageDetails }> {
   const d = db(env);
   const found = await d.recipeVersion(slugOf(name), versionOf(version));
   if (!found) throw new HttpError(404, "no such recipe version");
-  return recipeView(env, d, found.entry, found.row);
+  return { view: await recipeView(env, d, found.entry, found.row), details: packageDetails(found.row) };
+}
+
+const packageDetails = (r: { name: string; version: string; foundations: Foundations }): PackageDetails => ({ name: r.name, version: r.version, foundationEvidence: "publisher-declared", foundations: r.foundations });
+
+// GET /api/{recipes,components}/:name/:version/details
+export async function versionDetails(env: Env, kind: Kind, name: string, version: string): Promise<Response> {
+  const d = db(env);
+  const found = kind === "recipe" ? await d.recipeVersion(slugOf(name), versionOf(version)) : await d.componentVersion(slugOf(name), versionOf(version));
+  if (!found) throw new HttpError(404, `no such ${kind} version`);
+  return json(packageDetails(found.row));
 }
 
 export async function listComponents(env: Env, url: URL): Promise<Response> {
@@ -263,10 +280,14 @@ export async function componentDetail(env: Env, name: string, version: string): 
 }
 
 async function componentDetailView(env: Env, name: string, version: string): Promise<ComponentVersionView> {
+  return (await componentFull(env, name, version)).view;
+}
+
+async function componentFull(env: Env, name: string, version: string): Promise<{ view: ComponentVersionView; details: PackageDetails }> {
   const d = db(env);
   const found = await d.componentVersion(slugOf(name), versionOf(version));
   if (!found) throw new HttpError(404, "no such component version");
-  return componentView(env, d, found.entry, found.row);
+  return { view: await componentView(env, d, found.entry, found.row), details: packageDetails(found.row) };
 }
 
 const SVG_HEADERS = { "Content-Type": "image/svg+xml", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox" };
@@ -397,19 +418,31 @@ export function wantsHtml(request: Request): boolean {
   return /text\/html/i.test(request.headers.get("Accept") ?? "");
 }
 
-// /recipes.txt, /recipes.json, /recipes/:name.txt, /recipes/:name.json and the same for components, and /recipes/:name/details.txt and /components/:name/details.txt.
-// Returns null for any other path. ?version= picks a version; ?q= searches a list.
+// /recipes.txt, /recipes.json, /recipes/:name.txt, /recipes/:name.json, /recipes/:name/details.txt and the same for
+// components. Returns null for any other path. ?version= picks a version; ?q= searches a list.
 export function pageVariant(env: Env, parts: string[], url: URL, request?: Request): Promise<Response> | null {
+  const catalogue = parts[0] === "recipes" || parts[0] === "components";
   // A client that does not ask for HTML (an agent's fetch tool, curl) gets the plain-text page at the page's own address.
-  const bare = parts.length <= 2 && (parts[0] === "recipes" || parts[0] === "components") && !/\.(txt|json)$/.test(parts[parts.length - 1] ?? "");
+  const bareDetails = catalogue && parts.length === 3 && parts[2] === "details";
+  if (bareDetails && request && !wantsHtml(request)) return detailsText(env, parts[0] as "recipes" | "components", parts[1], url);
+  const bare = parts.length <= 2 && catalogue && !/\.(txt|json)$/.test(parts[parts.length - 1] ?? "");
   if (bare && request && !wantsHtml(request)) return variant(env, parts[0] as "recipes" | "components", parts[1] ?? null, "txt", url);
   const top = /^(recipes|components)\.(txt|json)$/.exec(parts[0] ?? "");
   const nested = parts.length === 2 && (parts[0] === "recipes" || parts[0] === "components") ? /^(.+)\.(txt|json)$/.exec(parts[1]) : null;
   if (parts.length === 1 && top) return variant(env, top[1] as "recipes" | "components", null, top[2] as "txt" | "json", url);
   if (nested) return variant(env, parts[0] as "recipes" | "components", nested[1], nested[2] as "txt" | "json", url);
-  if (parts.length === 3 && parts[0] === "components" && parts[2] === "details.txt") return componentDetailView(env, parts[1], url.searchParams.get("version") ?? "latest").then((v) => plain(componentDetailsText(v, env.PUBLIC_ORIGIN)));
-  if (parts.length === 3 && parts[0] === "recipes" && parts[2] === "details.txt") return recipeDetailView(env, parts[1], url.searchParams.get("version") ?? "latest").then((v) => plain(recipeDetailsText(v, env.PUBLIC_ORIGIN)));
+  if (catalogue && parts.length === 3 && parts[2] === "details.txt") return detailsText(env, parts[0] as "recipes" | "components", parts[1], url);
   return null;
+}
+
+async function detailsText(env: Env, what: "recipes" | "components", name: string, url: URL): Promise<Response> {
+  const version = url.searchParams.get("version") ?? "latest";
+  if (what === "recipes") {
+    const { view, details } = await recipeFull(env, name, version);
+    return plain(recipeDetailsText(view, details, env.PUBLIC_ORIGIN));
+  }
+  const { view, details } = await componentFull(env, name, version);
+  return plain(componentDetailsText(view, details, env.PUBLIC_ORIGIN));
 }
 
 async function variant(env: Env, what: "recipes" | "components", name: string | null, format: "txt" | "json", url: URL): Promise<Response> {

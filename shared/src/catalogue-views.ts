@@ -1,6 +1,6 @@
 // What the public recipe and component routes return. Never carries tokens or credentials.
-import type { BundlePointer, ComponentDependency, MigrationSummary, Port, Recipe, RecipeSlot, ReleasePointer, EntryModule, SettingDeclaration, Suitability, Targets } from "./catalogue.js";
-import type { ClassDescriptor, Foundations } from "./foundations.js";
+import type { BundlePointer, ClassInterface, ComponentDependency, MigrationSummary, Port, Recipe, RecipeSlot, ReleasePointer, EntryModule, SettingDeclaration, Suitability, Targets } from "./catalogue.js";
+import type { ClassDescriptor, ClassReference, Compatibility, Foundations } from "./foundations.js";
 
 export const DEPRECATED_FILTERS = ["exclude", "include", "only"] as const;
 export type DeprecatedFilter = typeof DEPRECATED_FILTERS[number];
@@ -92,7 +92,7 @@ export interface ComponentSummary {
 // class by the fit rule (newest listed version of each), `url` the catalogue list of components providing every type the
 // class provides.
 export interface RecipeSlotView extends Omit<RecipeSlot, "preferred"> {
-  declaration: ClassDescriptor;
+  declaration: SlotClass;
   preferred: { name: string; version: string; url: string | null };
   catalogue: { description: string; suitability: Suitability; guardians: string[] } | null;
   deprecation: Deprecation | null;
@@ -100,9 +100,8 @@ export interface RecipeSlotView extends Omit<RecipeSlot, "preferred"> {
 }
 
 export interface RecipeVersionView extends RecipeSummary {
-  foundations: Foundations;
+  foundations: FoundationSummary;
   foundationEvidence: "publisher-declared";
-  lastSuccessfulVerification: null;
   digest: string;
   source: ReleasePointer;
   bundle: BundlePointer & { url: string };
@@ -122,9 +121,8 @@ export interface RecipeVersionView extends RecipeSummary {
 // `usedBy` lists the listed recipes whose newest version names this component in a slot, with each slot and whether the
 // component is the slot's preferred one or a job candidate.
 export interface ComponentVersionView extends ComponentSummary {
-  foundations: Foundations;
+  foundations: FoundationSummary;
   foundationEvidence: "publisher-declared";
-  lastSuccessfulVerification: null;
   digest: string;
   guardians: string[];
   settings: SettingDeclaration[];
@@ -138,6 +136,66 @@ export interface ComponentVersionView extends ComponentSummary {
   versions: VersionRef[];
   usedBy: { name: string; slug: string; title: string; version: string; url: string; slots: { id: string; preferred: boolean }[] }[];
 }
+
+// What a slot's class asks of a component: the interfaces, the settings schema the recipe writes, and the ids of the
+// class's shared behaviour suites. The full descriptor (inventory, suite commands) is in the recipe's details.
+export interface SlotClass {
+  provides: ClassInterface[];
+  requires: ClassInterface[];
+  settings: ClassDescriptor["settings"];
+  suites: string[];
+}
+
+export function slotClass(d: ClassDescriptor): SlotClass {
+  return { provides: d.provides.map(({ type, version }) => ({ type, version })), requires: d.requires, settings: d.settings, suites: d.verification.map((v) => v.id) };
+}
+
+// A class the package implements, with each provided interface's entry modules per platform.
+export interface ImplementedClass {
+  reference: ClassReference;
+  provides: { type: string; version: string; modules: Record<string, string[]> }[];
+  requires: ClassInterface[];
+  suites: string[];
+}
+
+// The package facts of a version page. The long lists are counted here and returned by the details route (`details`).
+export interface FoundationSummary {
+  licence: string;
+  platforms: string[];
+  implements: ImplementedClass[];
+  runtimes: Compatibility["runtimes"];
+  frameworks: Compatibility["frameworks"];
+  styles: { scope: Compatibility["styles"]["scope"]; namespaces: number; conflicts: number };
+  maintenance: Foundations["maintenance"];
+  counts: { upstream: number; dependencies: number; classes: number; files: number; artefacts: number };
+  details: string;
+}
+
+export function summariseFoundations(f: Foundations, details: string): FoundationSummary {
+  const implemented = f.implements.flatMap((r) => f.classes.filter((c) => c.reference.name === r.name && c.reference.version === r.version && c.reference.digest === r.digest));
+  return {
+    licence: f.licence,
+    platforms: f.platforms,
+    implements: implemented.map(({ reference, descriptor: d }) => ({ reference, provides: d.provides.map(({ type, version, modules }) => ({ type, version, modules })), requires: d.requires, suites: d.verification.map((v) => v.id) })),
+    runtimes: f.compatibility.runtimes,
+    frameworks: f.compatibility.frameworks,
+    styles: { scope: f.compatibility.styles.scope, namespaces: f.compatibility.styles.namespaces.length, conflicts: f.compatibility.styles.conflicts.length },
+    maintenance: f.maintenance,
+    counts: { upstream: f.upstream.length, dependencies: f.compatibility.dependencies.length, classes: f.classes.length, files: f.files.length, artefacts: f.artefacts.length },
+    details,
+  };
+}
+
+// GET /api/{recipes,components}/:name/:version/details: the package foundations in full.
+export interface PackageDetails {
+  name: string;
+  version: string;
+  foundationEvidence: "publisher-declared";
+  foundations: Foundations;
+}
+
+// Where the signatures of a published version are, said the same way on every page.
+export const SIGNATURES_NOTE = "The release signature, the guardian signature and the guardian's review report are files of the release beside the archive. aepm fetch downloads them and aepm install checks them against the owner's policy. The catalogue does not store them.";
 
 // The catalogue list of components that provide every one of `types`: where a slot's alternatives are found.
 export function providersPath(types: string[]): string {

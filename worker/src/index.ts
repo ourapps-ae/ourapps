@@ -1,5 +1,5 @@
 import { TERMS_VERSION } from "@my/store-shared";
-import { finishLogin, logout, logoutEverywhere, oauthConfigured, requireDeveloper, requireTerms, startLogin } from "./auth.js";
+import { currentDeveloper, finishLogin, logout, logoutEverywhere, oauthConfigured, requireDeveloper, requireTerms, startLogin } from "./auth.js";
 import { defaultDeps, type Deps, type Env } from "./env.js";
 import { randomId } from "./crypto.js";
 import { HttpError, json } from "./http.js";
@@ -74,6 +74,11 @@ async function route(request: Request, env: Env, deps: Deps): Promise<Response> 
   if (p[0] === "auth") {
     if (p[1] === "github" && m === "GET") return startLogin(env);
     if (p[1] === "callback" && m === "GET") return finishLogin(request, env, deps);
+    // The site asks who is signed in on every page; a visitor gets null, not an error.
+    if (p[1] === "session" && m === "GET") {
+      const me = await currentDeveloper(request, env, deps);
+      return me ? dev.me(env, me) : json(null);
+    }
     if (p[1] === "logout" && m === "POST") return logout(request, env, deps);
     if (p[1] === "logout-everywhere" && m === "POST") return logoutEverywhere(request, env, deps, await requireDeveloper(request, env, deps));
   }
@@ -96,6 +101,7 @@ async function route(request: Request, env: Env, deps: Deps): Promise<Response> 
     if (p.length === 4 && p[3] === "components.svg" && recipes) return catalogue.recipeComponentsDiagram(env, p[1], p[2]);
     if (p.length === 4 && p[3] === "connections.svg" && !recipes) return catalogue.componentConnectionsDiagram(env, p[1], p[2]);
     if (p.length === 4 && p[3] === "deprecations") return catalogue.deprecations(env, recipes ? "recipe" : "component", p[1], p[2]);
+    if (p.length === 4 && p[3] === "details") return catalogue.versionDetails(env, recipes ? "recipe" : "component", p[1], p[2]);
   }
 
   if (p[0] === "build" && p.length === 3 && p[2] === "targets" && m === "GET") return buildTargets(request, env, p[1]);

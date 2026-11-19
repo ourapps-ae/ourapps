@@ -1403,6 +1403,7 @@ export async function agents(root: HTMLElement): Promise<void> {
             <tr><td><code>GET /api/components/search?q=</code></td><td>search components; filter by <code>provides</code> and <code>requires</code></td></tr>
             <tr><td><code>/recipes/:name.txt</code>, <code>/components/:name.txt</code></td><td>the entry as plain text: build steps, questions, slots, components, settings</td></tr>
             <tr><td><code>/recipes/:name/details.txt</code>, <code>/components/:name/details.txt</code></td><td>the rest of an entry: slot classes, suitability, connections, package foundations, upstream sources and file lists</td></tr>
+            <tr><td><code>GET /api/recipes/:name/:version/details</code></td><td>the full package foundations as JSON; the version itself gives counts</td></tr>
             <tr><td><code>GET /api/recipes/:name/latest</code></td><td>the same as JSON; <code>.../:version/bundle</code> gives a one-hour download link</td></tr>
             <tr><td><code>https://github.com/ourapps-ae/:name</code></td><td>each package's public source and releases</td></tr>
           </table>

@@ -266,6 +266,7 @@ function body(): Raw {
             <tr><td><code>GET /api/components</code>, <code>/api/components/search?q=</code>, <code>/api/components/:name/:version</code></td><td>anyone</td><td>The same, plus <code>provides</code> and <code>requires</code> to filter by interface</td></tr>
             <tr><td><code>GET /api/{recipes,components}/:name/:version/bundle</code></td><td>anyone</td><td>A signed link to the package, valid one hour</td></tr>
             <tr><td><code>GET /api/{recipes,components}/:name/:version/deprecations</code></td><td>anyone</td><td>The deprecation warnings for that version and everything it uses</td></tr>
+            <tr><td><code>GET /api/{recipes,components}/:name/:version/details</code></td><td>anyone</td><td>The package foundations in full: upstream sources, exact dependencies, styles, classes, files</td></tr>
             <tr><td><code>/recipes.txt</code>, <code>/recipes/:name.json</code>, <code>/components.txt</code>, <code>/sitemap.xml</code></td><td>anyone</td><td>Plain text and JSON of every public page</td></tr>
             <tr><td><code>POST /api/dev/recipes</code>, <code>POST /api/dev/components</code></td><td>signed in, or a manage key</td><td>Publish; checks the release and the asset digest with your saved GitHub token</td></tr>
             <tr><td><code>POST /api/dev/{recipes,components}/:name/deprecate</code>, <code>/undeprecate</code></td><td>the publisher</td><td>Flag or clear every version, with an optional replacement</td></tr>

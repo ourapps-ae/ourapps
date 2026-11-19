@@ -102,7 +102,7 @@ aepm design ourpoker@&lt;version&gt; --store store --answers answers.json \
           <li><b>Compatibility</b>: runtime and framework version ranges, dependencies shared with other parts (which must agree) or kept isolated, and the stylesheet names it uses globally. Conflicts are refused before anything is installed.</li>
           <li><b>Maintenance</b>: owners, a contact, the repository and where updates come from.</li>
         </ul>
-        <p>These are the publisher's declarations. aepm checks them against the archive and its signed review evidence, which is where a part's last successful test time comes from. A component's text page counts its sources, dependencies and files; <code>/components/&lt;name&gt;/details.txt</code> lists them. Details: <a href="/docs/package-foundations.md">package foundations</a>.</p>
+        <p>These are the publisher's declarations. aepm checks them against the archive and its signed review evidence. A recipe or component page shows these as counts; its <b>Sources and dependencies</b> link opens the lists (<code>/components/&lt;name&gt;/details</code>, as text at <code>/components/&lt;name&gt;/details.txt</code>). The release signature, the guardian signature and the guardian's review report are files of the release beside the archive; aepm checks them, and the catalogue does not store them. Details: <a href="/docs/package-foundations.md">package foundations</a>.</p>
         <h3>Publish your composition</h3>
         <p>Once your agent has connected the parts into an application, you can publish the result as a recipe so that others pick it from the library. <a href="#publish">Publish a recipe or component</a>.</p>
       `,

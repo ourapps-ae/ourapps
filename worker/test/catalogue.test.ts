@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { EXAMPLE_BUNDLE_DIGEST, EXAMPLE_INTERFACE_DIGEST, exampleComponentEntries, exampleComponentEntry, exampleRecipeEntry, type BundleLink, type ComponentList, type ComponentSearch, type ComponentVersionView, type DeprecationReport, type RecipeList, type RecipeSearch, type RecipeVersionView } from "@my/store-shared";
+import { SIGNATURES_NOTE, summariseFoundations, type Foundations, type PackageDetails, EXAMPLE_BUNDLE_DIGEST, EXAMPLE_INTERFACE_DIGEST, exampleComponentEntries, exampleComponentEntry, exampleRecipeEntry, type BundleLink, type ComponentList, type ComponentSearch, type ComponentVersionView, type DeprecationReport, type RecipeList, type RecipeSearch, type RecipeVersionView } from "@my/store-shared";
 import { Db } from "../src/db.js";
 import { ftsQuery } from "../src/catalogue-db.js";
 import { componentDetailsText, componentText, recipeDetailsText, recipeText } from "../src/catalogue-text.js";
@@ -247,14 +247,32 @@ describe("publishing a component", () => {
 });
 
 describe("publishing a recipe", () => {
-  it("stores declared foundation facts without claiming verification", async () => {
+  it("stores declared foundation facts: counts on the version, the lists on its details", async () => {
     await publishRecipe();
     const r = (await (await get("/api/recipes/poker-night")).json()) as RecipeVersionView;
     const c = (await (await get("/api/components/card-deck")).json()) as ComponentVersionView;
-    expect(r.foundations).toEqual(exampleRecipeEntry().foundations);
-    expect(c.foundations).toEqual(exampleComponentEntry().foundations);
-    for (const v of [r, c]) { expect(v.foundationEvidence).toBe("publisher-declared"); expect(v.lastSuccessfulVerification).toBeNull(); }
-    expect(await (await get("/components/card-deck/details.txt")).text()).toContain("Package foundations (publisher-declared)");
+    expect(r.foundations).toEqual(summariseFoundations(exampleRecipeEntry().foundations, `${BASE}/api/recipes/poker-night/0.1.0/details`));
+    expect(c.foundations).toEqual(summariseFoundations(exampleComponentEntry().foundations, `${BASE}/api/components/card-deck/0.1.0/details`));
+    for (const v of [r, c]) {
+      expect(v.foundationEvidence).toBe("publisher-declared");
+      expect(v).not.toHaveProperty("lastSuccessfulVerification");
+      for (const field of ["upstream", "compatibility", "classes", "files", "artefacts"]) expect(v.foundations).not.toHaveProperty(field);
+    }
+    expect(c.foundations.implements.map((x) => x.reference.name)).toEqual(["ourapps-ae/card-deck-class"]);
+    expect(r.components[0]!.declaration).not.toHaveProperty("inventory");
+    expect(r.components[0]!.declaration.suites.length).toBeGreaterThan(0);
+    const details = await get(new URL(r.foundations.details).pathname);
+    expect(details.status).toBe(200);
+    expect(await details.json()).toEqual({ name: "acme/poker-night", version: "0.1.0", foundationEvidence: "publisher-declared", foundations: exampleRecipeEntry().foundations });
+    expect(await (await get("/api/components/card-deck/latest/details")).json()).toMatchObject({ name: "acme/card-deck", foundations: exampleComponentEntry().foundations });
+    expect((await get("/api/components/card-deck/9.9.9/details")).status).toBe(404);
+    expect((await get("/api/recipes/nope/latest/details")).status).toBe(404);
+    const text = await (await get("/components/card-deck/details.txt")).text();
+    expect(text).toContain("Package foundations (publisher-declared)");
+    expect(text).toContain(`Signatures: ${SIGNATURES_NOTE}`);
+    expect(text).not.toContain("Last successful verification");
+    const bare = await handle(api(null, "GET", "/components/card-deck/details", undefined, { Accept: "text/plain" }), env, deps);
+    expect(await bare.text()).toBe(text);
   });
 
   it("keeps absent foundation projections unavailable without manufacturing facts", async () => {
@@ -809,17 +827,21 @@ describe("page variants", () => {
     const json = (await (await get("/recipes/poker-night.json")).json()) as RecipeVersionView;
     expect(json).toEqual((await (await get("/api/recipes/poker-night")).json()) as RecipeVersionView);
 
-    // OurPoker 0.7.0 has 39 slots, 825 upstream records and 723 exact dependencies; its recipe page stays small.
+    // OurPoker 0.7.0 has 39 slots, 825 upstream records and 723 exact dependencies; its recipe page and version stay small.
     const slot = json.components[0]!;
-    const upstream: RecipeVersionView["foundations"]["upstream"][number] = { name: "an-upstream-library-with-a-long-name", version: "1.0.0", revision: null, repository: "https://example.org/upstream", purl: "pkg:npm/an-upstream-library-with-a-long-name@1.0.0", licence: "MIT", notices: ["notices/npm/an-upstream-library-with-a-long-name@1.0.0/0-LICENSE"], delivery: { kind: "build-time", manager: "npm", lock: "implementation/package-lock.json", digest: "0".repeat(64), packagePath: "node_modules/an-upstream-library-with-a-long-name", integrity: `sha512-${"A".repeat(86)}==` } };
+    const full = ((await (await get("/api/recipes/poker-night/0.1.0/details")).json()) as PackageDetails).foundations;
+    const upstream: Foundations["upstream"][number] = { name: "an-upstream-library-with-a-long-name", version: "1.0.0", revision: null, repository: "https://example.org/upstream", purl: "pkg:npm/an-upstream-library-with-a-long-name@1.0.0", licence: "MIT", notices: ["notices/npm/an-upstream-library-with-a-long-name@1.0.0/0-LICENSE"], delivery: { kind: "build-time", manager: "npm", lock: "implementation/package-lock.json", digest: "0".repeat(64), packagePath: "node_modules/an-upstream-library-with-a-long-name", integrity: `sha512-${"A".repeat(86)}==` } };
+    const largeFoundations: Foundations = { ...full, upstream: Array.from({ length: 825 }, () => upstream), compatibility: { ...full.compatibility, dependencies: Array.from({ length: 723 }, (_, i) => ({ isolation: "isolated", name: `pkg:npm/dependency-${i}`, version: "1.0.0" })) } };
     const large: RecipeVersionView = {
       ...json,
       components: Array.from({ length: 39 }, (_, i) => ({ ...slot, id: `slot-${i}`, preferred: { ...slot.preferred, name: `acme/part-${i}` } })),
-      foundations: { ...json.foundations, upstream: Array.from({ length: 825 }, () => upstream), compatibility: { ...json.foundations.compatibility, dependencies: Array.from({ length: 723 }, (_, i) => ({ isolation: "isolated", name: `pkg:npm/dependency-${i}`, version: "1.0.0" })) } },
+      foundations: summariseFoundations(largeFoundations, json.foundations.details),
     };
     const summary = recipeText(large, BASE);
-    const rest = recipeDetailsText(large, BASE);
+    const rest = recipeDetailsText(large, { name: json.name, version: json.version, foundationEvidence: "publisher-declared", foundations: largeFoundations }, BASE);
     expect(summary.length).toBeLessThan(60_000);
+    expect(JSON.stringify(large).length).toBeLessThan(100_000);
+    expect(JSON.stringify(large.foundations)).not.toContain("an-upstream-library-with-a-long-name");
     expect(summary).not.toContain("an-upstream-library-with-a-long-name");
     expect(summary).toContain("- acme/part-38@0.1.0");
     expect(rest.split("Upstream: an-upstream-library-with-a-long-name").length - 1).toBe(825);
@@ -862,19 +884,20 @@ describe("page variants", () => {
 
       // android-host 0.7.0 has 344 upstream sources, 291 exact dependencies and 468 files; its component page stays small.
       const card = (await (await get("/components/card-deck.json")).json()) as ComponentVersionView;
-      const upstream: ComponentVersionView["foundations"]["upstream"][number] = { name: "an-upstream-library-with-a-long-name", version: "1.0.0", revision: null, repository: "https://example.org/upstream", purl: "pkg:maven/org.example/an-upstream-library-with-a-long-name@1.0.0", licence: "Apache-2.0", notices: ["notices/maven/an-upstream-library-with-a-long-name@1.0.0/0-LICENSE"], delivery: { kind: "bundled", files: [{ path: "vendor/an-upstream-library-with-a-long-name.jar", digest: "0".repeat(64) }] } };
-      const large: ComponentVersionView = {
-        ...card,
-        foundations: {
-          ...card.foundations,
-          upstream: Array.from({ length: 344 }, () => upstream),
-          compatibility: { ...card.foundations.compatibility, dependencies: Array.from({ length: 291 }, (_, i) => ({ isolation: "isolated", name: `pkg:maven/org.example/dependency-${i}`, version: "1.0.0" })) },
-          files: Array.from({ length: 468 }, (_, i) => ({ path: `android/src/main/java/app/ourapps/host/File${i}.kt`, executable: false })),
-        },
+      const cardFull = ((await (await get("/api/components/card-deck/0.1.0/details")).json()) as PackageDetails).foundations;
+      const upstream: Foundations["upstream"][number] = { name: "an-upstream-library-with-a-long-name", version: "1.0.0", revision: null, repository: "https://example.org/upstream", purl: "pkg:maven/org.example/an-upstream-library-with-a-long-name@1.0.0", licence: "Apache-2.0", notices: ["notices/maven/an-upstream-library-with-a-long-name@1.0.0/0-LICENSE"], delivery: { kind: "bundled", files: [{ path: "vendor/an-upstream-library-with-a-long-name.jar", digest: "0".repeat(64) }] } };
+      const largeFoundations: Foundations = {
+        ...cardFull,
+        upstream: Array.from({ length: 344 }, () => upstream),
+        compatibility: { ...cardFull.compatibility, dependencies: Array.from({ length: 291 }, (_, i) => ({ isolation: "isolated", name: `pkg:maven/org.example/dependency-${i}`, version: "1.0.0" })) },
+        files: Array.from({ length: 468 }, (_, i) => ({ path: `android/src/main/java/app/ourapps/host/File${i}.kt`, executable: false })),
       };
+      const large: ComponentVersionView = { ...card, foundations: summariseFoundations(largeFoundations, card.foundations.details) };
       const summary = componentText(large, BASE);
-      const rest = componentDetailsText(large, BASE);
+      const rest = componentDetailsText(large, { name: card.name, version: card.version, foundationEvidence: "publisher-declared", foundations: largeFoundations }, BASE);
       expect(summary.length).toBeLessThan(30_000);
+      expect(JSON.stringify(large).length).toBeLessThan(20_000);
+      expect(large.foundations.counts).toEqual({ upstream: 344, dependencies: 291, classes: 1, files: 468, artefacts: cardFull.artefacts.length });
       expect(summary).toContain("344 upstream sources, 291 exact dependencies, 468 files");
       expect(summary).not.toContain("an-upstream-library-with-a-long-name");
       expect(rest.split("Upstream: an-upstream-library-with-a-long-name").length - 1).toBe(344);

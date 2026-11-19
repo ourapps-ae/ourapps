@@ -28,6 +28,9 @@ describe("matchRoute", () => {
     expect(matchRoute("/recipes/poker-night")).toEqual({ page: "recipe", slug: "poker-night" });
     expect(matchRoute("/components")).toEqual({ page: "components" });
     expect(matchRoute("/components/card-deck")).toEqual({ page: "component", slug: "card-deck" });
+    expect(matchRoute("/components/card-deck/details")).toEqual({ page: "details", kind: "components", slug: "card-deck" });
+    expect(matchRoute("/recipes/poker-night/details")).toEqual({ page: "details", kind: "recipes", slug: "poker-night" });
+    expect(matchRoute("/recipes/poker-night/other")).toEqual({ page: "not-found" });
   });
 
   it("does not take /recipes or /components for developer pages", () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { classDescriptor, exampleComponentEntry, exampleRecipeEntry, type ComponentSummary, type ComponentVersionView, type Deprecation, type RecipeSummary, type RecipeVersionView } from "@my/store-shared";
-import { componentBody, componentCard, deprecationBanner, recipeBody, recipeCard } from "./library.js";
+import { SIGNATURES_NOTE, classDescriptor, exampleComponentEntry, exampleRecipeEntry, slotClass, summariseFoundations, type ComponentSummary, type PackageDetails, type ComponentVersionView, type Deprecation, type RecipeSummary, type RecipeVersionView } from "@my/store-shared";
+import { escapeHtml } from "../html.js";
+import { componentBody, componentCard, deprecationBanner, detailsBody, recipeBody, recipeCard, splitDescription } from "./library.js";
 
 const origin = "https://ourapps.app";
 const publisher = { slug: "dana", displayName: "Dana" };
@@ -10,7 +11,7 @@ function recipeView(patch: Partial<RecipeVersionView> = {}): RecipeVersionView {
   const r = e.recipe;
   const suitability = exampleComponentEntry().suitability;
   return {
-    foundations: e.foundations, foundationEvidence: "publisher-declared", lastSuccessfulVerification: null,
+    foundations: summariseFoundations(e.foundations, `${origin}/api/recipes/poker-night/0.1.0/details`), foundationEvidence: "publisher-declared",
     name: r.name,
     slug: "poker-night",
     version: r.version,
@@ -33,7 +34,7 @@ function recipeView(patch: Partial<RecipeVersionView> = {}): RecipeVersionView {
     screenshots: [],
     components: r.components.map((c) => ({
       ...c,
-      declaration: classDescriptor(c.class, e.foundations)!,
+      declaration: slotClass(classDescriptor(c.class, e.foundations)!),
       preferred: { ...c.preferred, url: c.id === "deck" ? `${origin}/components/card-deck` : null },
       catalogue: c.id === "deck" ? { description: "A shuffled deck.", suitability, guardians: ["Example Guardian Ltd"] } : null,
       deprecation: null,
@@ -53,7 +54,7 @@ function recipeView(patch: Partial<RecipeVersionView> = {}): RecipeVersionView {
 function componentView(patch: Partial<ComponentVersionView> = {}): ComponentVersionView {
   const e = exampleComponentEntry();
   return {
-    foundations: e.foundations, foundationEvidence: "publisher-declared", lastSuccessfulVerification: null,
+    foundations: summariseFoundations(e.foundations, `${origin}/api/components/card-deck/0.1.0/details`), foundationEvidence: "publisher-declared",
     name: e.name,
     slug: "card-deck",
     version: e.version,
@@ -86,19 +87,32 @@ function componentView(patch: Partial<ComponentVersionView> = {}): ComponentVers
 }
 
 describe("recipe page", () => {
-  it("shows independent classes, shared suites and declared evidence", () => {
+  it("shows package facts as counts with one link to the lists, after what a reader needs first", () => {
     const text = recipeBody(recipeView(), "latest").html;
-    expect(text).toContain("ourapps-ae/card-deck-class"); expect(text).toContain("Shared behaviour suites: behaviour"); expect(text).toContain("Publisher-declared package facts"); expect(text).toContain("no verified record");
+    expect(text).toContain("ourapps-ae/card-deck-class"); expect(text).toContain("Behaviour suites: behaviour");
+    expect(text).toContain("Package facts"); expect(text).toContain(escapeHtml(SIGNATURES_NOTE)); expect(text).not.toContain("verified record");
+    expect(text).toContain('<a href="/recipes/poker-night/details?version=0.1.0">Sources and dependencies</a>');
+    expect(text).toMatch(/\d+ upstream sources?, \d+ exact dependenc(y|ies), \d+ class(es)?, \d+ files?/);
+    expect(text).not.toContain("Upstream code");
+    const order = ['id="what-you-download"', 'id="build-it"', 'id="about"', 'id="questions"', 'id="slots"', 'id="package-facts"'].map((x) => text.indexOf(x));
+    expect(order.every((at, i) => at > 0 && (i === 0 || at > order[i - 1]))).toBe(true);
+  });
+
+  it("shows the start of the description and the rest on request", () => {
+    expect(splitDescription("# T\n\nIntro.\n\n## More\n\nRest.")).toEqual(["# T\n\nIntro.\n", "## More\n\nRest."]);
+    expect(splitDescription("Only an intro.")).toEqual(["Only an intro.", ""]);
+    const html = recipeBody(recipeView({ description: "# Poker Night\n\nIntro text.\n\n## Rules\n\nLong rules." }), "latest").html;
+    expect(html.indexOf("Intro text.")).toBeLessThan(html.indexOf("<summary>The full description</summary>"));
+    expect(html.indexOf("Long rules.")).toBeGreaterThan(html.indexOf("<summary>The full description</summary>"));
   });
   it("lists each slot with its class, preferred component and the other components of its class", () => {
     const html = recipeBody(recipeView(), "latest").html;
     expect(html).toContain("<th>Slot</th><th>Class</th><th>Preferred component</th><th>Alternatives</th>");
     expect(html).toContain("<code>seats</code>");
-    expect(html).toContain("provides <code>ae/seating</code> 1.0.0<br />requires <code>ae/card-deck</code> 1.0.0");
+    expect(html).toContain("<p>Provides <code>ae/seating</code> 1.0.0</p><p>Requires <code>ae/card-deck</code> 1.0.0</p>");
     expect(html).toContain('<a href="/components/card-deck">acme/card-deck</a>');
-    expect(html).toContain("version 0.1.0");
-    expect(html).toContain('<a href="/components?provides=ae%2Fseating">Other components of this class (1)</a>');
-    expect(html).toContain('<a href="/components?provides=ae%2Fcard-deck">Other components of this class (0)</a>');
+    expect(html).toContain('<a href="/components?provides=ae%2Fseating">1 other</a>');
+    expect(html).toContain('<a href="/components?provides=ae%2Fcard-deck">0 others</a>');
   });
 
   it("shows description, diagram, questions, components with suitability and guardians, targets, answer sets and versions", () => {
@@ -119,7 +133,7 @@ describe("recipe page", () => {
     expect(html).toContain("a reference, never a value");
     expect(html).toContain('href="/components/card-deck"');
     expect(html).toContain("Guardians: Example Guardian Ltd");
-    expect(html).toContain("Not in the catalogue");
+    expect(html).toContain("not in the catalogue");
     expect(html).toContain("when lessons is yes");
     expect(html).toContain("when (targets includes ios) or (targets includes macos)");
     expect(html).toContain("asked when lessons is yes");
@@ -187,6 +201,15 @@ describe("component page", () => {
     expect(html).toContain('href="/components/card-deck.json"');
   });
 
+  it("leads with how to use it, its class, interfaces, platforms and settings; package facts as counts", () => {
+    const html = componentBody(componentView(), "latest").html;
+    expect(html).toContain('{&quot;id&quot;:&quot;card-deck&quot;,&quot;class&quot;:{&quot;name&quot;:&quot;ourapps-ae/card-deck-class&quot;,&quot;version&quot;:&quot;1.0.0&quot;,&quot;digest&quot;:');
+    expect(html).toContain("--substitute SLOT=acme/card-deck@0.1.0");
+    expect(html).toContain('<a href="/components/card-deck/details?version=0.1.0">Sources and dependencies</a>');
+    const order = ['id="what-you-download"', 'id="use-it"', 'id="class"', 'id="platforms"', 'id="settings"', 'id="package-facts"'].map((x) => html.indexOf(x));
+    expect(order.every((at, i) => at > 0 && (i === 0 || at > order[i - 1]))).toBe(true);
+  });
+
   it("marks an optional requirement", () => {
     const html = componentBody(componentView({ requires: [{ id: "random-source", type: "ae/random-source", version: "1.0.0", optional: true }, { id: "audit", type: "ae/audit", version: "1.0.0" }] }), "latest").html;
     expect(html).toContain('<code>random-source</code> <span class="small muted">optional</span>');
@@ -195,7 +218,7 @@ describe("component page", () => {
 
   it("describes a data-keeping component and no guardian", () => {
     const html = componentBody(componentView({ guardians: [], usedBy: [], migration: { stores: [{ id: "rooms", schema: { name: "ae/room-state", version: "1.0.0" } }], formats: ["ndjson"], portable: true, requiresStop: true, retentionDays: 30 } }), "latest").html;
-    expect(html).toContain("No guardian is recorded");
+    expect(html).toContain("Guardians: none recorded for this version");
     expect(html).toContain("rooms (ae/room-state 1.0.0)");
     expect(html).toContain("it must stop while data moves");
     expect(html).toContain("kept 30 days after removal");
@@ -263,5 +286,23 @@ describe("cards", () => {
     const html = componentCard(c).html;
     expect(html).toContain('href="/components/card-deck"');
     expect(html).toContain("Provides card-deck. Requires random-source (optional).");
+  });
+});
+
+describe("sources and dependencies", () => {
+  it("lists every upstream source, dependency, class, file and installed file, each closed until opened", () => {
+    const e = exampleComponentEntry();
+    const foundations = { ...e.foundations, upstream: [{ name: "left-pad", version: "1.3.0", revision: null, repository: "https://example.org/left-pad", purl: "pkg:npm/left-pad@1.3.0", licence: "MIT", notices: ["notices/left-pad"], delivery: { kind: "build-time" as const, manager: "npm" as const, lock: "package-lock.json", digest: "0".repeat(64), packagePath: "node_modules/left-pad", integrity: "sha512-x" } }], compatibility: { ...e.foundations.compatibility, dependencies: [{ name: "pkg:npm/left-pad", version: "1.3.0", isolation: "isolated" as const }] } };
+    const d: PackageDetails = { name: e.name, version: e.version, foundationEvidence: "publisher-declared", foundations };
+    const html = detailsBody(d, "components", "card-deck").html;
+    expect(html).toContain("<summary><b>Upstream sources (1)</b></summary>");
+    expect(html).toContain("<code>pkg:npm/left-pad@1.3.0</code>");
+    expect(html).toContain("fetched at build time by npm, pinned by package-lock.json");
+    expect(html).toContain("<summary><b>Exact dependencies (1)</b></summary>");
+    expect(html).toContain(`<summary><b>Files (${e.foundations.files.length})</b></summary>`);
+    expect(html).toContain("ourapps-ae/card-deck-class");
+    expect(html).toContain(escapeHtml(SIGNATURES_NOTE));
+    expect(html).not.toContain("<details open");
+    expect(html).toContain('href="/api/components/card-deck/0.1.0/details"');
   });
 });

@@ -67,7 +67,7 @@ Compatibility requires `runtimes`, `frameworks`, `dependencies` and `styles`. Ra
 
 ## Evidence and selection
 
-Version responses contain `foundationEvidence:"publisher-declared"` and `lastSuccessfulVerification:null`. The Worker has no signed-review trust-policy verifier. Publisher dates, named guardians, suite declarations and archive release metadata cannot populate successful verification time.
+Version responses contain `foundationEvidence:"publisher-declared"` and a `foundations` summary (licence, platforms, implemented classes, runtimes, frameworks, maintenance and counts of the lists); the version's `details` route returns the full foundations. The Worker has no signed-review trust-policy verifier and stores no review report or signature: those are release files beside the archive that aepm fetches and checks.
 
 Publication validates independent class digests, declared inputs and individual candidate fit. It checks graph conflicts between the recipe and each candidate, and among unconditional non-job preferred slots. It does not combine all conditional alternatives into one graph. aepm evaluates actual answers, chooses job candidates, retains `server` when declared, checks the selected graph and verifies archive bytes and signed review evidence.
 

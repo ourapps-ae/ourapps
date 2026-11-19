@@ -148,13 +148,16 @@ async function publicChecks() {
 }
 
 // Every listed recipe and component text page stays small (recipes under 60,000 bytes, components under 30,000) and
-// links its details page, which answers.
+// links its details page, which answers. Each version response stays small too (recipes under 100,000 bytes, components
+// under 30,000) and gives counts whose lists its details route returns.
 async function textPageChecks() {
-  for (const [kind, limit] of [["recipes", 60_000], ["components", 30_000]]) {
-    const listed = await fetch(`${base}/api/${kind}?limit=100`);
-    const entries = listed.ok ? (await listed.json())[kind] : [];
-    record(listed.ok, `GET /api/${kind} for the text pages`, listed.ok ? "" : String(listed.status));
+  for (const [kind, limit, apiLimit] of [["recipes", 60_000, 100_000], ["components", 30_000, 30_000]]) {
+    const listed = await call("GET", `/api/${kind}?limit=100`, { auth: "", pattern: `/api/${kind}` });
+    const entries = listed.status === 200 ? listed.json[kind] : [];
+    expectStatus(`GET /api/${kind}`, listed, 200);
+    expectStatus(`GET /api/${kind}/search`, await call("GET", `/api/${kind}/search?q=a`, { auth: "", pattern: `/api/${kind}/search` }), 200);
     let largest = ["none", 0];
+    let largestApi = ["none", 0];
     for (const { slug, version } of entries) {
       const res = await fetch(`${base}/${kind}/${slug}.txt`);
       const text = await res.text();
@@ -164,9 +167,25 @@ async function textPageChecks() {
       record(res.status === 200 && size < limit && text.includes(details), `/${kind}/${slug}.txt is under ${limit} bytes and links its details`, `${res.status}, ${size} bytes`);
       const more = await fetch(details);
       record(more.status === 200, `GET /${kind}/${slug}/details.txt`, String(more.status));
+      const view = await call("GET", `/api/${kind}/${slug}/${version}`, { auth: "", pattern: `/api/${kind}/:name/:version` });
+      const viewSize = new TextEncoder().encode(view.text).length;
+      if (viewSize > largestApi[1]) largestApi = [slug, viewSize];
+      const counts = view.json?.foundations?.counts;
+      record(view.status === 200 && viewSize < apiLimit && counts && !("upstream" in view.json.foundations), `GET /api/${kind}/${slug}/${version} is under ${apiLimit} bytes and gives counts`, `${view.status}, ${viewSize} bytes`);
+      const full = await call("GET", `/api/${kind}/${slug}/${version}/details`, { auth: "", pattern: `/api/${kind}/:name/:version/details` });
+      const f = full.json?.foundations;
+      record(full.status === 200 && f && counts && f.upstream.length === counts.upstream && f.compatibility.dependencies.length === counts.dependencies && f.files.length === counts.files, `GET /api/${kind}/${slug}/${version}/details matches the counts`, String(full.status));
     }
-    console.log(`     largest /${kind} text page: ${largest[0]}, ${largest[1]} bytes`);
+    const first = entries[0];
+    if (first) {
+      expectStatus(`GET /api/${kind}/:name/:version/bundle`, await call("GET", `/api/${kind}/${first.slug}/${first.version}/bundle`, { auth: "", pattern: `/api/${kind}/:name/:version/bundle` }), 200);
+      expectStatus(`GET /api/${kind}/:name/:version/deprecations`, await call("GET", `/api/${kind}/${first.slug}/${first.version}/deprecations`, { auth: "", pattern: `/api/${kind}/:name/:version/deprecations` }), 200);
+      if (kind === "recipes") expectStatus("GET /api/recipes/:name/:version/diagram.svg", await call("GET", `/api/recipes/${first.slug}/${first.version}/diagram.svg`, { auth: "", pattern: "/api/recipes/:name/:version/diagram.svg" }), [200, 404]);
+    }
+    console.log(`     largest /${kind} text page: ${largest[0]}, ${largest[1]} bytes; largest version response: ${largestApi[0]}, ${largestApi[1]} bytes`);
   }
+  const session = await call("GET", "/api/auth/session", { auth: "" });
+  record(session.status === 200 && session.json === null, "GET /api/auth/session answers null for a visitor", `${session.status} ${session.text.slice(0, 80)}`);
 }
 
 async function keyedChecks() {

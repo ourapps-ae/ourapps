@@ -1,42 +1,40 @@
-import { agents, appForm, appLinks, appsPage, dashboard, settings } from "./pages/dev.js";
-import { exampleApp, examplePage } from "./pages/example.js";
-import { componentPage, componentsPage, recipePage, recipesPage } from "./pages/library.js";
-import { guide } from "./pages/guide.js";
-import { referencePage } from "./pages/reference.js";
-import { smallPage } from "./pages/small.js";
-import { termsPage } from "./pages/terms.js";
-import { devPage, installPage, landing, notFound, previewPage } from "./pages/public.js";
+// Each page's module loads when its route is first shown, so a page downloads only the code it uses.
 import { navigate } from "./nav.js";
 import { matchRoute } from "./router.js";
 
 const root = document.getElementById("app")!;
 
+const dev = () => import("./pages/dev.js");
+const library = () => import("./pages/library.js");
+const publicPages = () => import("./pages/public.js");
+
 async function render(): Promise<void> {
   const route = matchRoute(location.pathname);
   if (!location.hash) scrollTo(0, 0);
   switch (route.page) {
-    case "landing": await landing(root); break;
-    case "dev-page": await devPage(root, route.slug); break;
-    case "install": await installPage(root, route.linkId); break;
-    case "dashboard": await dashboard(root); break;
-    case "apps": await appsPage(root); break;
-    case "app-new": await appForm(root, null); break;
-    case "app-edit": await appForm(root, route.appId); break;
-    case "app-links": await appLinks(root, route.appId); break;
-    case "app-preview": await previewPage(root, route.appId); break;
-    case "settings": await settings(root); break;
-    case "guide": await guide(root); break;
-    case "agents": await agents(root); break;
-    case "terms": await termsPage(root); break;
-    case "reference": await referencePage(root); break;
-    case "small": await smallPage(root); break;
-    case "recipes": await recipesPage(root); break;
-    case "recipe": await recipePage(root, route.slug); break;
-    case "components": await componentsPage(root); break;
-    case "component": await componentPage(root, route.slug); break;
-    case "example": await examplePage(root); break;
-    case "example-app": await exampleApp(root); break;
-    default: notFound(root);
+    case "landing": await (await publicPages()).landing(root); break;
+    case "dev-page": await (await publicPages()).devPage(root, route.slug); break;
+    case "install": await (await publicPages()).installPage(root, route.linkId); break;
+    case "dashboard": await (await dev()).dashboard(root); break;
+    case "apps": await (await dev()).appsPage(root); break;
+    case "app-new": await (await dev()).appForm(root, null); break;
+    case "app-edit": await (await dev()).appForm(root, route.appId); break;
+    case "app-links": await (await dev()).appLinks(root, route.appId); break;
+    case "app-preview": await (await publicPages()).previewPage(root, route.appId); break;
+    case "settings": await (await dev()).settings(root); break;
+    case "guide": await (await import("./pages/guide.js")).guide(root); break;
+    case "agents": await (await dev()).agents(root); break;
+    case "terms": await (await import("./pages/terms.js")).termsPage(root); break;
+    case "reference": await (await import("./pages/reference.js")).referencePage(root); break;
+    case "small": await (await import("./pages/small.js")).smallPage(root); break;
+    case "recipes": await (await library()).recipesPage(root); break;
+    case "recipe": await (await library()).recipePage(root, route.slug); break;
+    case "components": await (await library()).componentsPage(root); break;
+    case "component": await (await library()).componentPage(root, route.slug); break;
+    case "details": await (await library()).detailsPage(root, route.kind, route.slug); break;
+    case "example": await (await import("./pages/example.js")).examplePage(root); break;
+    case "example-app": await (await import("./pages/example.js")).exampleApp(root); break;
+    default: (await publicPages()).notFound(root);
   }
   if (location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView();
 }

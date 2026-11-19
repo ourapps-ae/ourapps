@@ -62,6 +62,19 @@ describe("GitHub sign-in", () => {
     expect((await handle(api(cookie, "GET", "/api/dev/me"), env, deps)).status).toBe(401);
   });
 
+  it("answers who is signed in without an error for a visitor", async () => {
+    const deps = testDeps();
+    const visitor = await handle(api(null, "GET", "/api/auth/session"), env, deps);
+    expect(visitor.status).toBe(200);
+    expect(await visitor.json()).toBeNull();
+    const cookie = await signIn(env, deps);
+    const signedIn = await handle(api(cookie, "GET", "/api/auth/session"), env, deps);
+    expect(signedIn.status).toBe(200);
+    expect(await signedIn.json()).toEqual(await (await handle(api(cookie, "GET", "/api/dev/me"), env, deps)).json());
+    await handle(api(cookie, "POST", "/api/auth/logout"), env, deps);
+    expect(await (await handle(api(cookie, "GET", "/api/auth/session"), env, deps)).json()).toBeNull();
+  });
+
   it("expires sessions after 30 days", async () => {
     const deps = testDeps();
     const cookie = await signIn(env, deps);
