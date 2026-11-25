@@ -7,7 +7,7 @@ import { signingRequest } from "../signing.js";
 import { buildStatusCard, watchBuildStatus } from "../buildStatus.js";
 import { retainedTargetRelease, targetEnabled, targetSections, wireTargets } from "../targets.js";
 import { appIcon, callout, copyRow, copyText, emptyState, errorBox, fmtDate, icon, pill, statePill, toast, wireCopy, wireImages } from "../ui.js";
-import { AGENT_RECIPE_PROMPT, AGENT_REPO_PROMPT, AGENT_STORE_PROMPT } from "./prompts.js";
+import { AGENT_REPO_PROMPT, AGENT_STORE_PROMPT } from "./prompts.js";
 import { SOURCE_URL } from "./public.js";
 import { failed, mountShell, requireMe } from "./shell.js";
 
@@ -90,12 +90,12 @@ export async function dashboard(root: HTMLElement): Promise<void> {
             </div>
             <div class="card">
               <h2>Learn and automate</h2>
-              <p class="small muted">Start from a <a href="/recipes">recipe</a> or compose from <a href="/components">components</a>; <a href="/dev/guide#how-it-works">how ourapps works</a> explains both routes. The <a href="/dev/guide#tldr">guide's short list</a> lists the few things only you can do (sign in, tokens and keys, adding each iPhone app in App Store Connect). Everything else an agent does with the API key and prompts on the <a href="/dev/agents">agents page</a>.</p>
+              <p class="small muted"><a href="/dev/guide#overview">How ourapps works</a> follows an app from your coding agent to the people you share it with. The <a href="/dev/guide#tldr">guide's short list</a> lists the few things only you can do (sign in, tokens and keys, adding each iPhone app in App Store Connect). Everything else an agent does with the API key and prompts on the <a href="/dev/agents">agents page</a>.</p>
             </div>
           </div>
         </div>
       `,
-      { sub: "Your applications, built from recipes and components, delivered by share link." },
+      { sub: "The apps you build, delivered to every device by share link." },
     );
   } catch (err) {
     failed(root, me, err);
@@ -1156,7 +1156,7 @@ export async function settings(root: HTMLElement, note = "", signingNote?: { res
           <p class="small muted mt">Sign-in only reads your public GitHub profile. Repository access comes from the token you save below, which you control and can revoke on GitHub at any time.</p>
           <hr />
           <h3>Delete account</h3>
-          <p class="small muted">Removes your profile, credentials, API keys, apps, share links and signing key at once. Your recipes and components stay in the library and catalogue without your name, marked orphaned; unlist them first to hide them. The certificate, the App Store profiles and the apps in App Store Connect stay on your Apple account until you remove them there; TestFlight builds keep working until they expire.</p>
+          <p class="small muted">Removes your profile, credentials, API keys, apps, share links and signing key at once. The certificate, the App Store profiles and the apps in App Store Connect stay on your Apple account until you remove them there; TestFlight builds keep working until they expire.</p>
           <div class="row wrap"><input type="text" id="confirm-login" placeholder="Type ${me.developer.githubLogin} to confirm" style="flex:1;min-width:200px" /><button class="btn danger" id="delete-account" disabled>${icon("trash")} Delete my account</button></div>
           <div id="delete-error" class="mt-s"></div>
         </div>
@@ -1346,7 +1346,6 @@ export async function agents(root: HTMLElement): Promise<void> {
   const first = apps[0];
   const repoPrompt = repoPromptFor(first);
   const storePrompt = AGENT_STORE_PROMPT();
-  const recipePrompt = AGENT_RECIPE_PROMPT();
 
   mountShell(
     root,
@@ -1394,34 +1393,11 @@ export async function agents(root: HTMLElement): Promise<void> {
         </div>
       </div>
 
-      <div class="section-title" id="recipes-and-components"><h2>Using recipes and components</h2></div>
-      <div class="grid-2">
-        <div class="card">
-          <h3>Where an agent finds them</h3>
-          <table class="table small mt-s">
-            <tr><td><code>GET /api/recipes?q=</code></td><td>search and filter recipes (no key): category, platform, quality, certified, channel, no known vulnerabilities</td></tr>
-            <tr><td><code>GET /api/components?q=</code></td><td>the same for components, plus <code>class</code>, <code>provides</code> and <code>requires</code></td></tr>
-            <tr><td><code>/classes/:name</code></td><td>a class and the components that implement it, side by side</td></tr>
-            <tr><td><code>/recipes/:name.txt</code>, <code>/components/:name.txt</code></td><td>the entry as plain text: build steps, questions, slots, components, settings</td></tr>
-            <tr><td><code>/recipes/:name/details.txt</code>, <code>/components/:name/details.txt</code></td><td>the rest of an entry: slot classes, suitability, connections, package foundations, upstream sources and file lists</td></tr>
-            <tr><td><code>GET /api/recipes/:name/:version/details</code></td><td>the full package foundations as JSON; the version itself gives counts</td></tr>
-            <tr><td><code>GET /api/recipes/:name/latest</code></td><td>the same as JSON; <code>.../:version/bundle</code> gives a one-hour download link</td></tr>
-            <tr><td><code>https://github.com/ourapps-ae/:name</code></td><td>each package's public source and releases</td></tr>
-          </table>
-          <p class="small muted mt-s">Every response lists deprecations. The agent tells you before building on a deprecated or orphaned entry. Details: <a href="/agents.md#recipe-library-and-component-catalogue">agents.md</a>.</p>
-        </div>
-        <div class="card">
-          <h3>Tools</h3>
-          <p class="small muted"><b>aepm</b> packs, resolves, reviews, installs, verifies and updates packages, and draws the design diagram. It runs no package code during installation. Get it from <a href="https://github.com/ourapps-ae/aepm" target="_blank" rel="noopener">github.com/ourapps-ae/aepm</a>. It needs Python 3.12, Node.js and Graphviz; run <code>python3 -m aepm --help</code> from the checkout.</p>
-          <p class="small muted">There is no single assembly command: an agent runs <code>aepm fetch</code>, <code>questions</code>, <code>design</code>, <code>resolve</code> and <code>install</code>, as each recipe's .txt page lists, with <code>doctor</code> to check build tools and <code>alternatives</code> to substitute a component. Updates use <code>propose-update</code>, <code>approve</code>, <code>apply</code> and <code>recover</code>.</p>
-        </div>
-      </div>
-
       <div class="section-title"><h2>Prompts for your agents</h2></div>
       ${apps.length > 0
         ? html`<div class="field prompt-app"><label for="prompt-app">Project</label><select id="prompt-app">${apps.map((a) => html`<option value="${a.id}">${a.name}</option>`)}<option value="">A new app (placeholders)</option></select></div>`
         : ""}
-      <p class="muted small">Copy, fill in the angle brackets if any remain, and paste into your coding agent. The first works inside the app repository, the second drives this console through the API, the third builds an application from a recipe.</p>
+      <p class="muted small">Copy, fill in the angle brackets if any remain, and paste into your coding agent. The first works inside the app repository; the second drives this console through the API.</p>
       <div class="card">
         <h3>1. Set up the app repository <span class="faint small" id="prompt-for">${filledFor(first)}</span></h3>
         <p class="small muted">Give this to an agent running inside the repository (Claude Code, Codex, Cursor, opencode). It creates the release workflow and my-app.json the contract asks for.</p>
@@ -1431,11 +1407,6 @@ export async function agents(root: HTMLElement): Promise<void> {
         <h3>2. Manage the console through the API</h3>
         <p class="small muted">Give this to an agent that has your API key in the environment variable <code>OURAPPS_API_KEY</code>. It can register apps, check releases, set up TestFlight and hand you share links.</p>
         <div class="prompt-box"><button class="btn sm secondary" data-copy="${storePrompt}">${icon("copy")} Copy</button><pre>${storePrompt}</pre></div>
-      </div>
-      <div class="card">
-        <h3>3. Build an application from a recipe</h3>
-        <p class="small muted">Give this to any coding agent. It finds a recipe and its components, asks you the recipe's questions, shows you what it will install, and installs with aepm. It needs no API key.</p>
-        <div class="prompt-box"><button class="btn sm secondary" data-copy="${recipePrompt}">${icon("copy")} Copy</button><pre>${recipePrompt}</pre></div>
       </div>
     `,
     { sub: "Let a coding agent do the repository work and drive this console for you." },
