@@ -4,7 +4,8 @@ import { renderSVG } from "uqr";
 import { Db, type AppRow, type Developer, type LinkRow } from "../db.js";
 import { downloadDisposition } from "../download-filename.js";
 import type { Deps, Env } from "../env.js";
-import { appleClient, deliveryRevision, dlUrl, projectDelivery, signManifestLinks } from "../flow.js";
+import { appleClient, deliveryRevision, dlUrl, projectAppStore, projectDelivery, signManifestLinks } from "../flow.js";
+import { appStoreLinks } from "../appstore.js";
 import { loadHistory } from "../history.js";
 import { HttpError, json } from "../http.js";
 import { verifyLink } from "../links.js";
@@ -105,6 +106,7 @@ export async function buildLinkPage(env: Env, deps: Deps, app: AppRow, dev: Deve
     manifestError = err instanceof Error ? err.message : String(err);
   }
   const targets = await Db.from(env).appTargets(app.id);
+  const storeLinks = await appStoreLinks(env, app.id);
   if (source) {
     const projected = projectDelivery(source, apple, targets);
     apple = projected.apple;
@@ -130,8 +132,9 @@ export async function buildLinkPage(env: Env, deps: Deps, app: AppRow, dev: Deve
     if (fromDashboard.length > 0) screenshots[p] = await signAll(fromDashboard);
     else if (fromRelease.length > 0) screenshots[p] = await signAll(fromRelease);
   }
+  const appStore = projectAppStore(revisionManifest, storeLinks);
   return {
-    deliveryRevision: await deliveryRevision(revisionManifest, apple),
+    deliveryRevision: await deliveryRevision(revisionManifest, apple, appStore),
     linkId,
     developer: { id: dev.id, slug: dev.slug, displayName: dev.displayName },
     app: { ...appDetails(app), iconUrl: await sign(app.iconUrl) },
@@ -143,6 +146,7 @@ export async function buildLinkPage(env: Env, deps: Deps, app: AppRow, dev: Deve
           maxPlayers: manifest.maxPlayers,
           install: manifest.install,
           apple,
+          appStore,
           fallbackName: manifest.name,
           fallbackIcon: manifest.icon,
           fallbackDescription: manifest.description,
@@ -191,11 +195,12 @@ export async function linkLatest(env: Env, deps: Deps, linkId: string): Promise<
   }
   const projected = projectDelivery(manifest, apple, await Db.from(env).appTargets(app.id));
   apple = projected.apple;
+  const appStore = projectAppStore(projected.manifest, await appStoreLinks(env, app.id));
   manifest = await signManifestLinks(env, deps, dev.id, projected.manifest);
   if (isBundleUrl(manifest.install.pwa, release)) manifest.install.pwa = webAppUrl(env, linkId);
   const ios = manifest.install.ios ? apple.ios : null;
   return json({
-    deliveryRevision: await deliveryRevision(projected.manifest, apple),
+    deliveryRevision: await deliveryRevision(projected.manifest, apple, appStore),
     name: app.name || manifest.name,
     version: manifest.version,
     // TestFlight installs and updates iPhone apps; an app can open this link.
@@ -203,6 +208,8 @@ export async function linkLatest(env: Env, deps: Deps, linkId: string): Promise<
     // What TestFlight installs; compare with this on iPhone, not with version.
     testflightVersion: ios?.version ?? null,
     apple,
+    // The App Store page per Apple platform, once a version is on the store.
+    appStore,
     android: manifest.install.android ? { apkUrl: manifest.install.android.apk } : null,
     macos: manifest.install.macos?.packages.length ? { version: manifest.version, packages: manifest.install.macos.packages } : null,
     windows: manifest.install.windows?.packages.length ? { version: manifest.version, packages: manifest.install.windows.packages } : null,

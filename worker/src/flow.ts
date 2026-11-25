@@ -24,8 +24,17 @@ export function projectDelivery(source: AppManifest, readiness: AppleReadiness, 
   return { manifest, apple };
 }
 
-export async function deliveryRevision(manifest: AppManifest | null, apple: AppleReadiness): Promise<string> {
-  return sha256Hex(JSON.stringify({ version: manifest?.version ?? null, install: manifest?.install ?? null, apple }));
+// The App Store page per Apple platform, once a version is on the store.
+export type AppStoreLinks = Record<"ios" | "macos" | "tvos", string | null>;
+
+// Only platforms the projected release still offers keep their App Store link.
+export function projectAppStore(manifest: AppManifest | null, links: AppStoreLinks): AppStoreLinks {
+  return { ios: manifest?.install.ios ? links.ios : null, macos: manifest?.install.macos ? links.macos : null, tvos: manifest?.install.tvos ? links.tvos : null };
+}
+
+export async function deliveryRevision(manifest: AppManifest | null, apple: AppleReadiness, appStore?: AppStoreLinks): Promise<string> {
+  const store = appStore && Object.values(appStore).some(Boolean) ? { appStore } : {};
+  return sha256Hex(JSON.stringify({ version: manifest?.version ?? null, install: manifest?.install ?? null, apple, ...store }));
 }
 
 export async function dlUrl(env: Env, deps: Deps, link: Omit<LinkPayload, "exp">): Promise<string> {
