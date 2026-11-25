@@ -300,6 +300,6 @@ Put an iPhone app on TestFlight:
 
 Two prompts the developer can paste into a coding agent are shown on `/dev/agents`, pre-filled for their app: one for an agent inside the app repository (sets up releases to the contract), one for an agent that drives this API (register, check, set up TestFlight, share).
 
-Source code and issues: https://github.com/ourapps-ae/ourapps (public for reading, all rights reserved; outside pull requests are not accepted). Security problems: report privately at https://github.com/ourapps-ae/ourapps/security/advisories/new, never in a public issue.
+Source code and issues: https://github.com/ourapps-app/ourapps (public for reading, all rights reserved; outside pull requests are not accepted). Security problems: report privately at https://github.com/ourapps-app/ourapps/security/advisories/new, never in a public issue.
 
 Copyright Level N Ltd 2026.

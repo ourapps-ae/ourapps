@@ -14,7 +14,7 @@ import { appIcon, avatar, callout, copyRow, fmtDate, icon, toast, wireCopy, wire
 // Shared frame for every store-themed page.
 export const COPYRIGHT = "Copyright Level N Ltd 2026";
 export const TAGLINE = "Deliver the apps you build to every device, through one private link.";
-export const SOURCE_URL = "https://github.com/ourapps-ae/ourapps";
+export const SOURCE_URL = "https://github.com/ourapps-app/ourapps";
 
 export function storeFrame(body: Raw, opts: { me?: Me | null; nav?: boolean; footnote?: string } = {}): Raw {
   const right = opts.me

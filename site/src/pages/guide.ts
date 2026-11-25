@@ -484,7 +484,7 @@ suspend fun checkForUpdate(context: Context) {
           <li>Keep build tokens and the Cloudflare token in repository secrets only. A build token lets its holder fetch your iPhone signing key; a Cloudflare token can replace any Worker on its account.</li>
           <li>Check Settings, Security now and then. Anything you do not recognise: sign out everywhere, revoke keys, and replace the GitHub token and Apple key at their sources.</li>
         </ul>
-        <p class="small muted">Full technical statement, including the rotation procedure and what is not covered: <a href="https://github.com/ourapps-ae/ourapps/blob/main/SECURITY.md" target="_blank" rel="noopener">SECURITY.md</a> in the source repository. Found a security problem? <a href="https://github.com/ourapps-ae/ourapps/security/advisories/new" target="_blank" rel="noopener">Report it privately</a>.</p>
+        <p class="small muted">Full technical statement, including the rotation procedure and what is not covered: <a href="https://github.com/ourapps-app/ourapps/blob/main/SECURITY.md" target="_blank" rel="noopener">SECURITY.md</a> in the source repository. Found a security problem? <a href="https://github.com/ourapps-app/ourapps/security/advisories/new" target="_blank" rel="noopener">Report it privately</a>.</p>
       `,
     },
     {
@@ -540,7 +540,7 @@ export async function guide(root: HTMLElement): Promise<void> {
         </nav>
         <article>
           ${list.map((s) => html`<section id="${s.id}"><h2>${s.title}</h2>${s.body}</section>`)}
-          <p class="small faint">Something missing or wrong? The source is public: <a href="https://github.com/ourapps-ae/ourapps/issues" target="_blank" rel="noopener">open an issue on github.com/ourapps-ae/ourapps</a>. Security problems: <a href="https://github.com/ourapps-ae/ourapps/security/advisories/new" target="_blank" rel="noopener">report them privately</a>, never in a public issue.</p>
+          <p class="small faint">Something missing or wrong? The source is public: <a href="https://github.com/ourapps-app/ourapps/issues" target="_blank" rel="noopener">open an issue on github.com/ourapps-app/ourapps</a>. Security problems: <a href="https://github.com/ourapps-app/ourapps/security/advisories/new" target="_blank" rel="noopener">report them privately</a>, never in a public issue.</p>
         </article>
       </div>
     `,
