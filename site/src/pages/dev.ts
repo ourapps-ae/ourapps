@@ -1389,7 +1389,7 @@ export async function agents(root: HTMLElement): Promise<void> {
           <p class="small muted"><code>AppTargets</code> contains six booleans: <code>ios</code>, <code>android</code>, <code>web</code>, <code>macos</code>, <code>windows</code> and <code>tvos</code>.</p>
           <pre class="mt-s"><code>curl -H "Authorization: Bearer $OURAPPS_API_KEY" \\
   ${location.origin}/api/dev/apps</code></pre>
-          <p class="small muted mt-s">Source code and issues: <a href="${SOURCE_URL}" target="_blank" rel="noopener">github.com/ourapps-ae/ourapps</a>.</p>
+          <p class="small muted mt-s">Source code and issues: <a href="${SOURCE_URL}" target="_blank" rel="noopener">github.com/ourapps-app/ourapps</a>.</p>
         </div>
       </div>
 

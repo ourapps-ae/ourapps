@@ -86,7 +86,7 @@ Rotating `LINK_SECRET` only invalidates download links that are less than an hou
 
 ## Reporting a vulnerability
 
-Report it privately at https://github.com/ourapps-ae/ourapps/security/advisories/new
+Report it privately at https://github.com/ourapps-app/ourapps/security/advisories/new
 (GitHub's private vulnerability reporting: only the maintainer sees it). Do not open a public
 issue for a security problem, and do not include real secrets or personal data in any report.
 Expect a reply within a few days; fixes are released before details are published.

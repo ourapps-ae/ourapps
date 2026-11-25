@@ -163,7 +163,7 @@ npm run build -w site && npx wrangler deploy
 `PUBLIC_ORIGIN` in `wrangler.jsonc` is the deployed host (`https://ourapps.app`); sign-in callbacks
 and links are built from it.
 
-Source: https://github.com/ourapps-ae/ourapps. The source is public for reading and
+Source: https://github.com/ourapps-app/ourapps. The source is public for reading and
 review; it is not open source. All rights reserved, see `LICENSE`. Outside contributions are not
 accepted (`CONTRIBUTING.md`); report security problems privately (`SECURITY.md`).
 
