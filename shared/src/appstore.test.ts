@@ -1,27 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { AGE_RATING_FREQUENCY, AGE_RATING_YES_NO, ageRatingAnswers, displayTypeFor, requiredDisplayTypes } from "./appstore.js";
+import { AGE_RATING_FREQUENCY, AGE_RATING_YES_NO, FALLBACK_SCREENSHOT_GROUPS, ageRatingAnswers, groupFor, requiredScreenshots } from "./appstore.js";
 
-describe("App Store screenshot sizes", () => {
-  it("places each accepted size in its display type, either way up on iPhone and iPad", () => {
-    expect(displayTypeFor("ios", 1320, 2868)?.id).toBe("APP_IPHONE_67");
-    expect(displayTypeFor("ios", 2868, 1320)?.id).toBe("APP_IPHONE_67");
-    expect(displayTypeFor("ios", 1284, 2778)?.id).toBe("APP_IPHONE_65");
-    expect(displayTypeFor("ios", 2064, 2752)?.id).toBe("APP_IPAD_PRO_3GEN_129");
-    expect(displayTypeFor("macos", 2880, 1800)?.id).toBe("APP_DESKTOP");
-    expect(displayTypeFor("tvos", 1920, 1080)?.id).toBe("APP_APPLE_TV");
+describe("App Store screenshot groups", () => {
+  const groups = FALLBACK_SCREENSHOT_GROUPS;
+  it("places each accepted size in its group, either way up on iPhone and iPad", () => {
+    expect(groupFor(groups, "ios", 1320, 2868)?.group.id).toBe("IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE");
+    expect(groupFor(groups, "ios", 2868, 1320)?.group.id).toBe("IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE");
+    expect(groupFor(groups, "ios", 1284, 2778)?.group.id).toBe("IPHONE_FACE_ID_LARGE_PROFILE");
+    expect(groupFor(groups, "ios", 2064, 2752)?.group.id).toBe("IPAD_13_PROFILE");
+    expect(groupFor(groups, "macos", 2880, 1800)).toEqual({ group: groups[3], alphaAllowed: true });
+    expect(groupFor(groups, "tvos", 1920, 1080)?.group.id).toBe("APPLE_TV_PROFILE");
   });
 
   it("takes no other size, and Mac and Apple TV only upright", () => {
-    expect(displayTypeFor("ios", 1170, 2532)).toBeNull();
-    expect(displayTypeFor("ios", 1920, 1080)).toBeNull();
-    expect(displayTypeFor("macos", 1800, 2880)).toBeNull();
-    expect(displayTypeFor("tvos", 1080, 1920)).toBeNull();
+    expect(groupFor(groups, "ios", 1000, 2000)).toBeNull();
+    expect(groupFor(groups, "ios", 1920, 1080)).toBeNull();
+    expect(groupFor(groups, "macos", 1800, 2880)).toBeNull();
+    expect(groupFor(groups, "tvos", 1080, 1920)).toBeNull();
   });
 
   it("asks for iPad only when the app runs on iPad", () => {
-    expect(requiredDisplayTypes("ios", false).map((r) => r.label)).toEqual(["iPhone 6.9 inch"]);
-    expect(requiredDisplayTypes("ios", true).map((r) => r.label)).toEqual(["iPhone 6.9 inch", "iPad 13 inch"]);
-    expect(requiredDisplayTypes("tvos", true)).toEqual([{ label: "Apple TV", types: ["APP_APPLE_TV"] }]);
+    expect(requiredScreenshots(groups, "ios", false)).toEqual([{ label: "iPhone 6.9 inch", groups: ["IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE", "IPHONE_FACE_ID_LARGE_PROFILE"] }]);
+    expect(requiredScreenshots(groups, "ios", true).map((r) => r.label)).toEqual(["iPhone 6.9 inch", "iPad 13 inch"]);
+    expect(requiredScreenshots(groups, "tvos", true)).toEqual([{ label: "Apple TV", groups: ["APPLE_TV_PROFILE"] }]);
   });
 });
 

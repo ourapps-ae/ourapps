@@ -90,34 +90,50 @@ export const POLICY_STORAGE: Record<string, string> = {
   servers: "On the developer's own servers",
 };
 
-// Apple's screenshot display types ourapps fills, with the pixel sizes Apple takes for each (portrait; landscape is the same turned).
-export interface DisplayType {
+// A placement group App Store screenshots go in: Apple's identifier for a family of devices, and the pixel sizes it takes.
+// Apple's reference data supplies them at run time; the fallback table is used only when it cannot be read.
+export interface ScreenshotGroup {
   id: string;
   label: string;
   platform: AppStorePlatform;
-  sizes: [number, number][];
-  // Upright sizes only, as for Mac and Apple TV.
-  fixed?: boolean;
+  displayClass: string;
+  sizes: { width: number; height: number; alphaAllowed: boolean }[];
+  // iPhone and iPad sizes count either way up; Mac and Apple TV sizes only as given.
+  turnable: boolean;
+  maxCount: number;
 }
 
-export const DISPLAY_TYPES: DisplayType[] = [
-  { id: "APP_IPHONE_67", label: "iPhone 6.9 inch", platform: "ios", sizes: [[1320, 2868], [1290, 2796], [1260, 2736]] },
-  { id: "APP_IPHONE_65", label: "iPhone 6.5 inch", platform: "ios", sizes: [[1284, 2778], [1242, 2688]] },
-  { id: "APP_IPAD_PRO_3GEN_129", label: "iPad 13 inch", platform: "ios", sizes: [[2064, 2752], [2048, 2732]] },
-  { id: "APP_DESKTOP", label: "Mac", platform: "macos", sizes: [[2880, 1800], [2560, 1600], [1440, 900], [1280, 800]], fixed: true },
-  { id: "APP_APPLE_TV", label: "Apple TV", platform: "tvos", sizes: [[3840, 2160], [1920, 1080]], fixed: true },
+const size = (width: number, height: number, alphaAllowed = false) => ({ width, height, alphaAllowed });
+
+export const FALLBACK_SCREENSHOT_GROUPS: ScreenshotGroup[] = [
+  { id: "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE", label: "iPhone 6.9 inch", platform: "ios", displayClass: "IPHONE_DYNAMIC_ISLAND_LARGE_DISPLAY", sizes: [size(1320, 2868), size(1290, 2796), size(1260, 2736)], turnable: true, maxCount: 10 },
+  { id: "IPHONE_FACE_ID_LARGE_PROFILE", label: "iPhone 6.5 inch", platform: "ios", displayClass: "IPHONE_FACE_ID_LARGE_DISPLAY", sizes: [size(1284, 2778), size(1242, 2688)], turnable: true, maxCount: 10 },
+  { id: "IPAD_13_PROFILE", label: "iPad 13 inch", platform: "ios", displayClass: "IPAD_13_DISPLAY", sizes: [size(2064, 2752), size(2048, 2732)], turnable: true, maxCount: 10 },
+  { id: "MAC_PROFILE", label: "Mac", platform: "macos", displayClass: "DEFAULT", sizes: [size(2880, 1800, true), size(2560, 1600, true), size(1440, 900, true), size(1280, 800, true)], turnable: false, maxCount: 10 },
+  { id: "APPLE_TV_PROFILE", label: "Apple TV", platform: "tvos", displayClass: "DEFAULT", sizes: [size(3840, 2160, true), size(1920, 1080, true)], turnable: false, maxCount: 10 },
 ];
 
-export const sizeText = (t: DisplayType) => t.sizes.map(([w, h]) => `${w} x ${h}`).join(", ");
+export const sizeText = (g: ScreenshotGroup) => g.sizes.map((s) => `${s.width} x ${s.height}`).join(", ");
 
-// The display type a screenshot of these pixel sizes belongs to on this platform, or null when Apple takes no such size.
-export function displayTypeFor(platform: AppStorePlatform, width: number, height: number): DisplayType | null {
-  return DISPLAY_TYPES.find((t) => t.platform === platform && t.sizes.some(([w, h]) => (w === width && h === height) || (!t.fixed && w === height && h === width))) ?? null;
+// The group a screenshot of these pixel sizes belongs to on this platform, or null when Apple takes no such size.
+export function groupFor(groups: ScreenshotGroup[], platform: AppStorePlatform, width: number, height: number): { group: ScreenshotGroup; alphaAllowed: boolean } | null {
+  for (const group of groups) {
+    if (group.platform !== platform) continue;
+    const found = group.sizes.find((s) => (s.width === width && s.height === height) || (group.turnable && s.width === height && s.height === width));
+    if (found) return { group, alphaAllowed: found.alphaAllowed };
+  }
+  return null;
 }
 
-// Each entry is satisfied by a screenshot in any of its display types. iPhone takes 6.9 inch, or 6.5 inch in its place.
-export function requiredDisplayTypes(platform: AppStorePlatform, runsOnIpad: boolean): { label: string; types: string[] }[] {
-  if (platform === "macos") return [{ label: "Mac", types: ["APP_DESKTOP"] }];
-  if (platform === "tvos") return [{ label: "Apple TV", types: ["APP_APPLE_TV"] }];
-  return [{ label: "iPhone 6.9 inch", types: ["APP_IPHONE_67", "APP_IPHONE_65"] }, ...(runsOnIpad ? [{ label: "iPad 13 inch", types: ["APP_IPAD_PRO_3GEN_129"] }] : [])];
+// Apple's required screenshots: iPhone 6.9 inch (6.5 inch in its place), iPad 13 inch when the app runs on iPad, Mac, Apple TV.
+// Each entry is met by a screenshot in any of its groups.
+export function requiredScreenshots(groups: ScreenshotGroup[], platform: AppStorePlatform, runsOnIpad: boolean): { label: string; groups: string[] }[] {
+  const of = (test: (g: ScreenshotGroup) => boolean) => groups.filter((g) => g.platform === platform && test(g)).map((g) => g.id);
+  if (platform === "macos") return [{ label: "Mac", groups: of(() => true) }];
+  if (platform === "tvos") return [{ label: "Apple TV", groups: of(() => true) }];
+  const iphone = ["IPHONE_DYNAMIC_ISLAND_LARGE_DISPLAY", "IPHONE_FACE_ID_LARGE_DISPLAY"];
+  return [
+    { label: "iPhone 6.9 inch", groups: of((g) => iphone.includes(g.displayClass)).sort((a, b) => iphone.indexOf(groups.find((g) => g.id === a)!.displayClass) - iphone.indexOf(groups.find((g) => g.id === b)!.displayClass)) },
+    ...(runsOnIpad ? [{ label: "iPad 13 inch", groups: of((g) => g.displayClass === "IPAD_13_DISPLAY") }] : []),
+  ];
 }
