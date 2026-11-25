@@ -13,6 +13,7 @@ export function targetSections(app: Partial<DevApp>): Raw {
     <fieldset class="target-body" ${targets[target] ? "" : "disabled"}>
       <div data-target-release></div>
       ${target === "ios" ? html`<div id="testflight-card"></div>` : target === "macos" || target === "tvos" ? html`<div id="${target}-testflight-card"></div>` : ""}
+      ${target === "ios" || target === "macos" || target === "tvos" ? html`<div id="${target}-appstore-card"></div>` : ""}
     </fieldset></section>`)}`;
 }
 

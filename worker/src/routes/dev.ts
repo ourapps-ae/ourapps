@@ -16,6 +16,7 @@ import { localNeed, refreshTestflight, renewStoreProfile, requestBuild, reviewCo
 import { applePlatform, profileType } from "../apple-platform.js";
 import { buildLinkPage } from "./public.js";
 import { requireTarget, TargetDisabledError } from "../targets.js";
+import { appStoreView, releaseAppStore, saveAppStoreDetails, submitAppStore, uploadScreenshots } from "../appstore.js";
 
 type AppInput = Partial<Record<"name" | "tagline" | "description" | "whatsNew" | "size" | "minOs" | "ageNote" | "privacySummary" | "iconUrl" | "repo" | "manifestUrl" | "bundleId", string>> & {
   screenshots?: unknown;
@@ -469,6 +470,30 @@ async function optionalJson<T extends object>(request: Request): Promise<Partial
   } catch {
     throw new HttpError(400, "body must be JSON");
   }
+}
+
+// GET /api/dev/apps/:id/appstore/:platform - where App Store review stands and the next step.
+export async function appStoreStatus(env: Env, deps: Deps, dev: Developer, id: string, platformName: string): Promise<Response> {
+  const db = Db.from(env);
+  const app = await db.platformApp(await ownedApp(db, dev, id), applePlatform(platformName));
+  return json(await appStoreView(env, deps, dev, app, true));
+}
+
+// PUT /api/dev/apps/:id/appstore/:platform - saves the steps sent and writes them to Apple.
+export async function saveAppStore(request: Request, env: Env, deps: Deps, dev: Developer, id: string, platformName: string): Promise<Response> {
+  const db = Db.from(env);
+  const app = await db.platformApp(await ownedApp(db, dev, id), applePlatform(platformName));
+  return json(await saveAppStoreDetails(request, env, deps, dev, app, await readJson<unknown>(request)));
+}
+
+// POST /api/dev/apps/:id/appstore/:platform/{screenshots,submit,release}
+export async function appStoreAction(request: Request, env: Env, deps: Deps, dev: Developer, id: string, platformName: string, action: string): Promise<Response> {
+  const db = Db.from(env);
+  const app = await db.platformApp(await ownedApp(db, dev, id), applePlatform(platformName));
+  const body = await optionalJson<{ restart?: unknown; releaseType?: unknown }>(request);
+  if (action === "screenshots") return json(await uploadScreenshots(request, env, deps, dev, app, body));
+  if (action === "submit") return json(await submitAppStore(request, env, deps, dev, app, body));
+  return json(await releaseAppStore(request, env, deps, dev, app));
 }
 
 // PUT /api/dev/review-contact - who Apple's TestFlight beta review contacts.

@@ -1,5 +1,5 @@
 // Typed D1 access. Rows are snake_case in SQL and camelCase in code.
-import { APP_TARGET_KEYS, isAppTarget, type AppTarget, type AppTargets, type ScreenshotPlatform } from "@my/store-shared";
+import { APP_TARGET_KEYS, isAppTarget, type AgeRatingAnswers, type AppTarget, type AppTargets, type ScreenshotGroup, type ScreenshotPlatform } from "@my/store-shared";
 import type { Env } from "./env.js";
 import type { ApplePlatform } from "./apple-platform.js";
 import { BuildNumberError, numericBuildNumber } from "./build-number.js";
@@ -166,6 +166,111 @@ export interface TestflightBuildRow {
   updatedAt: string;
 }
 
+// App Store review: draft (not submitted), waiting and in-review at Apple, rejected, pending-release (approved, the
+// developer releases it), releasing (Apple is putting it on the store), ready (on the App Store).
+export type AppStoreStage = "draft" | "waiting" | "in-review" | "rejected" | "pending-release" | "releasing" | "ready";
+export type ReleaseType = "AFTER_APPROVAL" | "MANUAL";
+
+export interface AppStoreInfo {
+  category: string;
+  ageRating: AgeRatingAnswers;
+  thirdPartyContent: boolean;
+  // The developer's own policy address; empty means the default policy ourapps serves.
+  privacyPolicyUrl: string;
+}
+
+export interface DefaultPolicy {
+  collects: string[];
+  storage: "device" | "servers";
+  contactEmail: string;
+  developerName: string;
+}
+
+export interface AppStoreAppRow {
+  appId: string;
+  listing: "public" | "unlisted";
+  unlistedGrantedAt: string | null;
+  info: AppStoreInfo | null;
+  policyId: string | null;
+  policy: DefaultPolicy | null;
+  privacyConfirmedAt: string | null;
+  // The App Store Connect app the information was last written to.
+  infoSyncedTo: string | null;
+  updatedAt: string;
+}
+
+export interface AppStoreDraft {
+  version: string;
+  description: string;
+  keywords: string;
+  supportUrl: string;
+  copyright: string;
+  whatsNew: string;
+  review: { firstName: string; lastName: string; email: string; phone: string; notes: string };
+  buildNumber: string | null;
+}
+
+// What Apple holds for the draft: the version whose text and review details it has, and the attached build.
+export interface AppStoreSynced {
+  version?: string;
+  localizationId?: string;
+  firstVersion?: boolean;
+  review?: string;
+  buildId?: string;
+}
+
+export interface ScreenshotItem {
+  url: string;
+  group: string | null;
+  width?: number;
+  height?: number;
+  // The library image ourapps uploaded for it and the placement that puts it on the version.
+  imageId?: string;
+  placementId?: string;
+  done: boolean;
+  error?: string;
+}
+
+export interface ScreenshotState {
+  version: string;
+  source: string;
+  runsOnIpad: boolean;
+  items: ScreenshotItem[];
+  // Apple's placement groups for the platform, from its reference data or the fallback table.
+  groups: ScreenshotGroup[];
+  groupsFrom: "apple" | "fallback";
+  libraryId: string | null;
+  // Images ourapps uploaded for earlier screenshots, deleted once nothing places them.
+  previous: string[];
+  // The version's earlier screenshot placements removed; the placements put in order; Apple's processing read back.
+  cleared: boolean;
+  ordered: boolean;
+  checked: boolean;
+  processing: number;
+}
+
+export interface AppStoreVersionRow {
+  appId: string;
+  platform: ApplePlatform;
+  draft: AppStoreDraft;
+  synced: AppStoreSynced;
+  screenshots: ScreenshotState | null;
+  errors: Partial<Record<string, string>>;
+  appleAppId: string | null;
+  appleVersionId: string | null;
+  submissionId: string | null;
+  stage: AppStoreStage;
+  appleState: string | null;
+  releaseType: ReleaseType;
+  message: string | null;
+  // The newest version on the App Store, kept while the next one is prepared.
+  liveVersion: string | null;
+  submittedAt: string | null;
+  checkedAt: string | null;
+  releasedAt: string | null;
+  updatedAt: string;
+}
+
 type Raw = Record<string, unknown>;
 
 function camel(key: string): string {
@@ -186,6 +291,16 @@ const appConvert = (r: Raw): Raw => ({
   showOnPage: r.showOnPage === 1,
   targets: Object.fromEntries(APP_TARGET_KEYS.map((key) => [key, r[`target${key[0].toUpperCase()}${key.slice(1)}`] === 1])),
 });
+
+const appStoreAppConvert = (r: Raw): Raw => {
+  const { infoJson, policyJson, ...rest } = r;
+  return { ...rest, info: infoJson ? JSON.parse(infoJson as string) : null, policy: policyJson ? JSON.parse(policyJson as string) : null };
+};
+
+const appStoreVersionConvert = (r: Raw): Raw => {
+  const { draftJson, syncedJson, screenshotsJson, errorsJson, ...rest } = r;
+  return { ...rest, draft: JSON.parse(draftJson as string), synced: JSON.parse(syncedJson as string), screenshots: screenshotsJson ? JSON.parse(screenshotsJson as string) : null, errors: JSON.parse(errorsJson as string) };
+};
 
 export class Db {
   constructor(private d1: D1Database) {}
@@ -536,6 +651,80 @@ export class Db {
       .prepare("UPDATE testflight_builds SET build_id = ?, whats_new = ?, state = ?, message = ?, apple_state = ?, submitted_at = ?, notified_at = ?, expires_at = ?, updated_at = ? WHERE id = ?")
       .bind(b.buildId, b.whatsNew, b.state, b.message, b.appleState ?? null, b.submittedAt ?? null, b.notifiedAt ?? null, b.expiresAt ?? null, b.updatedAt, b.id)
       .run();
+  }
+
+  // App Store review
+
+  async appStoreApp(appId: string): Promise<AppStoreAppRow | null> {
+    return row<AppStoreAppRow>(await this.d1.prepare("SELECT * FROM app_store_apps WHERE app_id = ?").bind(appId).first(), appStoreAppConvert);
+  }
+
+  async putAppStoreApp(a: AppStoreAppRow): Promise<void> {
+    await this.d1
+      .prepare(
+        `INSERT INTO app_store_apps (app_id, listing, unlisted_granted_at, info_json, policy_id, policy_json, privacy_confirmed_at, info_synced_to, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(app_id) DO UPDATE SET listing = excluded.listing, unlisted_granted_at = excluded.unlisted_granted_at, info_json = excluded.info_json, policy_id = excluded.policy_id,
+         policy_json = excluded.policy_json, privacy_confirmed_at = excluded.privacy_confirmed_at, info_synced_to = excluded.info_synced_to, updated_at = excluded.updated_at`,
+      )
+      .bind(a.appId, a.listing, a.unlistedGrantedAt, a.info ? JSON.stringify(a.info) : null, a.policyId, a.policy ? JSON.stringify(a.policy) : null, a.privacyConfirmedAt, a.infoSyncedTo, a.updatedAt)
+      .run();
+  }
+
+  async appStoreVersion(appId: string, platform: ApplePlatform): Promise<AppStoreVersionRow | null> {
+    return row<AppStoreVersionRow>(await this.d1.prepare("SELECT * FROM app_store_versions WHERE app_id = ? AND platform = ?").bind(appId, platform).first(), appStoreVersionConvert);
+  }
+
+  async putAppStoreVersion(v: AppStoreVersionRow): Promise<void> {
+    await this.d1
+      .prepare(
+        `INSERT INTO app_store_versions (app_id, platform, draft_json, synced_json, screenshots_json, errors_json, apple_app_id, apple_version_id, submission_id, stage, apple_state, release_type, message, live_version, submitted_at, checked_at, released_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(app_id, platform) DO UPDATE SET draft_json = excluded.draft_json, synced_json = excluded.synced_json, screenshots_json = excluded.screenshots_json, errors_json = excluded.errors_json,
+         apple_app_id = excluded.apple_app_id, apple_version_id = excluded.apple_version_id, submission_id = excluded.submission_id, stage = excluded.stage, apple_state = excluded.apple_state,
+         release_type = excluded.release_type, message = excluded.message, live_version = excluded.live_version, submitted_at = excluded.submitted_at, checked_at = excluded.checked_at,
+         released_at = excluded.released_at, updated_at = excluded.updated_at`,
+      )
+      .bind(
+        v.appId, v.platform, JSON.stringify(v.draft), JSON.stringify(v.synced), v.screenshots ? JSON.stringify(v.screenshots) : null, JSON.stringify(v.errors), v.appleAppId, v.appleVersionId, v.submissionId,
+        v.stage, v.appleState, v.releaseType, v.message, v.liveVersion, v.submittedAt, v.checkedAt, v.releasedAt, v.updatedAt,
+      )
+      .run();
+  }
+
+  // Versions with Apple's App Review or on their way to the store, least recently checked first.
+  async followedAppStoreVersions(limit = 4): Promise<AppStoreVersionRow[]> {
+    const res = await this.d1
+      .prepare("SELECT * FROM app_store_versions WHERE stage IN ('waiting', 'in-review', 'rejected', 'pending-release', 'releasing') AND apple_version_id IS NOT NULL ORDER BY checked_at LIMIT ?")
+      .bind(limit)
+      .all<Raw>();
+    return res.results.map((r) => row<AppStoreVersionRow>(r, appStoreVersionConvert)!);
+  }
+
+  // Versions being prepared whose screenshots are unfinished or not yet processed by Apple, least recently changed first.
+  async appStoreScreenshotWork(limit = 5): Promise<AppStoreVersionRow[]> {
+    const res = await this.d1
+      .prepare(
+        `SELECT * FROM app_store_versions WHERE stage IN ('draft', 'rejected') AND screenshots_json IS NOT NULL
+         AND (json_extract(screenshots_json, '$.checked') = 0 OR EXISTS (SELECT 1 FROM json_each(screenshots_json, '$.items') WHERE json_extract(value, '$.done') = 0))
+         ORDER BY updated_at LIMIT ?`,
+      )
+      .bind(limit)
+      .all<Raw>();
+    return res.results.map((r) => row<AppStoreVersionRow>(r, appStoreVersionConvert)!);
+  }
+
+  // The platforms whose app is on the App Store, with Apple's id for the app.
+  async liveAppStore(appId: string): Promise<{ platform: ApplePlatform; appleAppId: string }[]> {
+    const res = await this.d1.prepare("SELECT platform, apple_app_id FROM app_store_versions WHERE app_id = ? AND live_version IS NOT NULL AND apple_app_id IS NOT NULL").bind(appId).all<{ platform: ApplePlatform; apple_app_id: string }>();
+    return res.results.map((r) => ({ platform: r.platform, appleAppId: r.apple_app_id }));
+  }
+
+  async privacyPolicy(policyId: string): Promise<{ appName: string; policy: DefaultPolicy; updatedAt: string } | null> {
+    const r = await this.d1
+      .prepare("SELECT a.name AS app_name, s.policy_json, s.updated_at FROM app_store_apps s JOIN apps a ON a.id = s.app_id WHERE s.policy_id = ? AND s.policy_json IS NOT NULL")
+      .bind(policyId)
+      .first<{ app_name: string; policy_json: string; updated_at: string }>();
+    return r ? { appName: r.app_name, policy: JSON.parse(r.policy_json) as DefaultPolicy, updatedAt: r.updated_at } : null;
   }
 
   // Signing certificate

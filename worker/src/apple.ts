@@ -77,10 +77,10 @@ export class AppleClient {
     });
     if (res.status >= 300 && res.status < 400) throw new AppleError(res.status, "Apple redirected the request; no credentials were forwarded.");
     if (res.status === 204) return undefined as T;
-    const json = (await res.json().catch(() => ({}))) as T & { errors?: { detail?: string; title?: string }[] };
+    const json = (await res.json().catch(() => ({}))) as T & { errors?: { detail?: string; title?: string; code?: string }[] };
     if (!res.ok) {
       const detail = json.errors?.map((e) => e.detail ?? e.title).join("; ") ?? res.statusText;
-      throw new AppleError(res.status, `${method} ${path}: ${detail}`);
+      throw new AppleError(res.status, `${method} ${path}: ${detail}`, detail, json.errors?.[0]?.code ?? "");
     }
     return json;
   }
@@ -340,6 +340,267 @@ export class AppleClient {
     await this.call("POST", "/v1/betaAppReviewSubmissions", { data: { type: "betaAppReviewSubmissions", relationships: { build: { data: { type: "builds", id: buildId } } } } });
   }
 
+  // App Store
+
+  async primaryLocale(appId: string): Promise<string> {
+    return (await this.appSettings(appId)).primaryLocale;
+  }
+
+  async appSettings(appId: string): Promise<{ primaryLocale: string; contentRightsDeclaration: string | null }> {
+    const app = await this.call<{ data: Resource<{ primaryLocale?: string; contentRightsDeclaration?: string | null }> }>("GET", `/v1/apps/${appId}?fields[apps]=primaryLocale,contentRightsDeclaration`);
+    return { primaryLocale: app.data.attributes.primaryLocale ?? "en-US", contentRightsDeclaration: app.data.attributes.contentRightsDeclaration ?? null };
+  }
+
+  // The app information that goes live with the next version, not the one on the store now, with what Apple holds for it:
+  // the primary category, the age rating answers and each localization's privacy policy.
+  async editableAppInfo(appId: string): Promise<AppInfoState> {
+    const res = await this.call<{ data: Resource<{ state?: string; appStoreState?: string }>[]; included?: Resource<Record<string, unknown>>[] }>(
+      "GET",
+      `/v1/apps/${appId}/appInfos?include=primaryCategory,ageRatingDeclaration,appInfoLocalizations&limit=10&limit[appInfoLocalizations]=50`,
+    );
+    const live = ["READY_FOR_DISTRIBUTION", "REPLACED_WITH_NEW_INFO", "READY_FOR_SALE"];
+    const info = res.data.find((i) => !live.includes(i.attributes.state ?? i.attributes.appStoreState ?? "")) ?? res.data[0];
+    if (!info) throw new AppleError(404, "Apple has no app information for this app.");
+    const included = (type: string, id: string | undefined) => res.included?.find((r) => r.type === type && r.id === id);
+    const ageId = asList(info.relationships?.ageRatingDeclaration?.data)[0]?.id;
+    const age = included("ageRatingDeclarations", ageId);
+    return {
+      id: info.id,
+      category: asList(info.relationships?.primaryCategory?.data)[0]?.id ?? null,
+      ageRating: ageId ? { id: ageId, attributes: age?.attributes ?? null } : null,
+      localizations: asList(info.relationships?.appInfoLocalizations?.data).map((l) => {
+        const a = included("appInfoLocalizations", l.id)?.attributes ?? {};
+        return { id: l.id, locale: String(a.locale ?? ""), privacyPolicyUrl: (a.privacyPolicyUrl as string | null | undefined) ?? null, privacyPolicyText: (a.privacyPolicyText as string | null | undefined) ?? null };
+      }),
+    };
+  }
+
+  async ageRatingDeclaration(appInfoId: string): Promise<{ id: string; attributes: Record<string, unknown> }> {
+    const res = await this.call<{ data: Resource<Record<string, unknown>> }>("GET", `/v1/appInfos/${appInfoId}/ageRatingDeclaration`);
+    return { id: res.data.id, attributes: res.data.attributes ?? {} };
+  }
+
+  async updateAgeRating(declarationId: string, attributes: Record<string, unknown>): Promise<void> {
+    await this.call("PATCH", `/v1/ageRatingDeclarations/${declarationId}`, { data: { type: "ageRatingDeclarations", id: declarationId, attributes } });
+  }
+
+  async setCategory(appInfoId: string, category: string): Promise<void> {
+    await this.call("PATCH", `/v1/appInfos/${appInfoId}`, { data: { type: "appInfos", id: appInfoId, relationships: { primaryCategory: { data: { type: "appCategories", id: category } } } } });
+  }
+
+  async updateAppInfoLocalization(id: string, attributes: Record<string, string>): Promise<void> {
+    await this.call("PATCH", `/v1/appInfoLocalizations/${id}`, { data: { type: "appInfoLocalizations", id, attributes } });
+  }
+
+  async createAppInfoLocalization(appInfoId: string, locale: string, name: string, attributes: Record<string, string>): Promise<void> {
+    await this.call("POST", "/v1/appInfoLocalizations", { data: { type: "appInfoLocalizations", attributes: { locale, name: name.slice(0, 30), ...attributes }, relationships: { appInfo: { data: { type: "appInfos", id: appInfoId } } } } });
+  }
+
+  async setContentRights(appId: string, declaration: string): Promise<void> {
+    await this.call("PATCH", `/v1/apps/${appId}`, { data: { type: "apps", id: appId, attributes: { contentRightsDeclaration: declaration } } });
+  }
+
+  // Free when every price in the base territory, now or scheduled, is the free price point.
+  async isFree(appId: string): Promise<boolean> {
+    let schedule: { data?: Resource | null };
+    try {
+      schedule = await this.call<{ data?: Resource | null }>("GET", `/v1/apps/${appId}/appPriceSchedule?include=baseTerritory`);
+    } catch (err) {
+      if (err instanceof AppleError && err.status === 404) return false;
+      throw err;
+    }
+    const base = asList(schedule?.data?.relationships?.baseTerritory?.data)[0]?.id;
+    if (!schedule?.data || !base) return false;
+    const prices = await this.call<{ data: Resource<{ startDate?: string | null; endDate?: string | null }>[]; included?: Resource<{ customerPrice?: string }>[] }>(
+      "GET",
+      `/v1/appPriceSchedules/${schedule.data.id}/manualPrices?filter[territory]=${base}&include=appPricePoint&fields[appPricePoints]=customerPrice&limit=200`,
+    );
+    const today = this.deps.now().toISOString().slice(0, 10);
+    const current = prices.data.filter((p) => !p.attributes.endDate || p.attributes.endDate > today);
+    return current.length > 0 && current.every((p) => {
+      const point = prices.included?.find((i) => i.type === "appPricePoints" && i.id === asList(p.relationships?.appPricePoint?.data)[0]?.id);
+      return point?.attributes.customerPrice !== undefined && Number(point.attributes.customerPrice) === 0;
+    });
+  }
+
+  // Free everywhere: the base territory's free price point, which Apple applies in every territory.
+  async makeFree(appId: string): Promise<void> {
+    const points = await this.call<{ data: Resource<{ customerPrice?: string }>[] }>("GET", `/v1/apps/${appId}/appPricePoints?filter[territory]=USA&limit=200`);
+    const free = points.data.find((p) => p.attributes.customerPrice !== undefined && Number(p.attributes.customerPrice) === 0);
+    if (!free) throw new AppleError(404, "Apple offered no free price for this app.");
+    await this.call("POST", "/v1/appPriceSchedules", {
+      data: { type: "appPriceSchedules", relationships: { app: { data: { type: "apps", id: appId } }, baseTerritory: { data: { type: "territories", id: "USA" } }, manualPrices: { data: [{ type: "appPrices", id: "${free-price}" }] } } },
+      included: [{ type: "appPrices", id: "${free-price}", attributes: { startDate: null, endDate: null }, relationships: { appPricePoint: { data: { type: "appPricePoints", id: free.id } } } }],
+    });
+  }
+
+  // Every territory, and those Apple adds later. Returns false, changing nothing, when availability is already set.
+  async makeAvailableEverywhere(appId: string): Promise<boolean> {
+    try {
+      const existing = await this.call<{ data?: Resource | null }>("GET", `/v1/apps/${appId}/appAvailabilityV2`);
+      if (existing?.data) return false;
+    } catch (err) {
+      if (!(err instanceof AppleError && err.status === 404)) throw err;
+    }
+    const territories = await this.call<{ data: Linkage[] }>("GET", "/v1/territories?limit=200");
+    const local = (id: string) => `\${territory-${id}}`;
+    await this.call("POST", "/v2/appAvailabilities", {
+      data: { type: "appAvailabilities", attributes: { availableInNewTerritories: true }, relationships: { app: { data: { type: "apps", id: appId } }, territoryAvailabilities: { data: territories.data.map((t) => ({ type: "territoryAvailabilities", id: local(t.id) })) } } },
+      included: territories.data.map((t) => ({ type: "territoryAvailabilities", id: local(t.id), attributes: { available: true }, relationships: { territory: { data: { type: "territories", id: t.id } } } })),
+    });
+    return true;
+  }
+
+  async appStoreVersions(appId: string, platform: ApplePlatform): Promise<StoreVersion[]> {
+    const res = await this.call<{ data: Resource<{ versionString?: string; appVersionState?: string; appStoreState?: string; releaseType?: string }>[] }>("GET", `/v1/apps/${appId}/appStoreVersions?filter[platform]=${applePlatformName(platform)}&limit=50`);
+    return res.data.map(storeVersion);
+  }
+
+  async readAppStoreVersion(versionId: string): Promise<StoreVersion> {
+    const res = await this.call<{ data: Resource<{ versionString?: string; appVersionState?: string; appStoreState?: string; releaseType?: string }> }>("GET", `/v1/appStoreVersions/${versionId}`);
+    return storeVersion(res.data);
+  }
+
+  async createAppStoreVersion(appId: string, platform: ApplePlatform, versionString: string, copyright: string): Promise<StoreVersion> {
+    const res = await this.call<{ data: Resource<{ versionString?: string; appVersionState?: string; releaseType?: string }> }>("POST", "/v1/appStoreVersions", {
+      data: { type: "appStoreVersions", attributes: { platform: applePlatformName(platform), versionString, copyright }, relationships: { app: { data: { type: "apps", id: appId } } } },
+    });
+    return storeVersion(res.data);
+  }
+
+  async updateAppStoreVersion(versionId: string, attributes: { versionString?: string; copyright?: string; releaseType?: string }): Promise<void> {
+    await this.call("PATCH", `/v1/appStoreVersions/${versionId}`, { data: { type: "appStoreVersions", id: versionId, attributes } });
+  }
+
+  // The version's text in one language: created when missing, otherwise changed. Returns its id.
+  async writeVersionText(versionId: string, locale: string, attributes: { description: string; keywords: string; supportUrl: string; whatsNew?: string }): Promise<string> {
+    const res = await this.call<{ data: Resource<{ locale: string }>[] }>("GET", `/v1/appStoreVersions/${versionId}/appStoreVersionLocalizations?limit=50`);
+    const found = res.data.find((l) => l.attributes.locale === locale);
+    if (found) {
+      await this.call("PATCH", `/v1/appStoreVersionLocalizations/${found.id}`, { data: { type: "appStoreVersionLocalizations", id: found.id, attributes } });
+      return found.id;
+    }
+    const made = await this.call<{ data: Resource }>("POST", "/v1/appStoreVersionLocalizations", {
+      data: { type: "appStoreVersionLocalizations", attributes: { locale, ...attributes }, relationships: { appStoreVersion: { data: { type: "appStoreVersions", id: versionId } } } },
+    });
+    return made.data.id;
+  }
+
+  async writeReviewDetail(versionId: string, attributes: { contactFirstName: string; contactLastName: string; contactEmail: string; contactPhone: string; notes: string; demoAccountRequired: boolean }): Promise<void> {
+    let id: string | null = null;
+    try {
+      id = (await this.call<{ data?: Resource | null }>("GET", `/v1/appStoreVersions/${versionId}/appStoreReviewDetail`))?.data?.id ?? null;
+    } catch (err) {
+      if (!(err instanceof AppleError && err.status === 404)) throw err;
+    }
+    if (id) await this.call("PATCH", `/v1/appStoreReviewDetails/${id}`, { data: { type: "appStoreReviewDetails", id, attributes } });
+    else await this.call("POST", "/v1/appStoreReviewDetails", { data: { type: "appStoreReviewDetails", attributes, relationships: { appStoreVersion: { data: { type: "appStoreVersions", id: versionId } } } } });
+  }
+
+  async attachBuild(versionId: string, buildId: string): Promise<void> {
+    await this.call("PATCH", `/v1/appStoreVersions/${versionId}/relationships/build`, { data: { type: "builds", id: buildId } });
+  }
+
+  // A submission that is not with App Review yet, or that Apple returned with issues, and the version it holds.
+  async openReviewSubmission(appId: string, platform: ApplePlatform): Promise<{ id: string; versionId: string | null } | null> {
+    const res = await this.call<{ data: Resource[] }>("GET", `/v1/reviewSubmissions?filter[app]=${appId}&filter[platform]=${applePlatformName(platform)}&filter[state]=READY_FOR_REVIEW,UNRESOLVED_ISSUES&include=appStoreVersionForReview&limit=5`);
+    const found = res.data[0];
+    return found ? { id: found.id, versionId: asList(found.relationships?.appStoreVersionForReview?.data)[0]?.id ?? null } : null;
+  }
+
+  async createReviewSubmission(appId: string, platform: ApplePlatform): Promise<string> {
+    const res = await this.call<{ data: Resource }>("POST", "/v1/reviewSubmissions", {
+      data: { type: "reviewSubmissions", attributes: { platform: applePlatformName(platform) }, relationships: { app: { data: { type: "apps", id: appId } } } },
+    });
+    return res.data.id;
+  }
+
+  async addToReviewSubmission(submissionId: string, versionId: string): Promise<void> {
+    await this.call("POST", "/v1/reviewSubmissionItems", {
+      data: { type: "reviewSubmissionItems", relationships: { reviewSubmission: { data: { type: "reviewSubmissions", id: submissionId } }, appStoreVersion: { data: { type: "appStoreVersions", id: versionId } } } },
+    });
+  }
+
+  async submitReviewSubmission(submissionId: string): Promise<void> {
+    await this.call("PATCH", `/v1/reviewSubmissions/${submissionId}`, { data: { type: "reviewSubmissions", id: submissionId, attributes: { submitted: true } } });
+  }
+
+  // The Release button for a version Apple approved with manual release.
+  async releaseVersion(versionId: string): Promise<void> {
+    await this.call("POST", "/v1/appStoreVersionReleaseRequests", { data: { type: "appStoreVersionReleaseRequests", relationships: { appStoreVersion: { data: { type: "appStoreVersions", id: versionId } } } } });
+  }
+
+  // The App Asset Library: an image is uploaded once into the app's library, then placed on a version localization.
+
+  async assetLibrary(appId: string): Promise<string> {
+    return (await this.call<{ data: Resource }>("GET", `/v1/apps/${appId}/assetLibrary`)).data.id;
+  }
+
+  // Apple's catalog of placement groups and image sizes for App Store version screenshots.
+  async assetReferenceData(): Promise<AssetReferenceData> {
+    const res = await this.call<{ data: Resource<AssetReferenceData>[] }>("GET", "/v1/appAssetLibraryRefData?filter[features]=APP_STORE_VERSIONS&fields[appAssetLibraryRefData]=features,placementProfileGroups,imageSpecs,placementTypes,displayClasses");
+    return res.data[0]?.attributes ?? {};
+  }
+
+  // The screenshot placements on a version localization, in display order, with the image each places and its state.
+  async screenshotPlacements(localizationId: string): Promise<{ id: string; group: string; state: string; imageId: string | null; imageState: string | null; imageDetails: string[] }[]> {
+    const res = await this.call<{ data: Resource<{ placementGroup?: string; state?: string }>[]; included?: Resource<{ state?: string; stateDetails?: { code?: string; description?: string }[] | null }>[] }>(
+      "GET",
+      `/v1/appStoreVersionLocalizations/${localizationId}/placements?filter[placementType]=APP_SCREENSHOT&sort=placementGroupPosition&include=image&fields[appAssetLibraryImages]=state,stateDetails&limit=200`,
+    );
+    return res.data.map((p) => {
+      const imageId = asList(p.relationships?.image?.data)[0]?.id ?? null;
+      const image = res.included?.find((i) => i.type === "appAssetLibraryImages" && i.id === imageId);
+      return { id: p.id, group: p.attributes.placementGroup ?? "", state: p.attributes.state ?? "", imageId, imageState: image?.attributes.state ?? null, imageDetails: (image?.attributes.stateDetails ?? []).map((d) => d.description ?? d.code ?? "error") };
+    });
+  }
+
+  async deletePlacement(placementId: string): Promise<void> {
+    await this.call("DELETE", `/v1/appAssetLibraryPlacements/${placementId}`);
+  }
+
+  async imageIsPlaced(imageId: string): Promise<boolean> {
+    return (await this.call<{ data: Linkage[] }>("GET", `/v1/appAssetLibraryImages/${imageId}/relationships/placements?limit=1`)).data.length > 0;
+  }
+
+  async deleteImage(imageId: string): Promise<void> {
+    await this.call("DELETE", `/v1/appAssetLibraryImages/${imageId}`);
+  }
+
+  // Reserves an image in the library; the bytes go to the returned operations, then commitImage.
+  async reserveImage(libraryId: string, fileName: string, fileSize: number, referenceName: string): Promise<{ id: string; operations: UploadOperation[] }> {
+    const res = await this.call<{ data: Resource<{ uploadOperations?: UploadOperation[] }> }>("POST", "/v1/appAssetLibraryImages", {
+      data: { type: "appAssetLibraryImages", attributes: { fileName, fileSize, category: "APP_SCREENSHOTS_AND_PREVIEWS", referenceName }, relationships: { assetLibrary: { data: { type: "appAssetLibraries", id: libraryId } } } },
+    });
+    return { id: res.data.id, operations: res.data.attributes.uploadOperations ?? [] };
+  }
+
+  // Apple checks the bytes against the reserved file size; the asset library takes no checksum.
+  async commitImage(imageId: string): Promise<void> {
+    await this.call("PATCH", `/v1/appAssetLibraryImages/${imageId}`, { data: { type: "appAssetLibraryImages", id: imageId, attributes: { uploaded: true } } });
+  }
+
+  async placeScreenshot(localizationId: string, imageId: string, group: string): Promise<string> {
+    const res = await this.call<{ data: Resource }>("POST", "/v1/appAssetLibraryPlacements", {
+      data: {
+        type: "appAssetLibraryPlacements",
+        attributes: { placementType: "APP_SCREENSHOT", placementGroup: group },
+        relationships: { image: { data: { type: "appAssetLibraryImages", id: imageId } }, appStoreVersionLocalization: { data: { type: "appStoreVersionLocalizations", id: localizationId } } },
+      },
+    });
+    return res.data.id;
+  }
+
+  async orderPlacements(localizationId: string, group: string, placementIds: string[]): Promise<void> {
+    await this.call("POST", "/v1/appAssetLibraryPlacementOrderingRequests", {
+      data: {
+        type: "appAssetLibraryPlacementOrderingRequests",
+        attributes: { placementGroup: group },
+        relationships: { orderedPlacements: { data: placementIds.map((id) => ({ type: "appAssetLibraryPlacements", id })) }, appStoreVersionLocalization: { data: { type: "appStoreVersionLocalizations", id: localizationId } } },
+      },
+    });
+  }
+
   // An Apple Distribution certificate signs the iPhone and iPad builds that go to TestFlight.
   async createDistributionCertificate(csrPem: string, certificateType: "DISTRIBUTION" | "MAC_INSTALLER_DISTRIBUTION" = "DISTRIBUTION", check?: () => Promise<void>): Promise<{ id: string; name: string; serialNumber: string; certificateContent: string; expirationDate: string | null }> {
     const res = await this.call<{ data: Resource<{ name: string; serialNumber: string; certificateContent: string; expirationDate?: string }> }>("POST", "/v1/certificates", {
@@ -358,8 +619,42 @@ export interface UploadOperation {
   requestHeaders?: { name: string; value: string }[];
 }
 
+// detail is Apple's own explanation, without the request; code is Apple's first error code.
 export class AppleError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(public status: number, message: string, public detail = message, public code = "") {
     super(message);
   }
+}
+
+export interface AppInfoState {
+  id: string;
+  category: string | null;
+  // attributes is null when Apple returned the declaration's id without its answers.
+  ageRating: { id: string; attributes: Record<string, unknown> | null } | null;
+  localizations: { id: string; locale: string; privacyPolicyUrl: string | null; privacyPolicyText: string | null }[];
+}
+
+// The parts of Apple's App Asset Library reference data ourapps reads.
+export interface AssetReferenceData {
+  features?: { featureId?: string; placementPolicies?: { placementType?: string; groupLimits?: { groupIds?: string[]; maxCount?: number }[] }[] }[];
+  placementProfileGroups?: { placementProfileGroupId?: string; platform?: string; displayClassId?: string }[];
+  imageSpecs?: { specId?: string; dimensions?: { minWidth?: number; maxWidth?: number; minHeight?: number; maxHeight?: number }; alphaAllowed?: boolean }[];
+  placementTypes?: { placementTypeId?: string; specMappings?: { placementGroupId?: string; specs?: string[] }[] }[];
+  displayClasses?: { displayClassId?: string; deviceFamily?: string; screenDimensions?: string[] }[];
+}
+
+export interface StoreVersion {
+  id: string;
+  versionString: string;
+  // Apple's appVersionState, or the older appStoreState in its terms.
+  state: string;
+  releaseType: string | null;
+}
+
+const OLD_STATES: Record<string, string> = { READY_FOR_SALE: "READY_FOR_DISTRIBUTION", PROCESSING_FOR_APP_STORE: "PROCESSING_FOR_DISTRIBUTION" };
+
+function storeVersion(r: Resource<{ versionString?: string; appVersionState?: string; appStoreState?: string; releaseType?: string }>): StoreVersion {
+  const a = r.attributes ?? {};
+  const old = a.appStoreState ?? "";
+  return { id: r.id, versionString: a.versionString ?? "", state: a.appVersionState ?? OLD_STATES[old] ?? old, releaseType: a.releaseType ?? null };
 }

@@ -304,7 +304,7 @@ export function renderInstall(root: HTMLElement, data: LinkPage, opts: InstallOp
         ${opts.example ? html`<div class="owner-bar"><span class="pill">Example</span> This is the page the people you share with would get for an imaginary app. Nothing installs. <a href="/example">Why Poker Night</a> <a href="/dev">Build yours</a></div>` : ""}
         ${opts.preview ? html`<div class="owner-bar"><span class="pill">Preview</span> This is how the install page looks to the people you share with. Install buttons are shown; this preview is not a share link. <a href="/dev/apps/${app.id}">Back to the app</a></div>` : ""}
         ${owner && !opts.preview && !opts.example ? html`<div class="owner-bar"><span class="pill">You</span> You are the developer of this app. <a href="/dev/apps/${app.id}">Edit</a> <a href="/dev/apps/${app.id}/links">Links</a></div>` : ""}
-        ${(owner || opts.preview) && !opts.example && data.release?.install.ios && !data.release.install.ios.testflight
+        ${(owner || opts.preview) && !opts.example && data.release?.install.ios && !data.release.install.ios.testflight && !data.release.appStore?.ios
           ? html`<div class="owner-bar"><span class="pill warn">iPhone</span> TestFlight is not open yet, so people on iPhone and iPad see "Coming to ${d.device} soon". <a href="/dev/apps/${app.id}#testflight">What it is waiting for</a></div>`
           : ""}
         <header class="product">
@@ -495,7 +495,8 @@ function ctaArea(data: LinkPage, d: Detected, name: string): Raw {
   const install = data.release.install;
   if (d.inApp && !d.inApp.installWorks) return html`<button class="btn get" data-get>Get</button><span class="small muted">Open in ${d.platform === "ios" ? "Safari" : "Chrome"} first</span>`;
   if (d.platform === "ios") {
-    if (install.ios?.testflight) return html`<button class="btn get" data-get>Get</button><span class="small muted">via Apple's TestFlight</span>`;
+    if (install.ios?.testflight) return html`<button class="btn get" data-get>Get</button><span class="small muted">via Apple's TestFlight${data.release.appStore?.ios ? " or the App Store" : ""}</span>`;
+    if (data.release.appStore?.ios) return html`<a class="btn get" href="${data.release.appStore.ios}">Get</a><span class="small muted">on the App Store</span>`;
     if (install.pwa) return html`<a class="btn get" href="${install.pwa}">Open</a><span class="small muted">web app</span>`;
     return html`<span class="pill">Not for ${d.device} yet</span>`;
   }
@@ -506,7 +507,7 @@ function ctaArea(data: LinkPage, d: Detected, name: string): Raw {
   }
   if (d.platform === "macos" || d.platform === "windows") {
     const native = install[d.platform];
-    if (native?.packages.length || (d.platform === "macos" && data.release.apple?.macos)) return html`<button class="btn get" data-get>Get</button><span class="small muted">See install options below</span>`;
+    if (native?.packages.length || (d.platform === "macos" && (data.release.apple?.macos || data.release.appStore?.macos))) return html`<button class="btn get" data-get>Get</button><span class="small muted">See install options below</span>`;
     if (d.platform === "macos" && data.release.apple?.iosOnMac) return html`<a class="btn get" href="${data.release.apple.iosOnMac.testflightUrl}">Get iPhone/iPad app</a><span class="small muted">Apple-silicon Mac · TestFlight</span>`;
     if (install.pwa) return html`<a class="btn get" href="${install.pwa}">Open web app</a>`;
     return html`<span class="pill">No compatible download available</span>`;
@@ -536,17 +537,34 @@ function installPanel(view: ViewKind | null, data: LinkPage, d: Detected, name: 
   if (view === "tvos") return televisionPanel(data.release!, pageUrl);
   const remote = d.platform === "other" || d.platform === "macos" || d.platform === "windows";
   if (view === "web") return remote ? webOnComputer(install.pwa!, name) : pwaSteps(install.pwa!, d.platform);
-  if (remote) return remoteCard(view, install, pageUrl, data.release!.testflightVersion ?? null, data.release!.version);
+  const store = data.release!.appStore?.ios ?? null;
+  if (remote) return remoteCard(view, install, pageUrl, data.release!.testflightVersion ?? null, data.release!.version, store);
   if (view === "android") return androidSteps(install.android!.apk, name);
   const note = deviceNote(install.ios?.devices, d.device);
-  if (install.ios?.testflight) return testflightSteps(name, d.device, install.ios.testflight, note);
+  if (install.ios?.testflight) return testflightSteps(name, d.device, install.ios.testflight, note, store);
+  if (store) return appStoreSteps(name, d.device, store, note);
   return iosComingSoon(name, d.device, install.pwa);
 }
 
 const TESTFLIGHT_APP = "https://apps.apple.com/app/testflight/id899247664";
 
+// Once a version is on the App Store, its page is offered beside the TestFlight invitation.
+export function appStoreLink(url: string, primary = false): Raw {
+  return html`<a class="btn block ${primary ? "" : "secondary"} mt-s" href="${url}">${icon("external")} Get it on the App Store</a>`;
+}
+
+function appStoreSteps(name: string, device: string, url: string, note: string): Raw {
+  return html`
+    <div class="install-card">
+      <h3>${icon("phone", "icon-20")} Install on this ${device}</h3>
+      <p class="muted small">${name} is on the App Store. It installs and updates like any other app.</p>
+      ${note ? callout("warn", html`<p class="small">${note}</p>`) : ""}
+      ${appStoreLink(url, true)}
+    </div>`;
+}
+
 // iPhone and iPad installs go through Apple's TestFlight app: no settings to change, nothing to approve.
-function testflightSteps(name: string, device: string, invite: string, note: string): Raw {
+function testflightSteps(name: string, device: string, invite: string, note: string, store: string | null = null): Raw {
   return html`
     <div class="install-card" id="testflight-card">
       <h3>${icon("phone", "icon-20")} Install on this ${device}</h3>
@@ -558,6 +576,7 @@ function testflightSteps(name: string, device: string, invite: string, note: str
         <li>In TestFlight tap <b>Accept</b>, then <b>Install</b>. ${name} appears on your home screen.</li>
       </ol>
       <p class="tiny faint mt-s">TestFlight keeps ${name} up to date; say yes to automatic updates when it asks. If TestFlight says the beta isn't accepting testers, try again later today.</p>
+      ${store ? html`<p class="small muted mt">${name} is also on the App Store.</p>${appStoreLink(store)}` : ""}
     </div>`;
 }
 
@@ -571,14 +590,16 @@ function iosComingSoon(name: string, device: string, pwa: string | null): Raw {
     </div>`;
 }
 
-function remoteCard(view: "iphone" | "ipad" | "android", install: Install, pageUrl: string, tfVersion: string | null, version: string): Raw {
+function remoteCard(view: "iphone" | "ipad" | "android", install: Install, pageUrl: string, tfVersion: string | null, version: string, store: string | null = null): Raw {
   const device = view === "android" ? "Android phone" : VIEW_LABEL[view];
   const steps =
     view === "android"
       ? html`<li>Tap <b>Get</b>; the app downloads.</li><li>The first time, allow installs from the browser when Android asks.</li><li>Tap <b>Install</b>.</li>`
       : install.ios?.testflight
-        ? html`<li>Get Apple's free <b>TestFlight</b> app from the App Store.</li><li>Tap <b>Open the invitation</b> on this page, on the ${device}.</li><li>In TestFlight tap <b>Accept</b>, then <b>Install</b>.${tfVersion && tfVersion !== version ? html` TestFlight has version ${tfVersion}.` : ""}</li>`
-        : html`<li>The ${device} version is coming soon${install.pwa ? "; the web version works there meanwhile" : ""}.</li>`;
+        ? html`<li>Get Apple's free <b>TestFlight</b> app from the App Store.</li><li>Tap <b>Open the invitation</b> on this page, on the ${device}.</li><li>In TestFlight tap <b>Accept</b>, then <b>Install</b>.${tfVersion && tfVersion !== version ? html` TestFlight has version ${tfVersion}.` : ""}</li>${store ? html`<li>Or tap <b>Get it on the App Store</b> on this page, on the ${device}.</li>` : ""}`
+        : store
+          ? html`<li>Tap <b>Get it on the App Store</b> on this page, on the ${device}.</li>`
+          : html`<li>The ${device} version is coming soon${install.pwa ? "; the web version works there meanwhile" : ""}.</li>`;
   return html`
     <div class="install-card remote-card">
       <div class="qr">${qrSvg(pageUrl)}</div>

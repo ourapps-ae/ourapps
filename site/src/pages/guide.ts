@@ -21,7 +21,8 @@ function sections(origin: string, slug: string): Section[] {
           <li><b>Each release carries <code>my-app.json</code></b>, which names the file or address for each device. ourapps reads it from the latest GitHub release and never looks at your code.</li>
           <li><b>ourapps signs and uploads the Apple builds.</b> iPhone, iPad, Mac and Apple TV builds are signed with a certificate ourapps keeps for you, uploaded to TestFlight and sent to your testers' group (<a href="#testflight">step 6</a>).</li>
           <li><b>You add the app and create a share link</b> in this console and send it (<a href="#add-app">step 3</a>, <a href="#share">step 5</a>). The person opens it and installs the version for their device.</li>
-          <li><b>Updates reach every device</b> through the same link (<a href="#updates">step 7</a>).</li>
+          <li><b>Updates reach every device</b> through the same link (<a href="#updates">step 8</a>).</li>
+          <li><b>When an app is ready for everyone</b>, ourapps takes a TestFlight build of it to Apple's App Review, and the install page offers it on the App Store too (<a href="#app-store">step 7</a>).</li>
         </ol>
         <div class="grid-2">
           <div class="card flat"><h3>${icon("android", "icon-20")} Android</h3><p>The page offers a direct download of your signed APK and walks the person through the one-time "allow from this source" prompt. Nothing else is needed.</p></div>
@@ -58,6 +59,7 @@ function sections(origin: string, slug: string): Section[] {
         <h3>You, as things happen</h3>
         <ol class="steps">
           <li><b>Wait for Apple's beta review</b> of the first build of each new iPhone version. The app's TestFlight card says what it is waiting for.</li>
+          <li><b>For the App Store</b>: answer the app's privacy questions in App Store Connect, decide the listing, the text and when a version is released, and ask Apple for unlisted distribution when you want it. <a href="/dev/guide#app-store">How</a>.</li>
           <li><b>Send the share link</b> to the person. The agent can create it and give you the URL and QR code; the message to the person is yours.</li>
           <li><b>Before the signing certificate's yearly expiry</b> (the date is under <a href="/dev/settings#signing">Settings</a>), press <b>Replace certificate</b> there. ourapps makes the profiles of enabled TestFlight targets again with it.</li>
           <li><b>Approve the release notes</b> for each version in <code>CHANGELOG.md</code>. An agent drafts them from the commits; they are shown to your people as the revision history, so the final words are yours. <a href="/dev/guide#release-notes">How</a>.</li>
@@ -325,8 +327,29 @@ startButton.onclick = async () => {
       `,
     },
     {
+      id: "app-store",
+      title: "7. The App Store (ourapps does most of it)",
+      body: html`
+        <p>An app on TestFlight can go to the App Store for iPhone and iPad, Mac and Apple TV. ourapps takes one of its TestFlight builds to Apple's App Review with your App Store Connect key, follows the review, and once Apple puts the version on the store, the install page shows <b>Get it on the App Store</b> beside the TestFlight invitation. The app is free, in every country and region the App Store serves.</p>
+        <p>Each Apple platform on the app's page has an <b>App Store</b> card with these steps. Done steps say what Apple has; the current step asks for what it needs.</p>
+        <ol class="steps">
+          <li><b>App information</b>, once per app: public or unlisted, the category, the age rating questions, whether the app shows content that belongs to someone else, and the privacy policy. Give the address of your own policy, or answer four short questions (what the app collects, where it is kept, a contact email and your name) and ourapps serves a policy at its own address, written in your name. You are responsible for the app and its policy; Level N Ltd only hosts the text.</li>
+          <li><b>App privacy answers.</b> Apple lets only you give them: the card opens App Privacy in App Store Connect, where you say what the app collects and publish it. Then press <b>I have answered them</b>.</li>
+          <li><b>Version text</b>: description, keywords, support address and copyright, and "what's new" from the second version on. They start from the app's details here and its release notes, and you can change each one.</li>
+          <li><b>Screenshots</b> come from the app's screenshot lists on this page and in my-app.json. ourapps checks each against the sizes Apple lists, uploads it once to the app's asset library in App Store Connect and places it on the version. Apple asks for iPhone 6.9 inch (1320 x 2868 pixels, or 1284 x 2778), iPad 13 inch (2064 x 2752) when the app runs on iPad, Mac (2880 x 1800, or another 16:10 size) and Apple TV (1920 x 1080 or 3840 x 2160). The card says which size is missing and why a screenshot was not used. Large images go a few at a time; the card carries on by itself, and so does ourapps every ten minutes.</li>
+          <li><b>Review contact and notes</b>: who Apple's App Review contacts, starting from your TestFlight review contact.</li>
+          <li><b>The build</b>: a TestFlight build of that version that Apple has processed.</li>
+          <li><b>Submit</b>, choosing what happens when Apple approves it: the version goes on the App Store straight away, or waits for you to press <b>Release</b>.</li>
+        </ol>
+        <p>After the submission, ourapps checks with Apple every ten minutes: waiting for review, in review, approved and waiting for you, on its way to the store, then on the App Store. When Apple does not approve a version, the card shows that and links Apple's messages in App Store Connect; change what Apple asks for and submit again. For the next version, save the version text with the new number and go through the steps that belong to a version again.</p>
+        <h3>Unlisted apps</h3>
+        <p>An unlisted app is on the App Store but only people with its link find it. Apple grants it on request: submit the app first (ourapps adds Apple's note to the review notes), then ask with <a href="https://developer.apple.com/support/unlisted-app-distribution/" target="_blank" rel="noopener">Apple's request form</a>. The version waits for you to release it; once Apple's email says unlisted distribution is granted, mark it granted on the card and press Release.</p>
+        ${callout("info", html`<p>Your App Store Connect key needs the <b>App Manager</b> or <b>Admin</b> role. The card says so in plain words when Apple refuses it.</p>`)}
+      `,
+    },
+    {
       id: "updates",
-      title: "7. Updates and auto-update (agent does the work)",
+      title: "8. Updates and auto-update (agent does the work)",
       sub: [{ id: "auto-update", title: "Auto-update" }],
       body: html`
         <p><b>Android does not update on its own; iPhone and web apps do.</b> TestFlight installs new iPhone builds itself and a web app loads the new version when it opens; Android has no store in the background, so an installed copy stays as it is until someone taps Update. Here is what each side does.</p>
@@ -399,14 +422,14 @@ suspend fun checkForUpdate(context: Context) {
     },
     {
       id: "public-page",
-      title: "8. Your public page",
+      title: "9. Your public page",
       body: html`
         <p><a href="/${slug}">${origin}/${slug}</a> shows your display name and the apps you switched on with "Show on my public page". It is details only: no install buttons, no links, and search engines are told not to index it. Use it when someone asks "what have you built?"; hand out share links when they want one.</p>
       `,
     },
     {
       id: "agents",
-      title: "9. Agents and the API (how to hand it over)",
+      title: "10. Agents and the API (how to hand it over)",
       body: html`
         <p>Everything in this console is also an API, so a coding agent can do the repetitive parts.</p>
         <ol class="steps">
@@ -459,7 +482,7 @@ suspend fun checkForUpdate(context: Context) {
           <li><b>Your agents, with an API key.</b> Each key has a scope (read only, or manage), an expiry you choose, and can be revoked alone or all at once. A key can never create or revoke keys, change credentials, delete your account or sign out sessions; those need you in a browser. Keys are per developer: no key can see another developer's apps or links.</li>
           <li><b>Your app's repository, with a build token.</b> Per app, used to fetch the signing certificate, its key and the App Store profile, and to upload builds to TestFlight through ourapps. Whoever holds it can sign builds as you and send them to your TestFlight, so keep it in repository secrets only; rotate it on the app's page.</li>
           <li><b>Nobody else.</b> There is no shared admin interface; every row is tied to one developer and every query is filtered by it.</li>
-          <li>Every security event (sign-in, sign-out, credential saves and removals, iPhone signing setup, key creation and revocation, build token rotation, app deletion, terms acceptance) is recorded with the country of the request and shown to you under Settings, Security.</li>
+          <li>Every security event (sign-in, sign-out, credential saves and removals, iPhone signing setup, key creation and revocation, build token rotation, app deletion, terms acceptance, App Store details, submissions and releases) is recorded with the country of the request and shown to you under Settings, Security.</li>
         </ul>
 
         <h3 id="security-people">Your people</h3>
@@ -489,7 +512,7 @@ suspend fun checkForUpdate(context: Context) {
     },
     {
       id: "troubleshooting",
-      title: "10. Troubleshooting",
+      title: "11. Troubleshooting",
       body: html`
         <table class="table">
           <tr><th>Symptom</th><th>Cause and fix</th></tr>
@@ -501,6 +524,8 @@ suspend fun checkForUpdate(context: Context) {
           <tr><td>Web app opens but cannot reach its server</td><td>The server does not allow the web app's address. Add the exact address, for example <code>https://poker-night-web.yourname.workers.dev</code>, to the server's CORS list.</td></tr>
           <tr><td>Install page says the app has no published build yet, for a minute after a release</td><td>The release went public before <code>my-app.json</code> was uploaded. Create releases as drafts and publish them after every file is in.</td></tr>
           <tr><td>The TestFlight invitation says "This beta isn't accepting any new testers right now"</td><td>No build has passed Apple's beta review yet, or the public link is off. The app's TestFlight card says which, and what it waits for. Until it opens, the install page tells people on iPhone and iPad that the app is coming soon.</td></tr>
+          <tr><td>The App Store card says the App Store Connect key does not allow this</td><td>The key needs the App Manager or Admin role. Make one in App Store Connect, Users and Access, Integrations, and save it in Settings.</td></tr>
+          <tr><td>The App Store card says a screenshot size is missing</td><td>Add a screenshot of one of the sizes it names to the app's screenshot list for that device, without transparency, then press Check and upload again.</td></tr>
           <tr><td>Nothing happens when tapping Open the invitation on iPhone</td><td>The page is inside another app's browser (Gmail, Instagram). Open in Safari. WhatsApp and Messages are fine.</td></tr>
           <tr><td>Android says "App not installed"</td><td>An older build signed with a different key is installed. Uninstall it first, or keep the signing key stable.</td></tr>
           <tr><td>Play Protect blocks the install</td><td>Tap More details, Install anyway. If there is no such button, the device policy forbids unknown sources (work phones).</td></tr>
@@ -509,10 +534,10 @@ suspend fun checkForUpdate(context: Context) {
     },
     {
       id: "limits",
-      title: "11. Limits and costs",
+      title: "12. Limits and costs",
       body: html`
         <ul class="bullets">
-          <li><b>Apple Developer Program:</b> 99 US dollars a year. <b>TestFlight:</b> up to 10,000 people per app through the public link; each build lasts 90 days and ourapps asks for a fresh one before then; Apple reviews the first build of each version.</li>
+          <li><b>Apple Developer Program:</b> 99 US dollars a year. <b>TestFlight:</b> up to 10,000 people per app through the public link; each build lasts 90 days and ourapps asks for a fresh one before then; Apple reviews the first build of each version. <b>App Store:</b> free apps, in every country and region; Apple's App Review checks every version.</li>
           <li><b>Android and web:</b> no device limit and no account. Google's developer verification rules for installs on certified Android phones, and its free limited distribution accounts for sharing with up to 20 devices, are at <a href="https://developer.android.com/developer-verification" target="_blank" rel="noopener">developer.android.com/developer-verification</a>.</li>
           <li><b>Share links:</b> unlimited, and they only expire when you set a date.</li>
           <li><b>GitHub:</b> free. Releases are free storage; private repositories get 2,000 Actions minutes a month, and macOS minutes count ten times. A lean iOS job takes 8 to 15 minutes, so budget roughly 15 iPhone builds a month on the free tier, or run iOS builds on your own Mac.</li>

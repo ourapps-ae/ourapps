@@ -5,6 +5,7 @@ import { randomId } from "./crypto.js";
 import { HttpError, json } from "./http.js";
 import { buildTargets, buildSigning, buildTestflight, buildUploadFileOperations, buildUploadFileStatus, buildDistributionStatus } from "./routes/build.js";
 import { tickTestflight } from "./testflight.js";
+import { privacyPage, tickAppStore } from "./appstore.js";
 import * as dev from "./routes/dev.js";
 import { devPage, linkLatest, linkPage, linkQr, serveArtefact } from "./routes/public.js";
 import { serveWebApp, webAppLinkId } from "./webapp.js";
@@ -55,6 +56,7 @@ async function route(request: Request, env: Env, deps: Deps): Promise<Response> 
   const m = request.method;
 
   if (parts[0] === "dl" && parts.length === 2 && m === "GET") return serveArtefact(env, deps, parts[1]);
+  if (parts[0] === "privacy" && parts.length === 2 && m === "GET") return privacyPage(env, parts[1]);
   if (parts[0] !== "api") {
     const verification = env.GOOGLE_SITE_VERIFICATION;
     if (verification && parts.length === 1 && parts[0] === verification && m === "GET") {
@@ -122,6 +124,9 @@ async function route(request: Request, env: Env, deps: Deps): Promise<Response> 
       if (p.length === 5 && p[3] === "testflight" && m === "GET") return dev.testflightStatus(env, me, p[2], p[4], deps);
       if (p.length === 5 && p[3] === "testflight" && m === "POST") return dev.setUpAppTestflight(request, env, deps, me, p[2], p[4]);
       if (p.length === 6 && p[3] === "testflight" && p[5] === "build" && m === "POST") return dev.requestAppBuild(env, deps, me, p[2], p[4]);
+      if (p.length === 5 && p[3] === "appstore" && m === "GET") return dev.appStoreStatus(env, deps, me, p[2], p[4]);
+      if (p.length === 5 && p[3] === "appstore" && m === "PUT") return dev.saveAppStore(request, env, deps, me, p[2], p[4]);
+      if (p.length === 6 && p[3] === "appstore" && ["screenshots", "submit", "release"].includes(p[5]) && m === "POST") return dev.appStoreAction(request, env, deps, me, p[2], p[4], p[5]);
     }
     if (p[1] === "links" && p.length === 4 && p[3] === "revoke" && m === "POST") return dev.revokeLink(env, deps, me, p[2], false);
     if (p[1] === "links" && p.length === 3 && m === "DELETE") return dev.revokeLink(env, deps, me, p[2], true);
@@ -137,8 +142,20 @@ async function route(request: Request, env: Env, deps: Deps): Promise<Response> 
   throw new HttpError(404, "not found");
 }
 
+// Every ten minutes: TestFlight builds into the testers' group and fresh builds before expiry, then App Store work with
+// the outbound calls left of the free plan's 50.
+export async function scheduled(env: Env, deps: Deps): Promise<void> {
+  let used = 0;
+  const counted: Deps = { ...deps, fetch: (input, init) => { used++; return deps.fetch(input, init); } };
+  try {
+    await tickTestflight(env, counted);
+  } catch (err) {
+    console.error(`testflight schedule: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  await tickAppStore(env, deps, 45 - used);
+}
+
 export default {
   fetch: (request: Request, env: Env) => handle(request, env),
-  // Every ten minutes: TestFlight builds into the testers' group and fresh builds before expiry.
-  scheduled: (_event: ScheduledController, env: Env, ctx: ExecutionContext) => ctx.waitUntil(tickTestflight(env, defaultDeps)),
+  scheduled: (_event: ScheduledController, env: Env, ctx: ExecutionContext) => ctx.waitUntil(scheduled(env, defaultDeps)),
 } satisfies ExportedHandler<Env>;

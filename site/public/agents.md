@@ -81,7 +81,8 @@ Tell the developer plainly when a task is theirs; do not try to work around it:
 - Providing the Android keystore and its passwords; you may store them with `gh secret set` once handed over.
 - Web apps: creating a free Cloudflare account and a token from the "Edit Cloudflare Workers" template, then the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (you may run `gh secret set` once handed the values). ourapps never holds them.
 - Creating API keys (browser session only).
-- Anything Apple's beta review asks.
+- Anything Apple's beta review or App Review asks.
+- For the App Store: answering the app's privacy questions in App Store Connect (`links.appPrivacy`), choosing the listing, text and release, and asking Apple for unlisted distribution (`links.unlistedRequest`).
 - Sending share links to people.
 
 ## Concepts
@@ -116,9 +117,27 @@ GET  /api/dev/apps/:id/testflight/:platform -> TestFlight (macos or tvos)
 POST /api/dev/apps/:id/testflight/:platform -> TestFlight (setup/check; macos requires browser session; optional nativeMac boolean selects native Mac rather than Mac Catalyst signing)
 POST /api/dev/apps/:id/testflight/:platform/build -> TestFlight (asks for that platform's build)
 PUT  /api/dev/review-contact        body: { "firstName", "lastName", "email", "phone" }  (who Apple's beta review contacts)
+GET  /api/dev/apps/:id/appstore/:platform  -> AppStore  (ios, macos or tvos)
+PUT  /api/dev/apps/:id/appstore/:platform  body: one or more steps, see below -> AppStore  (saves them and writes them to Apple)
+POST /api/dev/apps/:id/appstore/:platform/screenshots  body: optional { "restart": true } -> AppStore  (checks the screenshots, uploads them to the app's asset library and places them; repeat while screenshots.pending > 0 or checked is false)
+POST /api/dev/apps/:id/appstore/:platform/submit  body: optional { "releaseType": "AFTER_APPROVAL" | "MANUAL" } -> AppStore  (sends the version to App Review)
+POST /api/dev/apps/:id/appstore/:platform/release -> AppStore  (releases a version Apple approved with MANUAL)
 ```
 
 TestFlight: `{ "platform", "profileType", "setUp", "needs", "storeApp", "stage", "url", "invitation": { "state", "checkedAt" }, "buildRequest": { "at", "error" } | null, "profile", "contact", "builds": [ { "version", "buildNumber", "state", "appleState", "message", "uploadedAt", "submittedAt", "expiresAt", "updatedAt" } ] }`. `needs` is `bundle-id`, `apple-key`, `signing`, `review-contact`, `store-app` or null. With the target enabled, `setUp` false and `needs` null, POST to check with Apple. For Mac and Apple TV, add the platform to the existing App Store Connect record; the default bundle identifier is the registered app's `bundleId`. Mac setup provisions the installer signing key on the server. `stage` is `no-build`, `waiting-for-upload`, `processing`, `in-review`, `approved`, `link-closed`, `rejected`, `failed` or `open`. `invitation.state` is `open`, `not-accepting`, `full`, `missing` or null. Only a matching ready platform build and open invitation expose an install link. Mac setup needs a signed-in browser. Body `{ "repair": true }` repeats setup; changing Mac profile type after setup also requires repair.
+
+AppStore: `{ "platform", "setUp", "needs", "appleAppId", "storeUrl", "links": { "appPrivacy", "appReview", "unlistedRequest" } | null, "step", "stage", "appInfo": { "listing", "unlistedGrantedAt", "category", "ageRating", "thirdPartyContent", "privacyPolicyUrl", "defaultPolicy": { "url", "collects", "storage", "contactEmail", "developerName" }, "done", "error" }, "privacy": { "confirmedAt", "done" }, "version": { "version", "description", "keywords", "supportUrl", "copyright", "whatsNew", "firstVersion", "suggested", "done", "error" }, "screenshots": { "required": [ { "label", "groups": [ { "id", "label", "sizes", "uploaded" } ] } ], "missing": [string], "pending", "started", "processing", "checked", "items": [ { "url", "group", "width", "height", "uploaded", "error" } ], "done", "error" }, "review": { "firstName", "lastName", "email", "phone", "notes", "done", "error" }, "build": { "buildNumber", "candidates": [ { "version", "buildNumber", "expiresAt" } ], "done", "error" }, "submission": { "releaseType", "appleState", "message", "liveVersion", "submittedAt", "checkedAt", "releasedAt", "error" } }`. `needs` is `testflight` until TestFlight is set up for that platform; every App Store write then returns 409 "Set up TestFlight for this platform first". `step` is the first step not done while the version can change: `app-info`, `privacy`, `version`, `screenshots`, `review`, `build`, `submit`, or null. `stage` is `draft`, `waiting`, `in-review`, `rejected`, `pending-release` (approved, waiting for Release), `releasing` or `ready` (on the App Store). Apps are free, in every territory including new ones.
+
+The PUT body takes any of these, checked before anything is written; unknown keys return 400:
+
+- `appInfo` (once per app, for every platform): `{ "listing": "public" | "unlisted", "category": "GAMES", "ageRating": { "contests": "NONE" | "INFREQUENT" | "FREQUENT", "messagingAndChat": false, ... }, "thirdPartyContent": false, "privacyPolicyUrl": "https://..." }`. Without `privacyPolicyUrl`, send `"defaultPolicy": { "collects": ["nothing"] | any of ["names", "content", "calls"], "storage": "device" | "servers", "contactEmail", "developerName" }` and ourapps serves the policy, in the developer's name, at `https://ourapps.app/privacy/<random id>` (public, not indexed). Categories are Apple's top-level ids (BUSINESS, EDUCATION, ENTERTAINMENT, FINANCE, FOOD_AND_DRINK, GAMES, HEALTH_AND_FITNESS, LIFESTYLE, MEDICAL, MUSIC, NAVIGATION, NEWS, PHOTO_AND_VIDEO, PRODUCTIVITY, REFERENCE, SHOPPING, SOCIAL_NETWORKING, SPORTS, TRAVEL, UTILITIES, WEATHER, BOOKS, DEVELOPER_TOOLS, GRAPHICS_AND_DESIGN, MAGAZINES_AND_NEWSPAPERS); age rating questions left out are answered NONE or false.
+- `privacyAnswered: true`: the developer has answered App Privacy in App Store Connect (`links.appPrivacy`). Apple has no API for it.
+- `unlistedGranted: true`: Apple has granted unlisted distribution (requested at `links.unlistedRequest` after submitting).
+- `version`: `{ "version": "1.2", "description", "keywords" (100 characters), "supportUrl" (https, required), "copyright", "whatsNew" }`. A new number after `ready` starts the next version.
+- `review`: `{ "firstName", "lastName", "email", "phone", "notes" }`, defaulting to the beta review contact.
+- `build`: `{ "buildNumber": "7" }`, a processed, unexpired TestFlight build of that version.
+
+Screenshots come from the app's lists and my-app.json; each is matched to one of Apple's placement groups (for example `IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE`, read from Apple's App Asset Library reference data), uploaded once to the app's asset library and placed on the version. A request handles up to about 2 MB of images and 40 calls to Apple, at least one image; the ten-minute schedule continues unfinished uploads. Uploading again removes the version's earlier screenshot placements, then deletes the images ourapps uploaded that nothing else places. `review`, `build` and screenshots need the version text saved first. Submit needs every other step done and answers 409 naming the rest. An unlisted app not yet granted is submitted with `MANUAL` release. The ten-minute schedule follows submitted versions; GET also checks Apple at most once a minute. Apple's refusals come back as 502 with plain words, including when the key lacks the App Manager or Admin role. Disabled targets return 409 `{ "error": "Target is disabled." }` for every App Store write.
 
 Field rules: `name` required; `repo` must be `owner/name`; `bundleId` is the Apple bundle identifier (`com.yourname.app`) and the default for each Apple platform's setup; `iconUrl`, `manifestUrl` and every screenshot must be https URLs; at most 10 screenshots per list; `screenshotsByPlatform` keys are `iphone`, `ipad`, `android`, `web`, `macos`, `windows`, `tvos` (empty lists are dropped); `showOnPage` lists the app, details only, on the developer's public page.
 
@@ -194,7 +213,7 @@ GET /api/dev/apps/:id/preview
 
 When `release` is null the install page shows the listing with "has no published build yet" and no install button; `releaseError` in the preview says why. `GET /api/public/links/:id` returns the same shape without `preview`, and its `releaseError` is only "no published build yet", never the reason.
 
-The same data the install page renders, so you can confirm icon, screenshots and text are in place. Both this and the public link endpoint include `screenshots`: a required `all` list and optional `iphone`, `ipad`, `android`, `web`, `macos`, `windows`, `tvos` lists, with private release images on signed links. Each version prefers its dashboard list, its manifest list, the dashboard general list, the manifest general list, then the closest other version. A lone list covers every platform; no images produces generated previews. `release.apple` contains the matching ready Apple invitations and their versions. Both also include `history`: one entry per published release (`version`, `tag`, `title`, `notes`, `date`, `sha`, `releaseUrl`, `commitUrl`), with notes from `CHANGELOG.md`, then the release body, then the commit message. GitHub links appear only for public repositories.
+The same data the install page renders, so you can confirm icon, screenshots and text are in place. Both this and the public link endpoint include `screenshots`: a required `all` list and optional `iphone`, `ipad`, `android`, `web`, `macos`, `windows`, `tvos` lists, with private release images on signed links. Each version prefers its dashboard list, its manifest list, the dashboard general list, the manifest general list, then the closest other version. A lone list covers every platform; no images produces generated previews. `release.apple` contains the matching ready Apple invitations and their versions. `release.appStore` has, per Apple platform, `https://apps.apple.com/app/id<Apple app id>` once a version is on the App Store, else null; the install page offers it beside the TestFlight invitation. Both also include `history`: one entry per published release (`version`, `tag`, `title`, `notes`, `date`, `sha`, `releaseUrl`, `commitUrl`), with notes from `CHANGELOG.md`, then the release body, then the commit message. GitHub links appear only for public repositories.
 
 ## Release notes
 
@@ -212,7 +231,7 @@ DELETE /api/dev/links/:id         -> { "ok": true }
 
 GET /api/public/links/:id         (no auth) -> install page data (the preview shape, see above), 410 when expired or revoked, 404 when unknown
 GET /api/public/links/:id/qr.svg  (no auth) -> SVG QR code of the link
-GET /api/public/links/:id/latest  (no auth) -> { "name", "version", "testflightUrl": string | null, "testflightVersion": string | null, "android": { "apkUrl" } | null, "pwa", "linksExpireAt" }
+GET /api/public/links/:id/latest  (no auth) -> { "name", "version", "testflightUrl": string | null, "testflightVersion": string | null, "appStore": { "ios", "macos", "tvos" }, "android": { "apkUrl" } | null, "pwa", "linksExpireAt" }
                                   "pwa" is the URL to open: https://<linkId>.ourapps.app/ when the release ships web.zip, else the manifest's own URL, else null
 ```
 
@@ -295,6 +314,13 @@ Put an iPhone app on TestFlight:
 1. `GET /api/dev/apps/:id/testflight`; while `needs` names a step, tell the developer what it is. The console's TestFlight card walks them through each one, including Apple's New App form.
 2. `POST /api/dev/apps/:id/testflight` checks with Apple and, once the app is in App Store Connect, sets up the App Store profile, the testers' beta group and its public link, and asks the repository for the first build.
 3. The repository uploads each build through ourapps (contract.md step 4). Follow `stage` with GET (or POST to check with Apple now) and tell the developer plainly what it waits for: the repository's build, Apple's processing or beta review, or the public link in App Store Connect. The install page offers the invitation once `invitation.state` is `open`.
+
+Take an app to the App Store (after TestFlight):
+
+1. `GET /api/dev/apps/:id/appstore/:platform`; `step` names the next step. Ask the developer for the listing, category, age rating answers and privacy policy, then `PUT` `appInfo`.
+2. Tell the developer to answer App Privacy at `links.appPrivacy`; once they confirm, `PUT` `{ "privacyAnswered": true }`.
+3. `PUT` `version` (with `supportUrl`), then `POST .../screenshots` until `screenshots.pending` is 0 and `screenshots.checked` is true. `screenshots.missing` says which size to add to the app's screenshot lists.
+4. `PUT` `review` and `build`, then `POST .../submit`. Follow `stage`; on `rejected` point the developer to `links.appReview`; on `pending-release` the developer decides when to `POST .../release`.
 
 ## Prompts
 
