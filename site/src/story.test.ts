@@ -10,6 +10,7 @@ describe("public copy", () => {
     expect(text).toContain("ourapps delivers apps privately");
     expect(text).toContain("sign-in reads your public profile only");
     expect(text).toContain(`Version ${TERMS_VERSION}`);
+    for (const words of ["For the App Store", "default privacy policy", "Level N Ltd only hosts the text"]) expect(text).toContain(words);
     for (const word of ["recipe", "component", "catalogue", "organisations you are an active member", "build report", "network address"]) expect(text.toLowerCase(), word).not.toContain(word);
   });
 
