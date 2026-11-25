@@ -45,7 +45,7 @@ function publicApp(app: AppRow) {
     iosOnMacCheckedAt: _iosOnMacCheckedAt,
     ...rest
   } = app;
-  return { ...rest, targets: app.targets ?? defaultAppTargets() };
+  return { ...rest, ascAppId: app.ascAppId ?? null, testflightUrl: app.testflightUrl ?? null, targets: app.targets ?? defaultAppTargets() };
 }
 
 function applyInput(app: AppRow, body: AppInput): void {
