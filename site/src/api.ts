@@ -59,6 +59,8 @@ export interface Install {
 
 export interface Release {
   apple?: Partial<Record<"ios" | "macos" | "tvos" | "iosOnMac", { version: string; testflightUrl: string } | null>>;
+  // The App Store page per Apple platform, once a version is on the store.
+  appStore?: Partial<Record<"ios" | "macos" | "tvos", string | null>>;
   version: string;
   minPlayers: number;
   maxPlayers: number;
@@ -171,6 +173,49 @@ export interface TestflightStatus {
   profile: string | null;
   contact: boolean;
   builds: TestflightBuild[];
+}
+
+export type AppStoreStep = "app-info" | "privacy" | "version" | "screenshots" | "review" | "build" | "submit";
+// draft and rejected can be changed; waiting and in-review are with Apple; pending-release waits for the Release button;
+// releasing is on its way to the store; ready is on the App Store.
+export type AppStoreStage = "draft" | "waiting" | "in-review" | "rejected" | "pending-release" | "releasing" | "ready";
+
+export interface AppStoreStatus {
+  platform: "ios" | "macos" | "tvos";
+  setUp: boolean;
+  // "testflight" until TestFlight is set up for the platform.
+  needs: "testflight" | null;
+  appleAppId: string | null;
+  storeUrl: string | null;
+  links: { appPrivacy: string; appReview: string; unlistedRequest: string } | null;
+  // The first step not done while the version can be changed; null otherwise.
+  step: AppStoreStep | null;
+  stage: AppStoreStage;
+  appInfo: {
+    listing: "public" | "unlisted";
+    unlistedGrantedAt: string | null;
+    category: string;
+    ageRating: Record<string, string | boolean>;
+    thirdPartyContent: boolean;
+    privacyPolicyUrl: string;
+    defaultPolicy: { url: string | null; collects: string[]; storage: "device" | "servers"; contactEmail: string; developerName: string };
+    done: boolean;
+    error: string | null;
+  };
+  privacy: { confirmedAt: string | null; done: boolean };
+  version: { version: string; description: string; keywords: string; supportUrl: string; copyright: string; whatsNew: string; firstVersion: boolean; suggested: string | null; done: boolean; error: string | null };
+  screenshots: {
+    required: { label: string; displayTypes: { id: string; label: string; sizes: string; uploaded: number }[] }[];
+    missing: string[];
+    pending: number;
+    started: boolean;
+    items: { url: string; displayType: string | null; width: number | null; height: number | null; uploaded: boolean; error: string | null }[];
+    done: boolean;
+    error: string | null;
+  };
+  review: { firstName: string; lastName: string; email: string; phone: string; notes: string; done: boolean; error: string | null };
+  build: { buildNumber: string | null; candidates: { version: string; buildNumber: string; expiresAt: string | null }[]; done: boolean; error: string | null };
+  submission: { releaseType: "AFTER_APPROVAL" | "MANUAL"; appleState: string | null; message: string | null; liveVersion: string | null; submittedAt: string | null; checkedAt: string | null; releasedAt: string | null; error: string | null };
 }
 
 export interface BuildStatus {

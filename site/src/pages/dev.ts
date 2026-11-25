@@ -5,6 +5,7 @@ import { navigate } from "../nav.js";
 import { qrSvg, shareOrCopy } from "../qr.js";
 import { signingRequest } from "../signing.js";
 import { buildStatusCard, watchBuildStatus } from "../buildStatus.js";
+import { loadAppStoreCard } from "../appStore.js";
 import { retainedTargetRelease, targetEnabled, targetSections, wireTargets } from "../targets.js";
 import { appIcon, callout, copyRow, copyText, emptyState, errorBox, fmtDate, icon, pill, statePill, toast, wireCopy, wireImages } from "../ui.js";
 import { AGENT_REPO_PROMPT, AGENT_STORE_PROMPT } from "./prompts.js";
@@ -319,6 +320,7 @@ export async function appForm(root: HTMLElement, appId: string | null): Promise<
     void loadTestflightCard(root, me, app as DevApp);
   }
   if (appId) for (const platform of ["macos", "tvos"] as const) void loadPlatformTestflightCard(root, app as DevApp, platform);
+  if (appId) for (const platform of ["ios", "macos", "tvos"] as const) void loadAppStoreCard(root, appId, platform);
   if (appId) {
     const fresh = sessionStorage.getItem(`buildToken:${appId}`);
     if (fresh) {
@@ -1110,6 +1112,10 @@ const EVENT_LABELS: Record<string, string> = {
   "app-created": "App created",
   "app-deleted": "App deleted",
   "signing-set-up": "iPhone signing set up",
+  "app-store-details-saved": "App Store details saved",
+  "app-store-screenshots-uploaded": "App Store screenshots uploaded",
+  "app-store-submitted": "Sent to App Review",
+  "app-store-released": "Released on the App Store",
 };
 
 // Makes the key and request in this browser, then lets the server get the certificate.
@@ -1384,6 +1390,8 @@ export async function agents(root: HTMLElement): Promise<void> {
             <tr><td><code>GET /api/public/links/:id/qr.svg</code></td><td>QR for a link</td></tr>
             <tr><td><code>GET, POST /api/dev/apps/:id/testflight</code></td><td>where TestFlight stands and the next step; set it up</td></tr>
             <tr><td><code>GET, POST /api/dev/apps/:id/testflight/:platform</code></td><td>separate Mac or Apple TV setup/status; Mac setup requires a browser session</td></tr>
+            <tr><td><code>GET, PUT /api/dev/apps/:id/appstore/:platform</code></td><td>where App Store review stands and the next step; save a step</td></tr>
+            <tr><td><code>POST /api/dev/apps/:id/appstore/:platform/{screenshots,submit,release}</code></td><td>upload screenshots, submit for review, release an approved version</td></tr>
             <tr><td><code>GET /api/build/:app/targets</code></td><td>read <code>{targets:AppTargets}</code> using that app's build token as the bearer credential</td></tr>
           </table>
           <p class="small muted"><code>AppTargets</code> contains six booleans: <code>ios</code>, <code>android</code>, <code>web</code>, <code>macos</code>, <code>windows</code> and <code>tvos</code>.</p>
