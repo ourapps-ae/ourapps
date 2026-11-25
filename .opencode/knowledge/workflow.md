@@ -49,9 +49,6 @@ call. Run it after each deploy that touches the API, and before any public relea
    `wrangler.jsonc`; then `npx wrangler d1 migrations apply app-game-store --remote`. The D1
    database and the Worker keep the name `app-game-store` after the repository rename.
 3. `npx wrangler deploy`.
-   A deploy whose migrations change catalogue tables goes: create any new R2 bucket (`npx wrangler r2 bucket create
-   ourapps-catalogue`), apply the migrations, then deploy at once. Between the last two, the old Worker answers 500 on
-   catalogue routes (only `worker/src/catalogue-db.ts` reads those tables).
 4. `PUBLIC_ORIGIN` in `wrangler.jsonc` must equal the live origin; the GitHub OAuth App
    callback must be `<PUBLIC_ORIGIN>/api/auth/callback`.
 
@@ -59,24 +56,3 @@ call. Run it after each deploy that touches the API, and before any public relea
 
 Add a new numbered file under `worker/migrations/`; never edit an applied one. Tests apply
 all migrations to a fresh D1 before each file runs.
-
-## Exporting D1
-
-`component_fts`, `recipe_fts` and their `fts5vocab` tables (`component_vocab`, `recipe_vocab`) are virtual tables. There are two ways to export:
-
-- **To read or keep a copy:** `npx wrangler d1 export app-game-store --remote --output dump.sql --compatibility sqlite3_cli_only`
-  (the flag needs wrangler 4.159.0 or newer; `worker/package.json` requires it). The file opens with the `sqlite3`
-  command-line tool, virtual tables included, but it cannot be imported back into D1.
-- **To import into D1 again** (a restore or a copy to another database): drop the four virtual tables, export without
-  that flag, then create them again (the `CREATE VIRTUAL TABLE` lines in `worker/migrations/0022_catalogue_scale.sql`)
-  and refill the full-text tables from the entry rows; the vocab tables need no refill:
-
-```
-INSERT INTO component_fts (rowid, name, title, summary, class, tags)
-  SELECT seq, name || ' ' || replace(slug, '-', ' '), COALESCE(class_title, ''), description,
-         COALESCE(class_name || ' ' || COALESCE(class_title, ''), ''), tags FROM components WHERE latest_version IS NOT NULL;
-INSERT INTO recipe_fts (rowid, name, title, summary, class, tags)
-  SELECT seq, name || ' ' || replace(slug, '-', ' '), title, summary, '', tags FROM recipes WHERE latest_version IS NOT NULL;
-```
-
-  Search finds nothing between the drop and the refill.
