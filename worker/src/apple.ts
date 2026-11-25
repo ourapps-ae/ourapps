@@ -365,12 +365,13 @@ export class AppleClient {
     await this.call("PATCH", `/v1/appInfos/${appInfoId}`, { data: { type: "appInfos", id: appInfoId, relationships: { primaryCategory: { data: { type: "appCategories", id: category } } } } });
   }
 
-  // Every localization gets the address; the primary language is added when it has none.
-  async setPrivacyPolicyUrl(appInfoId: string, locale: string, url: string, name: string): Promise<void> {
+  // Every localization gets the address, and the text Apple TV shows when given; the primary language is added when it has none.
+  async setPrivacyPolicy(appInfoId: string, locale: string, name: string, url: string, text?: string): Promise<void> {
     const res = await this.call<{ data: Resource<{ locale: string }>[] }>("GET", `/v1/appInfos/${appInfoId}/appInfoLocalizations?limit=50`);
-    for (const l of res.data) await this.call("PATCH", `/v1/appInfoLocalizations/${l.id}`, { data: { type: "appInfoLocalizations", id: l.id, attributes: { privacyPolicyUrl: url } } });
+    const attributes = { privacyPolicyUrl: url, ...(text === undefined ? {} : { privacyPolicyText: text }) };
+    for (const l of res.data) await this.call("PATCH", `/v1/appInfoLocalizations/${l.id}`, { data: { type: "appInfoLocalizations", id: l.id, attributes } });
     if (!res.data.some((l) => l.attributes.locale === locale)) {
-      await this.call("POST", "/v1/appInfoLocalizations", { data: { type: "appInfoLocalizations", attributes: { locale, name: name.slice(0, 30), privacyPolicyUrl: url }, relationships: { appInfo: { data: { type: "appInfos", id: appInfoId } } } } });
+      await this.call("POST", "/v1/appInfoLocalizations", { data: { type: "appInfoLocalizations", attributes: { locale, name: name.slice(0, 30), ...attributes }, relationships: { appInfo: { data: { type: "appInfos", id: appInfoId } } } } });
     }
   }
 

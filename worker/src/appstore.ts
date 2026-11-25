@@ -186,7 +186,7 @@ export async function appStoreView(env: Env, deps: Deps, dev: Developer, app: Ap
     needs: appleAppId ? null : "testflight",
     appleAppId,
     storeUrl: appleAppId ? storeUrl(appleAppId) : null,
-    links: appleAppId ? { appPrivacy: connectUrl(appleAppId, "/privacy"), appReview: connectUrl(appleAppId), unlistedRequest: UNLISTED_REQUEST } : null,
+    links: appleAppId ? { appPrivacy: connectUrl(appleAppId, "/privacy"), appReview: connectUrl(appleAppId, `/reviewsubmissions${v.submissionId ? `/details/${v.submissionId}` : ""}`), unlistedRequest: UNLISTED_REQUEST } : null,
     step: editing && appleAppId ? STEPS.find((s) => !done[s]) ?? null : null,
     stage: v.stage,
     appInfo: {
@@ -329,6 +329,10 @@ export async function saveAppStoreDetails(request: Request, env: Env, deps: Deps
   const version = body.version === undefined ? undefined : parseVersion(body.version, v.draft);
   const review = body.review === undefined ? undefined : parseReview(body.review, v.draft);
   const buildNumber = body.build === undefined ? undefined : parseBuild(body.build);
+  // A new version number after the store's version starts the next draft; anything else waits for Apple's answer.
+  const nextVersion = version && version.version !== v.draft.version && v.stage === "ready";
+  if ((version || review || buildNumber !== undefined) && !nextVersion) requireEditable(v);
+  if ((review || buildNumber !== undefined) && !version) requireVersionText(v);
   const appleAppId = app.ascAppId!;
   const now = deps.now().toISOString();
   v.appleAppId = appleAppId;
@@ -348,17 +352,13 @@ export async function saveAppStoreDetails(request: Request, env: Env, deps: Deps
     }
     if (version) {
       step = "version";
-      const next = version.version !== v.draft.version;
-      if (!next || v.stage !== "ready") requireEditable(v);
-      if (next) startVersion(v);
+      if (version.version !== v.draft.version) startVersion(v);
       Object.assign(v.draft, version);
       await writeVersion(await client(), app, v);
       delete v.errors.version;
     }
     if (review) {
       step = "review";
-      requireEditable(v);
-      requireVersionText(v);
       v.draft.review = review;
       const notes = info.listing === "unlisted" && !review.notes.includes(UNLISTED_NOTE) ? `${review.notes}\n\n${UNLISTED_NOTE}`.trim() : review.notes;
       await (await client()).writeReviewDetail(v.appleVersionId!, { contactFirstName: review.firstName, contactLastName: review.lastName, contactEmail: review.email, contactPhone: review.phone, notes, demoAccountRequired: false });
@@ -367,8 +367,6 @@ export async function saveAppStoreDetails(request: Request, env: Env, deps: Deps
     }
     if (buildNumber !== undefined) {
       step = "build";
-      requireEditable(v);
-      requireVersionText(v);
       v.draft.buildNumber = buildNumber;
       delete v.synced.buildId;
       const apple = await client();
@@ -404,7 +402,11 @@ async function writeAppInfo(apple: AppleClient, env: Env, app: AppRow, info: App
   const appInfoId = await apple.editableAppInfo(appleAppId);
   await apple.setCategory(appInfoId, answers.category);
   await apple.setAgeRating(appInfoId, answers.ageRating);
-  await apple.setPrivacyPolicyUrl(appInfoId, await apple.primaryLocale(appleAppId), answers.privacyPolicyUrl || `${env.PUBLIC_ORIGIN}/privacy/${info.policyId}`, app.name);
+  const policyUrl = answers.privacyPolicyUrl || `${env.PUBLIC_ORIGIN}/privacy/${info.policyId}`;
+  // Apple TV shows the policy's text rather than its address.
+  const tv = app.platform === "tvos" || Boolean((await Db.from(env).platformApp(app, "tvos")).ascAppId);
+  const text = !tv ? undefined : info.policy && !answers.privacyPolicyUrl ? policyText(app.name, info.policy) : `The privacy policy for ${app.name} is at ${policyUrl}`;
+  await apple.setPrivacyPolicy(appInfoId, await apple.primaryLocale(appleAppId), app.name, policyUrl, text);
   await apple.setContentRights(appleAppId, answers.thirdPartyContent);
   await apple.makeFree(appleAppId);
   await apple.makeAvailableEverywhere(appleAppId);
@@ -694,26 +696,36 @@ function policyPage(title: string, body: string): string {
 </head><body>${body}<footer>Hosted on ourapps.app. Copyright Level N Ltd 2026.</footer></body></html>`;
 }
 
-export function policyHtml(appName: string, p: DefaultPolicy, updatedAt: string): string {
-  const app = escape(appName);
-  const dev = escape(p.developerName);
-  const email = escape(p.contactEmail);
-  const nothing = p.collects.includes("nothing");
+// The policy in sections of plain text: a heading, paragraphs and a list.
+function policySections(appName: string, p: DefaultPolicy): { heading: string; paragraphs: string[]; list?: string[] }[] {
+  const dev = p.developerName;
   const items: Record<string, string> = { names: "names people type into the app", content: "content people create in the app", calls: "the camera and microphone, only during calls people start in the app" };
-  const kept = p.storage === "servers"
-    ? `<p>What the app collects is kept on servers run by ${dev}, and is used only to make the app work. It is not sold, not used for advertising and not shared with anyone else.</p>`
-    : `<p>What the app collects stays on the device it was entered on. ${dev} does not receive it, and it is not sold, used for advertising or shared with anyone.</p>`;
-  const removing = p.storage === "servers"
-    ? `<p>To have what is kept on ${dev}'s servers deleted, write to <a href="mailto:${email}">${email}</a>.</p>`
-    : "<p>Deleting the app removes what it keeps on the device.</p>";
+  const contact = { heading: "Contact", paragraphs: [`Questions about ${appName} or this policy: ${p.contactEmail}.`] };
+  const intro = { heading: "", paragraphs: [`${dev} made ${appName} and is responsible for the app and for this policy. Level N Ltd only hosts this text on ourapps.app.`] };
+  if (p.collects.includes("nothing")) return [intro, { heading: "What the app collects", paragraphs: [`${appName} collects no information about the people who use it.`] }, contact];
+  const servers = p.storage === "servers";
   return [
-    `<h1>${app} privacy policy</h1>`,
-    `<p>${dev} made ${app} and is responsible for the app and for this policy. Level N Ltd only hosts this text on ourapps.app.</p>`,
-    "<h2>What the app collects</h2>",
-    nothing ? `<p>${app} collects no information about the people who use it.</p>` : `<p>${app} collects:</p><ul>${p.collects.map((c) => `<li>${items[c]}</li>`).join("")}</ul>`,
-    nothing ? "" : `<h2>Where it is kept and how it is used</h2>${kept}<h2>Removing it</h2>${removing}`,
-    "<h2>Contact</h2>",
-    `<p>Questions about ${app} or this policy: <a href="mailto:${email}">${email}</a>.</p>`,
+    intro,
+    { heading: "What the app collects", paragraphs: [`${appName} collects:`], list: p.collects.map((c) => items[c]) },
+    { heading: "Where it is kept and how it is used", paragraphs: [servers
+      ? `What the app collects is kept on servers run by ${dev}, and is used only to make the app work. It is not sold, not used for advertising and not shared with anyone else.`
+      : `What the app collects stays on the device it was entered on. ${dev} does not receive it, and it is not sold, used for advertising or shared with anyone.`] },
+    { heading: "Removing it", paragraphs: [servers ? `To have what is kept on ${dev}'s servers deleted, write to ${p.contactEmail}.` : "Deleting the app removes what it keeps on the device."] },
+    contact,
+  ];
+}
+
+// The text Apple TV shows in place of a policy address.
+export function policyText(appName: string, p: DefaultPolicy): string {
+  return policySections(appName, p).map((s) => [s.heading, ...s.paragraphs, ...(s.list ?? []).map((i) => `- ${i}`)].filter(Boolean).join("\n")).join("\n\n");
+}
+
+export function policyHtml(appName: string, p: DefaultPolicy, updatedAt: string): string {
+  const email = escape(p.contactEmail);
+  const linked = (text: string) => escape(text).replaceAll(email, `<a href="mailto:${email}">${email}</a>`);
+  return [
+    `<h1>${escape(appName)} privacy policy</h1>`,
+    ...policySections(appName, p).map((s) => `${s.heading ? `<h2>${escape(s.heading)}</h2>` : ""}${s.paragraphs.map((t) => `<p>${linked(t)}</p>`).join("")}${s.list ? `<ul>${s.list.map((i) => `<li>${escape(i)}</li>`).join("")}</ul>` : ""}`),
     `<p>Updated ${escape(updatedAt.slice(0, 10))}.</p>`,
   ].join("");
 }
