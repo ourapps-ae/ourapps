@@ -234,8 +234,10 @@ export interface ScreenshotState {
   source: string;
   runsOnIpad: boolean;
   items: ScreenshotItem[];
-  // Apple's screenshot set per display type, and the sets emptied of earlier screenshots.
+  // Apple's screenshot set per display type, once read; the display types emptied of earlier screenshots;
+  // and whether Apple's processing of the uploads has been read.
   sets: Record<string, string>;
+  setsRead: boolean;
   cleared: string[];
   checked: boolean;
 }
