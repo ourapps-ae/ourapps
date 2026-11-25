@@ -3,7 +3,7 @@
 // Optional OURAPPS_READ_API_KEY checks that an owner's read-only key cannot save target selection.
 // Without a key only the public part runs. With a manage key it walks every endpoint agents.md
 // lists on a throwaway app, compares answers with the documented shapes, and deletes what it made.
-// It never calls endpoints that change anything at Apple or GitHub.
+// It never calls endpoints that change anything at Apple or GitHub; App Store calls stop at "set up TestFlight first".
 import { readFileSync } from "node:fs";
 
 const args = process.argv.slice(2);
@@ -138,6 +138,8 @@ async function publicChecks() {
     const res = await fetch(base + path);
     record(res.status === 200, `GET ${path}`, res.status === 200 ? "" : String(res.status));
   }
+  const policy = await fetch(base + "/privacy/00000000000000000000");
+  record(policy.status === 404 && (policy.headers.get("x-robots-tag") ?? "").includes("noindex"), "an unknown privacy policy address is a 404 and not indexed", String(policy.status));
   const session = await call("GET", "/api/auth/session", { auth: "" });
   record(session.status === 200 && session.json === null, "GET /api/auth/session answers null for a visitor", `${session.status} ${session.text.slice(0, 80)}`);
   const unknown = await call("GET", "/api/public/links/000000000000000000000000", { auth: "", pattern: "/api/public/links/:id" });
@@ -266,6 +268,15 @@ async function keyedChecks() {
     record(tfSetUp.status === 200 && tfSetUp.json?.needs === "bundle-id", "POST /api/dev/apps/:id/testflight names the missing bundle ID", `${tfSetUp.status} ${tfSetUp.json?.needs}`);
     const tfBuild = await call("POST", P("/api/dev/apps/:id/testflight/build"), { pattern: "/api/dev/apps/:id/testflight/build" });
     expectStatus("POST /api/dev/apps/:id/testflight/build before set-up is a 409", tfBuild, 409);
+    // Without TestFlight, App Store work stops before Apple: status only, then the plain refusal.
+    const store = await call("GET", P("/api/dev/apps/:id/appstore/ios"), { pattern: "/api/dev/apps/:id/appstore/:platform" });
+    expectStatus("GET /api/dev/apps/:id/appstore/:platform", store, 200);
+    expectKeys("App Store shape", store.json, ["platform", "setUp", "needs", "appleAppId", "storeUrl", "links", "step", "stage", "appInfo", "privacy", "version", "screenshots", "review", "build", "submission"]);
+    record(store.json?.setUp === false && store.json?.needs === "testflight" && store.json?.stage === "draft", "App Store review needs TestFlight first", store.json?.needs);
+    for (const [method, suffix, body] of [["PUT", "", { privacyAnswered: true }], ["POST", "/screenshots"], ["POST", "/submit"], ["POST", "/release"]]) {
+      const refused = await call(method, P(`/api/dev/apps/:id/appstore/ios${suffix}`), { body, pattern: `/api/dev/apps/:id/appstore/:platform${suffix}` });
+      record(refused.status === 409 && /^Set up TestFlight for this platform first/.test(refused.json?.error ?? ""), `${method} /api/dev/apps/:id/appstore/:platform${suffix} before TestFlight is a 409`, `${refused.status} ${refused.json?.error ?? ""}`);
+    }
     // An empty contact is refused, so the saved one is never touched.
     const contact = await call("PUT", "/api/dev/review-contact", { body: { firstName: "", lastName: "", email: "", phone: "" } });
     expectStatus("PUT /api/dev/review-contact refuses an empty contact", contact, 400);
