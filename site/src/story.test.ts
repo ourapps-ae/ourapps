@@ -44,7 +44,8 @@ describe("one story across the pages", () => {
     const guide = read("./pages/guide.ts");
     const ids = [...guide.matchAll(/^ {6}id: "([a-z-]+)",$/gm)].map((m) => m[1]);
     expect(ids.slice(0, 2)).toEqual(["overview", "tldr"]);
-    for (const id of ["sign-in", "credentials", "add-app", "release", "share", "testflight", "updates", "security"]) expect(ids).toContain(id);
+    for (const id of ["sign-in", "credentials", "add-app", "release", "share", "testflight", "app-store", "updates", "security"]) expect(ids).toContain(id);
+    expect(ids.indexOf("app-store")).toBe(ids.indexOf("testflight") + 1);
   });
 
   it("no page or document tells another story", () => {
