@@ -2,42 +2,54 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { Db } from "../src/db.js";
 import type { Env } from "../src/env.js";
 import { handle } from "../src/index.js";
-import { tickAppStore } from "../src/appstore.js";
+import { SCREENSHOT_BYTES, tickAppStore } from "../src/appstore.js";
 import { api, clearDb, jsonRes, saveAppleSecrets, signIn, testDeps, testEnv, type TestDeps } from "./helpers.js";
 
 // App Store Connect as App Store review sees it. Apple's documentation, checked 25 November 2026:
 // https://developer.apple.com/documentation/appstoreconnectapi (reviewSubmissions, reviewSubmissionItems, appStoreVersions,
 // appStoreVersionLocalizations, appStoreReviewDetails, appInfos, ageRatingDeclarations, appPriceSchedules, appAvailabilities v2,
-// appScreenshotSets, appScreenshots, appStoreVersionReleaseRequests) and
+// appStoreVersionReleaseRequests), the App Asset Library at
+// https://developer.apple.com/documentation/appstoreconnectapi/app-asset-library and
+// https://developer.apple.com/documentation/appstoreconnectapi/migrating-to-the-app-asset-library, and
 // https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications
 
 const APPLE_APP = "6447402192";
 const API = "https://api.appstoreconnect.apple.com";
 
 type Version = { id: string; versionString: string; appVersionState: string; platform: string; releaseType?: string; copyright?: string };
-type Shot = { id: string; setId: string; fileSize: number; state: string; checksum?: string };
+type Image = { id: string; fileSize: number; state: string; attributes: Record<string, unknown> };
+type Placement = { id: string; localizationId: string; imageId: string; group: string };
 type Fake = {
   versions: Version[];
   localizations: { id: string; versionId: string; locale: string; attributes: Record<string, unknown> }[];
   reviewDetails: { id: string; versionId: string; attributes: Record<string, unknown> }[];
   builds: { id: string; version: string; buildNumber: string; platform: string; processingState: string; expired: boolean }[];
-  sets: { id: string; localizationId: string; displayType: string }[];
-  shots: Shot[];
-  submissions: { id: string; state: string; versionId: string | null; submitted: boolean }[];
+  // The app information Apple holds.
+  category: string | null;
+  ageRating: Record<string, unknown>;
+  infoLocalization: Record<string, unknown>;
+  contentRights: string | null;
+  freeSchedule: boolean;
   availability: boolean;
+  submissions: { id: string; state: string; versionId: string | null; submitted: boolean }[];
+  // The asset library: reference data (null answers 500), images, placements and the orders asked for.
+  refData: boolean;
+  images: Image[];
+  placements: Placement[];
+  orders: { group: string; ids: string[] }[];
+  // The state an image reaches when its upload is committed.
+  afterCommit: string;
   // Every write Apple refuses, as for a key without the App Manager or Admin role.
   deny: boolean;
-  // Screenshots Apple fails after the upload is committed.
-  failShots: boolean;
   manifest: Record<string, unknown> | null;
-  images: Record<string, Uint8Array>;
+  files: Record<string, Uint8Array>;
   uploads: Record<string, Uint8Array>;
 };
 
 type Seen = { method: string; url: string; path: string; body: unknown };
 
-function png(width: number, height: number, colourType = 2): Uint8Array {
-  const b = new Uint8Array(64);
+function png(width: number, height: number, colourType = 2, length = 64): Uint8Array {
+  const b = new Uint8Array(length);
   b.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
   const view = new DataView(b.buffer);
   view.setUint32(16, width);
@@ -58,17 +70,55 @@ function fakeStore(): Fake {
     localizations: [],
     reviewDetails: [],
     builds: [{ id: "build-7", version: "1.2", buildNumber: "7", platform: "IOS", processingState: "VALID", expired: false }, { id: "build-8", version: "1.2", buildNumber: "8", platform: "IOS", processingState: "PROCESSING", expired: false }],
-    sets: [],
-    shots: [],
-    submissions: [],
+    category: null,
+    ageRating: {},
+    infoLocalization: { locale: "en-GB", privacyPolicyUrl: null, privacyPolicyText: null },
+    contentRights: null,
+    freeSchedule: false,
     availability: false,
+    submissions: [],
+    refData: true,
+    images: [],
+    placements: [],
+    orders: [],
+    afterCommit: "PREPARE_FOR_SUBMISSION",
     deny: false,
-    failShots: false,
     manifest: null,
-    images: {},
+    files: {},
     uploads: {},
   };
 }
+
+// The reference data as Apple publishes it: groups for every device, with Apple TV under its own identifier.
+const spec = (id: string, w: number, h: number, alpha = false) => ({ specId: id, shortName: `i${w}x${h}a${alpha ? 1 : 0}`, dimensions: { minWidth: w, maxWidth: w, minHeight: h, maxHeight: h }, alphaAllowed: alpha, compatiblePlacementTypes: ["APP_SCREENSHOT"] });
+const REF_DATA = {
+  features: [{ featureId: "APP_STORE_VERSIONS", placementPolicies: [{ placementType: "APP_SCREENSHOT", groupLimits: [{ groupIds: ["IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE", "IPHONE_FACE_ID_LARGE_PROFILE", "IPHONE_FACE_ID_MEDIUM_PROFILE", "IPAD_13_PROFILE", "MAC_PROFILE", "TV_SCREEN_PROFILE"], maxCount: 10 }] }] }],
+  placementProfileGroups: [
+    { placementProfileGroupId: "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE", platform: "IPHONE_APP_STORE", displayClassId: "IPHONE_DYNAMIC_ISLAND_LARGE_DISPLAY" },
+    { placementProfileGroupId: "IPHONE_FACE_ID_LARGE_PROFILE", platform: "IPHONE_APP_STORE", displayClassId: "IPHONE_FACE_ID_LARGE_DISPLAY" },
+    { placementProfileGroupId: "IPHONE_FACE_ID_MEDIUM_PROFILE", platform: "IPHONE_APP_STORE", displayClassId: "IPHONE_FACE_ID_MEDIUM_DISPLAY" },
+    { placementProfileGroupId: "IPAD_13_PROFILE", platform: "IPAD_APP_STORE", displayClassId: "IPAD_13_DISPLAY" },
+    { placementProfileGroupId: "MAC_PROFILE", platform: "MAC_APP_STORE", displayClassId: "DEFAULT" },
+    { placementProfileGroupId: "TV_SCREEN_PROFILE", platform: "TV_APP_STORE", displayClassId: "DEFAULT" },
+    { placementProfileGroupId: "WATCH_ULTRA_PROFILE", platform: "WATCH_APP_STORE", displayClassId: "WATCH_ULTRA" },
+  ],
+  imageSpecs: [spec("s1320", 1320, 2868), spec("s1290", 1290, 2796), spec("s1284", 1284, 2778), spec("s1170", 1170, 2532), spec("s2064", 2064, 2752), spec("s2048", 2048, 2732), spec("s2880", 2880, 1800, true), spec("s1920", 1920, 1080, true), spec("s422", 422, 514)],
+  placementTypes: [{ placementTypeId: "APP_SCREENSHOT", acceptsAssetCategories: ["APP_SCREENSHOTS_AND_PREVIEWS"], specMappings: [
+    { placementGroupId: "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE", specs: ["s1320", "s1290"] },
+    { placementGroupId: "IPHONE_FACE_ID_LARGE_PROFILE", specs: ["s1284"] },
+    { placementGroupId: "IPHONE_FACE_ID_MEDIUM_PROFILE", specs: ["s1170"] },
+    { placementGroupId: "IPAD_13_PROFILE", specs: ["s2064", "s2048"] },
+    { placementGroupId: "MAC_PROFILE", specs: ["s2880"] },
+    { placementGroupId: "TV_SCREEN_PROFILE", specs: ["s1920"] },
+    { placementGroupId: "WATCH_ULTRA_PROFILE", specs: ["s422"] },
+  ] }],
+  displayClasses: [
+    { displayClassId: "IPHONE_DYNAMIC_ISLAND_LARGE_DISPLAY", deviceFamily: "IPHONE", screenDimensions: ["6.9"] },
+    { displayClassId: "IPHONE_FACE_ID_LARGE_DISPLAY", deviceFamily: "IPHONE", screenDimensions: ["6.5"] },
+    { displayClassId: "IPHONE_FACE_ID_MEDIUM_DISPLAY", deviceFamily: "IPHONE", screenDimensions: ["5.8"] },
+    { displayClassId: "IPAD_13_DISPLAY", deviceFamily: "IPAD", screenDimensions: ["13"] },
+  ],
+};
 
 const resource = (type: string, id: string, attributes: Record<string, unknown> = {}, relationships?: Record<string, unknown>) => ({ type, id, attributes, ...(relationships ? { relationships } : {}) });
 
@@ -76,6 +126,7 @@ function storeFetch(f: Fake) {
   const seen: Seen[] = [];
   let n = 0;
   const next = (prefix: string) => `${prefix}-${++n}`;
+  const missing = () => jsonRes({ errors: [{ status: "404", code: "NOT_FOUND", detail: "There is no resource" }] }, 404);
   const fetchStub: typeof fetch = async (input, init) => {
     const req = new Request(input, init);
     const url = new URL(req.url);
@@ -86,7 +137,7 @@ function storeFetch(f: Fake) {
     const q = (k: string) => url.searchParams.get(k);
     const p = url.pathname;
     const m = req.method;
-    if (url.host === "img.example") return f.images[p] ? new Response(f.images[p], { headers: { "Content-Type": "image/png" } }) : new Response("gone", { status: 404 });
+    if (url.host === "img.example") return f.files[p] ? new Response(f.files[p], { headers: { "Content-Type": "image/png", "Content-Length": String(f.files[p].length) } }) : new Response("gone", { status: 404 });
     if (url.host === "upload.example") {
       f.uploads[p.slice(1)] = raw!;
       return new Response(null, { status: 200 });
@@ -99,19 +150,43 @@ function storeFetch(f: Fake) {
     }
     if (url.host !== "api.appstoreconnect.apple.com") return new Response("no stub", { status: 599 });
     if (f.deny && m !== "GET") return jsonRes({ errors: [{ status: "403", code: "FORBIDDEN_ERROR", title: "This request is forbidden for security reasons", detail: "The API key in use does not allow this request" }] }, 403);
-    const data = (body as { data?: { attributes?: Record<string, unknown>; relationships?: Record<string, { data: { id: string } }>; id?: string } } | null)?.data;
+    const data = (body as { data?: { attributes?: Record<string, unknown>; relationships?: Record<string, { data: { id: string } & { length?: number } }>; id?: string } } | null)?.data;
     let r: RegExpMatchArray | null;
-    if (m === "GET" && p === `/v1/apps/${APPLE_APP}`) return jsonRes({ data: resource("apps", APPLE_APP, { primaryLocale: "en-GB" }) });
-    if (m === "GET" && p === `/v1/apps/${APPLE_APP}/appInfos`) return jsonRes({ data: [resource("appInfos", "info-live", { state: "READY_FOR_DISTRIBUTION" }), resource("appInfos", "info-1", { state: "PREPARE_FOR_SUBMISSION" })] });
-    if (m === "GET" && p === "/v1/appInfos/info-1/ageRatingDeclaration") return jsonRes({ data: resource("ageRatingDeclarations", "age-1") });
-    if (m === "PATCH" && p === "/v1/ageRatingDeclarations/age-1") return jsonRes({ data: resource("ageRatingDeclarations", "age-1") });
-    if (m === "PATCH" && p === "/v1/appInfos/info-1") return jsonRes({ data: resource("appInfos", "info-1") });
-    if (m === "GET" && p === "/v1/appInfos/info-1/appInfoLocalizations") return jsonRes({ data: [resource("appInfoLocalizations", "ail-1", { locale: "en-GB" })] });
-    if (m === "PATCH" && p === "/v1/appInfoLocalizations/ail-1") return jsonRes({ data: resource("appInfoLocalizations", "ail-1") });
-    if (m === "PATCH" && p === `/v1/apps/${APPLE_APP}`) return jsonRes({ data: resource("apps", APPLE_APP) });
+    if (m === "GET" && p === `/v1/apps/${APPLE_APP}`) return jsonRes({ data: resource("apps", APPLE_APP, { primaryLocale: "en-GB", contentRightsDeclaration: f.contentRights }) });
+    if (m === "GET" && p === `/v1/apps/${APPLE_APP}/appInfos`) {
+      const info = (id: string, state: string) => resource("appInfos", id, { state }, {
+        primaryCategory: { data: f.category ? { type: "appCategories", id: f.category } : null },
+        ageRatingDeclaration: { data: { type: "ageRatingDeclarations", id: `age-${id}` } },
+        appInfoLocalizations: { data: [{ type: "appInfoLocalizations", id: `ail-${id}` }] },
+      });
+      return jsonRes({ data: [info("live", "READY_FOR_DISTRIBUTION"), info("1", "PREPARE_FOR_SUBMISSION")], included: [resource("ageRatingDeclarations", "age-1", f.ageRating), resource("appInfoLocalizations", "ail-1", f.infoLocalization)] });
+    }
+    if (m === "PATCH" && p === "/v1/ageRatingDeclarations/age-1") {
+      Object.assign(f.ageRating, data!.attributes);
+      return jsonRes({ data: resource("ageRatingDeclarations", "age-1") });
+    }
+    if (m === "PATCH" && p === "/v1/appInfos/1") {
+      f.category = data!.relationships!.primaryCategory.data.id;
+      return jsonRes({ data: resource("appInfos", "1") });
+    }
+    if (m === "PATCH" && p === "/v1/appInfoLocalizations/ail-1") {
+      Object.assign(f.infoLocalization, data!.attributes);
+      return jsonRes({ data: resource("appInfoLocalizations", "ail-1") });
+    }
+    if (m === "PATCH" && p === `/v1/apps/${APPLE_APP}`) {
+      f.contentRights = data!.attributes!.contentRightsDeclaration as string;
+      return jsonRes({ data: resource("apps", APPLE_APP) });
+    }
+    if (m === "GET" && p === `/v1/apps/${APPLE_APP}/appPriceSchedule`) return f.freeSchedule ? jsonRes({ data: resource("appPriceSchedules", APPLE_APP, {}, { baseTerritory: { data: { type: "territories", id: "USA" } } }) }) : missing();
+    if (m === "GET" && p === `/v1/appPriceSchedules/${APPLE_APP}/manualPrices`) {
+      return jsonRes({ data: [resource("appPrices", "price-1", { startDate: null, endDate: null }, { appPricePoint: { data: { type: "appPricePoints", id: "pp-free" } } })], included: [resource("appPricePoints", "pp-free", { customerPrice: "0.0" })] });
+    }
     if (m === "GET" && p === `/v1/apps/${APPLE_APP}/appPricePoints`) return jsonRes({ data: [resource("appPricePoints", "pp-099", { customerPrice: "0.99" }), resource("appPricePoints", "pp-free", { customerPrice: "0.0" })] });
-    if (m === "POST" && p === "/v1/appPriceSchedules") return jsonRes({ data: resource("appPriceSchedules", APPLE_APP) }, 201);
-    if (m === "GET" && p === `/v1/apps/${APPLE_APP}/appAvailabilityV2`) return f.availability ? jsonRes({ data: resource("appAvailabilities", APPLE_APP, { availableInNewTerritories: false }) }) : jsonRes({ errors: [{ status: "404", code: "NOT_FOUND", detail: "There is no resource" }] }, 404);
+    if (m === "POST" && p === "/v1/appPriceSchedules") {
+      f.freeSchedule = true;
+      return jsonRes({ data: resource("appPriceSchedules", APPLE_APP) }, 201);
+    }
+    if (m === "GET" && p === `/v1/apps/${APPLE_APP}/appAvailabilityV2`) return f.availability ? jsonRes({ data: resource("appAvailabilities", APPLE_APP, { availableInNewTerritories: false }) }) : missing();
     if (m === "GET" && p === "/v1/territories") return jsonRes({ data: ["USA", "GBR", "FRA"].map((id) => ({ type: "territories", id })) });
     if (m === "POST" && p === "/v2/appAvailabilities") {
       f.availability = true;
@@ -140,7 +215,7 @@ function storeFetch(f: Fake) {
     }
     if ((r = p.match(/^\/v1\/appStoreVersions\/([\w-]+)\/appStoreReviewDetail$/))) {
       const d = f.reviewDetails.find((x) => x.versionId === r![1]);
-      return d ? jsonRes({ data: resource("appStoreReviewDetails", d.id) }) : jsonRes({ errors: [{ status: "404", code: "NOT_FOUND", detail: "There is no resource" }] }, 404);
+      return d ? jsonRes({ data: resource("appStoreReviewDetails", d.id) }) : missing();
     }
     if (m === "POST" && p === "/v1/appStoreReviewDetails") {
       f.reviewDetails.push({ id: next("rd"), versionId: data!.relationships!.appStoreVersion.data.id, attributes: data!.attributes! });
@@ -178,28 +253,46 @@ function storeFetch(f: Fake) {
       f.versions.find((v) => v.id === data!.relationships!.appStoreVersion.data.id)!.appVersionState = "PROCESSING_FOR_DISTRIBUTION";
       return jsonRes({ data: resource("appStoreVersionReleaseRequests", "rel-1") }, 201);
     }
-    if ((r = p.match(/^\/v1\/appStoreVersionLocalizations\/([\w-]+)\/appScreenshotSets$/))) return jsonRes({ data: f.sets.filter((s) => s.localizationId === r![1]).map((s) => resource("appScreenshotSets", s.id, { screenshotDisplayType: s.displayType })) });
-    if (m === "POST" && p === "/v1/appScreenshotSets") {
-      const s = { id: next("set"), localizationId: data!.relationships!.appStoreVersionLocalization.data.id, displayType: data!.attributes!.screenshotDisplayType as string };
-      f.sets.push(s);
-      return jsonRes({ data: resource("appScreenshotSets", s.id, { screenshotDisplayType: s.displayType }) }, 201);
+    if (m === "GET" && p === "/v1/appAssetLibraryRefData") return f.refData ? jsonRes({ data: [resource("appAssetLibraryRefData", "1", REF_DATA)] }) : jsonRes({ errors: [{ status: "500", code: "UNEXPECTED_ERROR", detail: "Try again later" }] }, 500);
+    if (m === "GET" && p === `/v1/apps/${APPLE_APP}/assetLibrary`) return jsonRes({ data: { type: "appAssetLibraries", id: "lib-1" } });
+    if ((r = p.match(/^\/v1\/appStoreVersionLocalizations\/([\w-]+)\/placements$/))) {
+      const placed = f.placements.filter((x) => x.localizationId === r![1]);
+      const images = f.images.filter((i) => placed.some((x) => x.imageId === i.id));
+      return jsonRes({
+        data: placed.map((x) => resource("appAssetLibraryPlacements", x.id, { placementType: "APP_SCREENSHOT", placementGroup: x.group, state: "PARENT_PREPARE_FOR_SUBMISSION" }, { image: { data: { type: "appAssetLibraryImages", id: x.imageId } } })),
+        included: images.map((i) => resource("appAssetLibraryImages", i.id, { state: i.state, stateDetails: i.state === "FAILED" ? [{ code: "IMAGE_INCORRECT_DIMENSIONS", description: "The dimensions of the image are wrong." }] : null })),
+      });
     }
-    if ((r = p.match(/^\/v1\/appScreenshotSets\/([\w-]+)\/appScreenshots$/))) {
-      return jsonRes({ data: f.shots.filter((s) => s.setId === r![1]).map((s) => resource("appScreenshots", s.id, { assetDeliveryState: { state: s.state, errors: s.state === "FAILED" ? [{ code: "IMAGE_INCORRECT_DIMENSIONS", description: "The dimensions of one or more screenshots are wrong." }] : [] } })) });
+    if (m === "DELETE" && (r = p.match(/^\/v1\/appAssetLibraryPlacements\/([\w-]+)$/))) {
+      f.placements = f.placements.filter((x) => x.id !== r![1]);
+      return new Response(null, { status: 204 });
     }
-    if (m === "POST" && p === "/v1/appScreenshots") {
-      const s = { id: next("shot"), setId: data!.relationships!.appScreenshotSet.data.id, fileSize: data!.attributes!.fileSize as number, state: "AWAITING_UPLOAD" };
-      f.shots.push(s);
-      return jsonRes({ data: resource("appScreenshots", s.id, { uploadOperations: [{ method: "PUT", url: `https://upload.example/${s.id}`, offset: 0, length: s.fileSize, requestHeaders: [{ name: "Content-Type", value: "image/png" }] }] }) }, 201);
+    if (m === "GET" && (r = p.match(/^\/v1\/appAssetLibraryImages\/([\w-]+)\/relationships\/placements$/))) return jsonRes({ data: f.placements.filter((x) => x.imageId === r![1]).slice(0, 1).map((x) => ({ type: "appAssetLibraryPlacements", id: x.id })) });
+    if (m === "POST" && p === "/v1/appAssetLibraryImages") {
+      const image = { id: next("img"), fileSize: data!.attributes!.fileSize as number, state: "AWAITING_UPLOAD", attributes: data!.attributes! };
+      f.images.push(image);
+      return jsonRes({ data: resource("appAssetLibraryImages", image.id, { state: image.state, uploadOperations: [{ method: "PUT", url: `https://upload.example/${image.id}`, offset: 0, length: image.fileSize, requestHeaders: [{ name: "Content-Type", value: "image/png" }] }] }) }, 201);
     }
-    if ((r = p.match(/^\/v1\/appScreenshots\/([\w-]+)$/))) {
+    if ((r = p.match(/^\/v1\/appAssetLibraryImages\/([\w-]+)$/))) {
+      const image = f.images.find((i) => i.id === r![1]);
+      if (!image) return missing();
       if (m === "DELETE") {
-        f.shots = f.shots.filter((s) => s.id !== r![1]);
+        if (f.placements.some((x) => x.imageId === image.id)) return jsonRes({ errors: [{ status: "409", code: "STATE_ERROR.ASSET_HAS_PLACEMENTS", detail: "The asset cannot be deleted while placements still use it. Delete those placements first." }] }, 409);
+        f.images = f.images.filter((i) => i !== image);
         return new Response(null, { status: 204 });
       }
-      const s = f.shots.find((x) => x.id === r![1])!;
-      Object.assign(s, { state: f.failShots ? "FAILED" : "COMPLETE", checksum: data!.attributes!.sourceFileChecksum });
-      return jsonRes({ data: resource("appScreenshots", s.id) });
+      if (f.uploads[image.id]?.length !== image.fileSize) return jsonRes({ errors: [{ status: "409", code: "STATE_ERROR", detail: "The upload does not match the reserved size." }] }, 409);
+      image.state = f.afterCommit;
+      return jsonRes({ data: resource("appAssetLibraryImages", image.id, { state: image.state }) });
+    }
+    if (m === "POST" && p === "/v1/appAssetLibraryPlacements") {
+      const placement = { id: next("place"), localizationId: data!.relationships!.appStoreVersionLocalization.data.id, imageId: data!.relationships!.image.data.id, group: data!.attributes!.placementGroup as string };
+      f.placements.push(placement);
+      return jsonRes({ data: resource("appAssetLibraryPlacements", placement.id, { placementType: "APP_SCREENSHOT", placementGroup: placement.group, state: "ASSET_PROCESSING" }) }, 201);
+    }
+    if (m === "POST" && p === "/v1/appAssetLibraryPlacementOrderingRequests") {
+      f.orders.push({ group: data!.attributes!.placementGroup as string, ids: (data!.relationships!.orderedPlacements.data as unknown as { id: string }[]).map((x) => x.id) });
+      return jsonRes({ data: resource("appAssetLibraryPlacementOrderingRequests", next("order")) }, 201);
     }
     return new Response(`no stub for ${m} ${p}`, { status: 599 });
   };
@@ -221,10 +314,6 @@ const view = async () => (await (await call("GET", base())).json()) as Record<st
 const writes = () => stub.seen.filter((s) => s.method !== "GET" && s.url.startsWith(API)).map((s) => `${s.method} ${s.path}`);
 const sent = (method: string, path: string) => stub.seen.filter((s) => s.method === method && s.path === path).map((s) => (s.body as { data: Record<string, any> }).data);
 
-async function md5(bytes: Uint8Array): Promise<string> {
-  return Array.from(new Uint8Array(await crypto.subtle.digest("MD5", bytes)), (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
 beforeEach(async () => {
   env = testEnv();
   await clearDb(env);
@@ -235,10 +324,10 @@ beforeEach(async () => {
   cookie = await signIn(env, deps);
   await saveAppleSecrets(env, deps, cookie);
   expect((await handle(api(cookie, "PUT", "/api/dev/review-contact", { firstName: "George", lastName: "McIntyre", email: "g@example.com", phone: "+44 7700 900123" }), env, deps)).status).toBe(200);
-  f.images = { "/phone-1.png": png(1320, 2868), "/phone-2.png": png(1290, 2796), "/tablet.png": png(2064, 2752), "/old-phone.png": png(1170, 2532), "/clear.png": png(1320, 2868, 6), "/tv.jpg": jpeg(1920, 1080) };
+  f.files = { "/phone-1.png": png(1320, 2868), "/phone-2.png": png(1290, 2796), "/tablet.png": png(2064, 2752), "/odd.png": png(1000, 2000), "/clear.png": png(1320, 2868, 6), "/tv.jpg": jpeg(1920, 1080) };
   const made = await handle(api(cookie, "POST", "/api/dev/apps", {
     name: "Poker Night", repo: "club/poker-night", bundleId: "com.example.pokernight", tagline: "Thursday table, house rules included", description: "The club's league night: fixtures, scores and the table.",
-    screenshots: ["https://img.example/phone-1.png", "https://img.example/old-phone.png"], screenshotsByPlatform: { ipad: ["https://img.example/tablet.png"], tvos: ["https://img.example/tv.jpg"] },
+    screenshots: ["https://img.example/phone-1.png", "https://img.example/odd.png"], screenshotsByPlatform: { ipad: ["https://img.example/tablet.png"], tvos: ["https://img.example/tv.jpg"] },
   }), env, deps);
   appId = ((await made.json()) as { app: { id: string } }).app.id;
   linkId = ((await (await handle(api(cookie, "POST", `/api/dev/apps/${appId}/links`, { label: "club" }), env, deps)).json()) as { link: { id: string } }).link.id;
@@ -319,7 +408,7 @@ describe("App Store review", () => {
     expect(after).toMatchObject({ step: "privacy", appInfo: { category: "GAMES", done: true, error: null } });
     const policyUrl = after.appInfo.defaultPolicy.url as string;
     expect(policyUrl).toMatch(/^https:\/\/ourapps\.app\/privacy\/[a-f0-9]{24}$/);
-    expect(sent("PATCH", "/v1/appInfos/info-1")[0].relationships).toEqual({ primaryCategory: { data: { type: "appCategories", id: "GAMES" } } });
+    expect(sent("PATCH", "/v1/appInfos/1")[0].relationships).toEqual({ primaryCategory: { data: { type: "appCategories", id: "GAMES" } } });
     const age = sent("PATCH", "/v1/ageRatingDeclarations/age-1")[0].attributes;
     expect(age).toMatchObject({ contests: "INFREQUENT", messagingAndChat: true, gambling: false, violenceRealistic: "NONE", lootBox: false });
     expect(Object.keys(age)).toHaveLength(25);
@@ -334,11 +423,15 @@ describe("App Store review", () => {
     const where = stub.seen.find((s) => s.path === "/v2/appAvailabilities")!.body as Record<string, any>;
     expect(where.data.attributes).toEqual({ availableInNewTerritories: true });
     expect(where.included.map((t: Record<string, any>) => [t.relationships.territory.data.id, t.attributes.available])).toEqual([["USA", true], ["GBR", true], ["FRA", true]]);
-    // Availability already set in App Store Connect is kept.
+    // Saving the same answers again reads what Apple holds and writes nothing.
+    const again = stub.seen.length;
+    expect((await call("PUT", base(), { appInfo: APP_INFO })).status).toBe(200);
+    expect(stub.seen.slice(again).filter((x) => x.method !== "GET")).toEqual([]);
+    // A changed answer writes only that answer; availability already set in App Store Connect is kept.
     f.availability = true;
     const before = stub.seen.length;
     expect((await call("PUT", base(), { appInfo: { ...APP_INFO, thirdPartyContent: true } })).status).toBe(200);
-    expect(stub.seen.slice(before).some((s) => s.path === "/v2/appAvailabilities")).toBe(false);
+    expect(stub.seen.slice(before).filter((x) => x.method !== "GET").map((x) => `${x.method} ${x.path}`)).toEqual([`PATCH /v1/apps/${APPLE_APP}`]);
     expect(sent("PATCH", `/v1/apps/${APPLE_APP}`)[1].attributes).toEqual({ contentRightsDeclaration: "USES_THIRD_PARTY_CONTENT" });
     const log = (await (await call("GET", "/api/dev/audit")).json()) as { events: { event: string; detail: string }[] };
     expect(log.events[0]).toMatchObject({ event: "app-store-details-saved", detail: "Poker Night ios: appInfo" });
@@ -398,47 +491,123 @@ describe("App Store review", () => {
     expect(stub.seen.find((s) => s.method === "PATCH" && s.path === "/v1/appStoreVersions/ver-1/relationships/build")!.body).toEqual({ data: { type: "builds", id: "build-7" } });
   });
 
-  it("checks each screenshot against Apple's sizes, says which size is missing, and uploads the rest", async () => {
+  it("checks each screenshot against Apple's sizes, says which size is missing, and places the rest from the asset library", async () => {
     expect((await call("POST", `${base()}/screenshots`)).status).toBe(409);
     await call("PUT", base(), { version: VERSION });
     // Without iPad screenshots, iPad 13 inch is missing; a size Apple does not take, and transparency, are refused.
-    await call("PUT", `/api/dev/apps/${appId}`, { screenshots: ["https://img.example/phone-1.png", "https://img.example/old-phone.png", "https://img.example/clear.png", "https://img.example/gone.png"], screenshotsByPlatform: {} });
+    await call("PUT", `/api/dev/apps/${appId}`, { screenshots: ["https://img.example/phone-1.png", "https://img.example/odd.png", "https://img.example/clear.png", "https://img.example/gone.png"], screenshotsByPlatform: {} });
     const first = (await (await call("POST", `${base()}/screenshots`)).json()) as Record<string, any>;
     expect(first.screenshots).toMatchObject({
-      pending: 0, done: false, missing: ["iPad 13 inch is missing: add a screenshot of 2064 x 2752, 2048 x 2732 pixels (upright or turned)."],
+      pending: 0, done: false, checked: true, missing: ["iPad 13 inch is missing: add a screenshot of 2064 x 2752, 2048 x 2732 pixels (upright or turned)."],
       items: [
-        { url: "https://img.example/phone-1.png", displayType: "APP_IPHONE_67", width: 1320, height: 2868, uploaded: true, error: null },
-        { url: "https://img.example/old-phone.png", displayType: null, width: 1170, height: 2532, uploaded: false, error: "is 1170 x 2532 pixels, a size Apple does not take for iPhone and iPad" },
-        { url: "https://img.example/clear.png", displayType: "APP_IPHONE_67", uploaded: false, error: "has transparency, which Apple does not take; save it without an alpha channel" },
+        { url: "https://img.example/phone-1.png", group: "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE", width: 1320, height: 2868, uploaded: true, error: null },
+        { url: "https://img.example/odd.png", group: null, width: 1000, height: 2000, uploaded: false, error: "is 1000 x 2000 pixels, a size Apple does not take for iPhone and iPad" },
+        { url: "https://img.example/clear.png", group: "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE", uploaded: false, error: "has transparency, which Apple does not take; save it without an alpha channel" },
         { url: "https://img.example/gone.png", uploaded: false, error: "could not be downloaded (status 404)" },
       ],
     });
-    const reserve = sent("POST", "/v1/appScreenshots");
-    expect(reserve).toHaveLength(1);
-    expect(reserve[0].attributes).toEqual({ fileName: "app_iphone_67-1.png", fileSize: 64 });
-    const shot = f.shots[0];
-    expect(f.uploads[shot.id]).toEqual(f.images["/phone-1.png"]);
-    expect(sent("PATCH", `/v1/appScreenshots/${shot.id}`)[0].attributes).toEqual({ uploaded: true, sourceFileChecksum: await md5(f.images["/phone-1.png"]) });
-    expect(f.sets.map((s) => s.displayType)).toEqual(["APP_IPHONE_67"]);
+    // Reserve in the library, upload, commit with uploaded alone, then place on the version's text.
+    const reserve = sent("POST", "/v1/appAssetLibraryImages");
+    expect(reserve).toEqual([{ type: "appAssetLibraryImages", attributes: { fileName: "iphone_dynamic_island_large_profile-1.png", fileSize: 64, category: "APP_SCREENSHOTS_AND_PREVIEWS", referenceName: "Poker Night iPhone 6.9 inch 1" }, relationships: { assetLibrary: { data: { type: "appAssetLibraries", id: "lib-1" } } } }]);
+    const image = f.images[0];
+    expect(f.uploads[image.id]).toEqual(f.files["/phone-1.png"]);
+    expect(sent("PATCH", `/v1/appAssetLibraryImages/${image.id}`)).toEqual([{ type: "appAssetLibraryImages", id: image.id, attributes: { uploaded: true } }]);
+    const localization = f.localizations[0].id;
+    expect(sent("POST", "/v1/appAssetLibraryPlacements")).toEqual([{ type: "appAssetLibraryPlacements", attributes: { placementType: "APP_SCREENSHOT", placementGroup: "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE" }, relationships: { image: { data: { type: "appAssetLibraryImages", id: image.id } }, appStoreVersionLocalization: { data: { type: "appStoreVersionLocalizations", id: localization } } } }]);
+    expect(stub.seen.some((x) => x.path.includes("appScreenshot"))).toBe(false);
 
-    // With an iPad screenshot the step is done; the earlier upload is replaced, not added to.
+    // The developer placed another screenshot on this version.
+    const ourPlacement = f.placements[0].id;
+    f.images.push({ id: "img-theirs", fileSize: 10, state: "APPROVED", attributes: {} });
+    f.placements.push({ id: "place-theirs", localizationId: localization, imageId: "img-theirs", group: "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE" });
+    // With an iPad screenshot the step is done; the version's earlier placements go first, then ourapps' unused images.
     await call("PUT", `/api/dev/apps/${appId}`, { screenshots: ["https://img.example/phone-1.png", "https://img.example/phone-2.png"], screenshotsByPlatform: { ipad: ["https://img.example/tablet.png"] } });
+    const before = stub.seen.length;
     const second = (await (await call("POST", `${base()}/screenshots`)).json()) as Record<string, any>;
-    expect(second.screenshots).toMatchObject({ pending: 0, missing: [], done: true, required: [{ label: "iPhone 6.9 inch", displayTypes: [{ id: "APP_IPHONE_67", uploaded: 2 }, { id: "APP_IPHONE_65", uploaded: 0 }] }, { label: "iPad 13 inch", displayTypes: [{ id: "APP_IPAD_PRO_3GEN_129", uploaded: 1 }] }] });
-    expect(f.shots.map((s) => s.id)).not.toContain(shot.id);
-    expect(f.shots).toHaveLength(3);
+    expect(second.screenshots).toMatchObject({ pending: 0, missing: [], done: true, required: [{ label: "iPhone 6.9 inch", groups: [{ id: "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE", label: "iPhone 6.9 inch", uploaded: 2 }, { id: "IPHONE_FACE_ID_LARGE_PROFILE", uploaded: 0 }] }, { label: "iPad 13 inch", groups: [{ id: "IPAD_13_PROFILE", uploaded: 1 }] }] });
+    const writes = stub.seen.slice(before).filter((x) => x.method !== "GET").map((x) => `${x.method} ${x.path}`);
+    expect(writes.slice(0, 3)).toEqual([`DELETE /v1/appAssetLibraryPlacements/${ourPlacement}`, "DELETE /v1/appAssetLibraryPlacements/place-theirs", `DELETE /v1/appAssetLibraryImages/${image.id}`]);
+    expect(f.images.map((i) => i.id)).toContain("img-theirs");
+    expect(f.images.map((i) => i.id)).not.toContain(image.id);
+    expect(f.placements.filter((x) => x.localizationId === localization)).toHaveLength(3);
+    // Two iPhone screenshots are put in the app's order.
+    const phones = f.placements.filter((x) => x.group === "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE").map((x) => x.id);
+    expect(f.orders).toEqual([{ group: "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE", ids: phones }]);
+    expect(sent("POST", "/v1/appAssetLibraryPlacementOrderingRequests")[0].relationships.appStoreVersionLocalization).toEqual({ data: { type: "appStoreVersionLocalizations", id: localization } });
     expect(second.step).toBe("app-info");
   });
 
-  it("spreads screenshot uploads over requests to stay inside the free plan's outbound calls", async () => {
+  it("never deletes an image ourapps uploaded while something else places it", async () => {
+    await call("PUT", base(), { version: VERSION });
+    await call("POST", `${base()}/screenshots`);
+    const ours = f.images.map((i) => i.id);
+    // The same images are placed on a custom product page as well.
+    for (const id of ours) f.placements.push({ id: `cpp-${id}`, localizationId: "cpp-loc", imageId: id, group: "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE" });
+    expect((await call("POST", `${base()}/screenshots`, { restart: true })).status).toBe(200);
+    expect(stub.seen.filter((x) => x.method === "DELETE" && x.path.startsWith("/v1/appAssetLibraryImages/"))).toEqual([]);
+    for (const id of ours) expect(f.images.map((i) => i.id)).toContain(id);
+    expect(f.placements.filter((x) => x.localizationId === "cpp-loc")).toHaveLength(ours.length);
+  });
+
+  it("uses Apple's placement groups from the reference data, and the fallback table only when it cannot be read", async () => {
+    expect((await call("PUT", `/api/dev/apps/${appId}/appstore/tvos`, { version: { ...VERSION, version: "1.0" } })).status).toBe(200);
+    const tv = (await (await call("POST", `/api/dev/apps/${appId}/appstore/tvos/screenshots`)).json()) as Record<string, any>;
+    expect(tv.screenshots).toMatchObject({ done: true, required: [{ label: "Apple TV", groups: [{ id: "TV_SCREEN_PROFILE", label: "Apple TV", sizes: "1920 x 1080", uploaded: 1 }] }] });
+    expect(sent("POST", "/v1/appAssetLibraryPlacements")[0].attributes).toEqual({ placementType: "APP_SCREENSHOT", placementGroup: "TV_SCREEN_PROFILE" });
+    expect(sent("POST", "/v1/appAssetLibraryImages")[0].attributes).toMatchObject({ fileName: "tv_screen_profile-1.jpg", fileSize: 23 });
+    // 1170 x 2532 is a smaller iPhone Apple takes; it is placed, but the 6.9 inch requirement stays open.
+    f.refData = false;
+    f.files["/medium.png"] = png(1170, 2532);
+    await call("PUT", base(), { version: VERSION });
+    await call("PUT", `/api/dev/apps/${appId}`, { screenshots: ["https://img.example/medium.png", "https://img.example/phone-1.png"], screenshotsByPlatform: {} });
+    const fallback = (await (await call("POST", `${base()}/screenshots`)).json()) as Record<string, any>;
+    expect(fallback.screenshots.items.map((i: Record<string, unknown>) => i.group)).toEqual([null, "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE"]);
+    expect(fallback.screenshots.items[0].error).toBe("is 1170 x 2532 pixels, a size Apple does not take for iPhone and iPad");
+    f.refData = true;
+    const apple = (await (await call("POST", `${base()}/screenshots`, { restart: true })).json()) as Record<string, any>;
+    expect(apple.screenshots.items.map((i: Record<string, unknown>) => i.group)).toEqual(["IPHONE_FACE_ID_MEDIUM_PROFILE", "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE"]);
+  });
+
+  it("bounds each request by image bytes and calls, and the ten-minute schedule continues the rest", async () => {
+    await call("PUT", base(), { version: VERSION });
+    const big = Array.from({ length: 4 }, (_, i) => `/big-${i}.png`);
+    for (const path of big) f.files[path] = png(1320, 2868, 2, 1_500_000);
+    f.files["/tablet-big.png"] = png(2064, 2752, 2, 1_500_000);
+    await call("PUT", `/api/dev/apps/${appId}`, { screenshots: big.map((p) => `https://img.example${p}`), screenshotsByPlatform: { ipad: ["https://img.example/tablet-big.png"] } });
+    const uploaded = () => Object.values(f.uploads).reduce((n, b) => n + b.length, 0);
+    const first = (await (await call("POST", `${base()}/screenshots`)).json()) as Record<string, any>;
+    // 1.5 MB each against a limit of about 2 MB: one image per request.
+    expect(SCREENSHOT_BYTES).toBe(2_000_000);
+    expect(uploaded()).toBe(1_500_000);
+    expect(first.screenshots.pending).toBe(4);
+    const second = (await (await call("POST", `${base()}/screenshots`)).json()) as Record<string, any>;
+    expect(uploaded()).toBe(3_000_000);
+    expect(second.screenshots.pending).toBe(3);
+    // Small images share a request; the schedule carries on without the console.
+    for (let i = 0; i < 3; i++) {
+      deps.advance(10 * 60_000);
+      await tickAppStore(env, d);
+    }
+    expect(uploaded()).toBe(7_500_000);
+    expect((await view()).screenshots).toMatchObject({ pending: 0, done: true });
+    f.files["/small-1.png"] = png(1320, 2868, 2, 300_000);
+    f.files["/small-2.png"] = png(1290, 2796, 2, 300_000);
+    await call("PUT", `/api/dev/apps/${appId}`, { screenshots: ["https://img.example/small-1.png", "https://img.example/small-2.png"], screenshotsByPlatform: { ipad: ["https://img.example/tablet.png"] } });
+    const before = stub.seen.length;
+    const small = (await (await call("POST", `${base()}/screenshots`)).json()) as Record<string, any>;
+    expect(small.screenshots).toMatchObject({ pending: 0, done: true });
+    expect(stub.seen.length - before).toBeLessThanOrEqual(40);
+  });
+
+  it("spreads many screenshots over requests to stay inside the free plan's outbound calls", async () => {
     await call("PUT", base(), { version: VERSION });
     const phones = Array.from({ length: 10 }, (_, i) => `/p${i}.png`);
     const tablets = Array.from({ length: 6 }, (_, i) => `/t${i}.png`);
-    for (const path of phones) f.images[path] = png(1320, 2868);
-    for (const path of tablets) f.images[path] = png(2048, 2732);
+    for (const path of phones) f.files[path] = png(1320, 2868);
+    for (const path of tablets) f.files[path] = png(2048, 2732);
     await call("PUT", `/api/dev/apps/${appId}`, { screenshots: phones.map((p) => `https://img.example${p}`), screenshotsByPlatform: { ipad: tablets.map((p) => `https://img.example${p}`) } });
     const pending: number[] = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 6; i++) {
       const before = stub.seen.length;
       const res = (await (await call("POST", `${base()}/screenshots`)).json()) as Record<string, any>;
       expect(stub.seen.length - before).toBeLessThanOrEqual(40);
@@ -450,15 +619,19 @@ describe("App Store review", () => {
     }
     expect(pending[0]).toBeGreaterThan(0);
     expect(pending.at(-1)).toBe(0);
-    expect(f.shots).toHaveLength(16);
+    expect(f.placements).toHaveLength(16);
   });
 
-  it("shows a screenshot Apple fails after the upload", async () => {
+  it("waits for Apple to process the screenshots, and shows one Apple fails", async () => {
     await call("PUT", base(), { version: VERSION });
-    f.failShots = true;
-    const res = (await (await call("POST", `${base()}/screenshots`)).json()) as Record<string, any>;
-    expect(res.screenshots.done).toBe(false);
-    expect(res.screenshots.items[0].error).toBe("was not accepted by Apple: The dimensions of one or more screenshots are wrong.");
+    f.afterCommit = "UPLOAD_COMPLETE";
+    const processing = (await (await call("POST", `${base()}/screenshots`)).json()) as Record<string, any>;
+    expect(processing.screenshots).toMatchObject({ pending: 0, processing: 2, checked: false, done: false });
+    for (const image of f.images) image.state = "PREPARE_FOR_SUBMISSION";
+    f.images[0].state = "FAILED";
+    const checked = (await (await call("POST", `${base()}/screenshots`)).json()) as Record<string, any>;
+    expect(checked.screenshots).toMatchObject({ checked: true, processing: 0, done: false });
+    expect(checked.screenshots.items[0].error).toBe("was not accepted by Apple: The dimensions of the image are wrong.");
   });
 
   it("submits with the full sequence, follows each review state, and releases by hand", async () => {
@@ -550,13 +723,10 @@ describe("App Store review", () => {
     expect(sent("PATCH", "/v1/appStoreVersions/ver-1").at(-1)!.attributes).toEqual({ releaseType: "AFTER_APPROVAL" });
   });
 
-  it("follows Apple TV separately, with its own screenshots", async () => {
+  it("follows Apple TV separately", async () => {
     f.versions.push({ id: "ver-tv", versionString: "1.0", appVersionState: "PREPARE_FOR_SUBMISSION", platform: "TV_OS" });
     expect((await call("PUT", `/api/dev/apps/${appId}/appstore/tvos`, { version: { ...VERSION, version: "1.0" } })).status).toBe(200);
     expect(sent("PATCH", "/v1/appStoreVersions/ver-tv")[0].attributes).toEqual({ copyright: "2026 George" });
-    const shots = (await (await call("POST", `/api/dev/apps/${appId}/appstore/tvos/screenshots`)).json()) as Record<string, any>;
-    expect(shots.screenshots).toMatchObject({ done: true, missing: [], required: [{ label: "Apple TV", displayTypes: [{ id: "APP_APPLE_TV", uploaded: 1 }] }] });
-    expect(sent("POST", "/v1/appScreenshots")[0].attributes).toEqual({ fileName: "app_apple_tv-1.jpg", fileSize: 23 });
     expect((await view()).version.done).toBe(false);
   });
 });
@@ -565,6 +735,6 @@ async function clearStore() {
   await env.DB.prepare("DELETE FROM app_store_versions").run();
   await env.DB.prepare("DELETE FROM app_store_apps").run();
   f.versions = [{ id: "ver-1", versionString: "1.0", appVersionState: "PREPARE_FOR_SUBMISSION", platform: "IOS" }];
-  Object.assign(f, { localizations: [], reviewDetails: [], sets: [], shots: [], submissions: [] });
+  Object.assign(f, { localizations: [], reviewDetails: [], images: [], placements: [], orders: [], submissions: [] });
   stub.seen.length = 0;
 }
