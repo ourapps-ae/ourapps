@@ -205,11 +205,15 @@ export interface AppStoreStatus {
   privacy: { confirmedAt: string | null; done: boolean };
   version: { version: string; description: string; keywords: string; supportUrl: string; copyright: string; whatsNew: string; firstVersion: boolean; suggested: string | null; done: boolean; error: string | null };
   screenshots: {
-    required: { label: string; displayTypes: { id: string; label: string; sizes: string; uploaded: number }[] }[];
+    // Apple's placement groups that meet each requirement, with the sizes each takes.
+    required: { label: string; groups: { id: string; label: string; sizes: string; uploaded: number }[] }[];
     missing: string[];
     pending: number;
     started: boolean;
-    items: { url: string; displayType: string | null; width: number | null; height: number | null; uploaded: boolean; error: string | null }[];
+    // Screenshots Apple is still processing, and whether Apple's processing has been read back.
+    processing: number;
+    checked: boolean;
+    items: { url: string; group: string | null; width: number | null; height: number | null; uploaded: boolean; error: string | null }[];
     done: boolean;
     error: string | null;
   };

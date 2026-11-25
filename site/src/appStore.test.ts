@@ -14,7 +14,7 @@ function status(over: Partial<AppStoreStatus> = {}): AppStoreStatus {
     appInfo: { listing: "public", unlistedGrantedAt: null, category: "", ageRating: {}, thirdPartyContent: false, privacyPolicyUrl: "", defaultPolicy: { url: null, collects: [], storage: "device", contactEmail: "club@example.com", developerName: "Poker Night Club" }, done: false, error: null },
     privacy: { confirmedAt: null, done: false },
     version: { version: "1.2", description: "League night.", keywords: "Poker Night", supportUrl: "", copyright: "2026 Poker Night Club", whatsNew: "", firstVersion: true, suggested: "1.2", done: false, error: null },
-    screenshots: { required: [{ label: "iPhone 6.9 inch", displayTypes: [{ id: "APP_IPHONE_67", label: "iPhone 6.9 inch", sizes: "1320 x 2868", uploaded: 0 }] }], missing: ["iPhone 6.9 inch is missing: add a screenshot of 1320 x 2868 pixels (upright or turned)."], pending: 0, started: false, items: [], done: false, error: null },
+    screenshots: { required: [{ label: "iPhone 6.9 inch", groups: [{ id: "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE", label: "iPhone 6.9 inch", sizes: "1320 x 2868", uploaded: 0 }] }], missing: ["iPhone 6.9 inch is missing: add a screenshot of 1320 x 2868 pixels (upright or turned)."], pending: 0, started: false, processing: 0, checked: false, items: [], done: false, error: null },
     review: { firstName: "Sam", lastName: "Dealer", email: "club@example.com", phone: "+44 7700 900123", notes: "", done: false, error: null },
     build: { buildNumber: "7", candidates: [{ version: "1.2", buildNumber: "7", expiresAt: null }], done: false, error: null },
     submission: { releaseType: "AFTER_APPROVAL", appleState: null, message: null, liveVersion: null, submittedAt: null, checkedAt: null, releasedAt: null, error: null },
@@ -51,11 +51,20 @@ describe("App Store card", () => {
   });
 
   it("says which screenshot size is missing, and why a screenshot was refused", () => {
-    const shots = { ...status().screenshots, started: true, items: [{ url: "https://img.example/old.png", displayType: null, width: 1170, height: 2532, uploaded: false, error: "is 1170 x 2532 pixels, a size Apple does not take for iPhone and iPad" }] };
+    const shots = { ...status().screenshots, started: true, checked: true, items: [{ url: "https://img.example/odd.png", group: null, width: 1000, height: 2000, uploaded: false, error: "is 1000 x 2000 pixels, a size Apple does not take for iPhone and iPad" }] };
     const card = appStoreCard(status({ step: "screenshots", screenshots: shots }), "ios").html;
     expect(card).toContain("iPhone 6.9 inch is missing: add a screenshot of 1320 x 2868 pixels (upright or turned).");
-    expect(card).toContain("old.png</a> is 1170 x 2532 pixels, a size Apple does not take for iPhone and iPad");
-    expect(card).toContain("Check and upload again");
+    expect(card).toContain("odd.png</a> is 1000 x 2000 pixels, a size Apple does not take for iPhone and iPad");
+    expect(card).toContain('data-as-screenshots="restart">Upload again');
+  });
+
+  it("continues unfinished uploads and waits for Apple's processing without starting again", () => {
+    const pending = appStoreCard(status({ step: "screenshots", screenshots: { ...status().screenshots, started: true, pending: 3 } }), "ios").html;
+    expect(pending).toContain('data-as-screenshots="continue">Continue uploading (3 to go)');
+    const processing = appStoreCard(status({ step: "screenshots", screenshots: { ...status().screenshots, started: true, processing: 2 } }), "ios").html;
+    expect(processing).toContain("Apple is processing 2 screenshots");
+    expect(processing).toContain('data-as-screenshots="continue">Check with Apple');
+    expect(appStoreCard(status({ step: "screenshots" }), "ios").html).toContain('data-as-screenshots="upload">Check and upload screenshots');
   });
 
   it("offers the release choice, and holds an unlisted app for Apple's grant", () => {

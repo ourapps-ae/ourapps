@@ -95,13 +95,15 @@ function versionForm(s: AppStoreStatus): Raw {
 function screenshotStep(s: AppStoreStatus, platform: Platform): Raw {
   const sh = s.screenshots;
   const lists = platform === "ios" ? "iPhone and iPad lists" : `${PLATFORM_NAMES[platform]} list`;
+  const [action, label] = !sh.started ? ["upload", "Check and upload screenshots"] : sh.pending > 0 ? ["continue", `Continue uploading (${sh.pending} to go)`] : !sh.checked ? ["continue", "Check with Apple"] : ["restart", "Upload again"];
   return html`
     ${stepError(sh.error)}
-    <p>ourapps takes the app's screenshots from the ${lists} and the list for all versions on this page, then from my-app.json, checks each against the sizes Apple takes, and uploads them.</p>
-    <ul class="bullets small">${sh.required.map((r) => html`<li><b>${r.label}</b>: ${r.displayTypes.map((t, i) => html`${i ? ", or " : ""}${t.sizes} pixels${t.uploaded ? html` ${pill(`${t.uploaded} uploaded`, "ok")}` : ""}`)}</li>`)}</ul>
+    <p>ourapps takes the app's screenshots from the ${lists} and the list for all versions on this page, then from my-app.json, checks each against the sizes Apple takes, uploads it to the app's asset library and places it on this version.</p>
+    <ul class="bullets small">${sh.required.map((r) => html`<li><b>${r.label}</b>: ${r.groups.map((g, i) => html`${i ? ", or " : ""}${g.sizes} pixels${g.uploaded ? html` ${pill(`${g.uploaded} placed`, "ok")}` : ""}`)}</li>`)}</ul>
     ${sh.missing.length && sh.started ? callout("warn", html`${sh.missing.map((m) => html`<p>${m}</p>`)}`) : ""}
+    ${sh.processing ? callout("info", html`<p>Apple is processing ${sh.processing} screenshot${sh.processing === 1 ? "" : "s"}; this usually takes a minute.</p>`) : ""}
     ${sh.items.some((i) => i.error) ? html`<ul class="bullets small">${sh.items.filter((i) => i.error).map((i) => html`<li><a href="${i.url}" target="_blank" rel="noopener">${i.url.split("/").pop()}</a> ${i.error}</li>`)}</ul>` : ""}
-    <button class="btn sm mt-s" type="button" data-as-screenshots>${sh.started ? "Check and upload again" : "Check and upload screenshots"}</button>`;
+    <button class="btn sm mt-s" type="button" data-as-screenshots="${action}">${label}</button>`;
 }
 
 function reviewForm(s: AppStoreStatus): Raw {
@@ -331,10 +333,11 @@ export async function loadAppStoreCard(root: HTMLElement, appId: string, platfor
     const shots = box.querySelector<HTMLButtonElement>("[data-as-screenshots]");
     if (shots) {
       shots.onclick = () => void act(shots, "Checking and uploading...", async () => {
-        // Each request uploads what fits in it; the rest follows in the next.
-        let next = await api<AppStoreStatus>("POST", `${path}/screenshots`, s.screenshots.started ? { restart: true } : undefined);
-        for (let i = 0; i < 20 && next.screenshots.pending > 0; i++) {
-          shots.textContent = `Uploading, ${next.screenshots.pending} to go...`;
+        // Each request does a bounded share; the rest follows in the next, while Apple processes what arrived.
+        let next = await api<AppStoreStatus>("POST", `${path}/screenshots`, shots.dataset.asScreenshots === "restart" ? { restart: true } : undefined);
+        for (let i = 0; i < 30 && (next.screenshots.pending > 0 || (!next.screenshots.checked && i < 3)); i++) {
+          shots.textContent = next.screenshots.pending > 0 ? `Uploading, ${next.screenshots.pending} to go...` : "Waiting for Apple...";
+          if (next.screenshots.pending === 0) await new Promise((done) => setTimeout(done, 5000));
           next = await api<AppStoreStatus>("POST", `${path}/screenshots`);
         }
         return next;
