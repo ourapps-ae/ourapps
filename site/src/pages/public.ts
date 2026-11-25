@@ -2,7 +2,6 @@ import { pickScreenshots, type ScreenshotSets } from "@my/store-shared";
 import { ApiError, api, whoAmI, type AppDetails, type HistoryEntry, type Install, type LinkPage, type Me } from "../api.js";
 import { html, mount, paragraphs, raw, type Raw } from "../html.js";
 import { navigate } from "../nav.js";
-import { cookingFigure } from "../figures.js";
 import { notesHtml } from "../notes.js";
 import { desktopAvailability, desktopPanel, televisionPanel, televisionSetupLink } from "../desktop.js";
 import { screenshotSvg } from "../placeholders.js";
@@ -14,15 +13,15 @@ import { appIcon, avatar, callout, copyRow, fmtDate, icon, toast, wireCopy, wire
 
 // Shared frame for every store-themed page.
 export const COPYRIGHT = "Copyright Level N Ltd 2026";
-export const TAGLINE = "Delivering Our Applications, built from Our Recipes, using Our Agentically-Engineered Components.";
+export const TAGLINE = "Deliver the apps you build to every device, through one private link.";
 export const SOURCE_URL = "https://github.com/ourapps-ae/ourapps";
 
 export function storeFrame(body: Raw, opts: { me?: Me | null; nav?: boolean; footnote?: string } = {}): Raw {
   const right = opts.me
     ? html`<a href="/dev" class="row" style="gap:8px">${avatar(opts.me.developer.displayName, `https://github.com/${opts.me.developer.githubLogin}.png?size=64`, "sm")} <span>Console</span></a>`
     : html`<a href="/dev">For developers</a>`;
-  const nav = opts.nav === false ? "" : html`<nav class="store-nav"><a class="brand" href="/">${icon("logo")} ourapps</a><span class="row wrap" style="gap:18px"><a href="/recipes">Recipes</a><a href="/components">Components</a>${right}</span></nav>`;
-  const footer = html`<footer class="store-footer"><span>${COPYRIGHT} · <a href="/terms">Terms</a></span><span>${opts.footnote ?? "Share links are private. The recipe library and component catalogue are public. No tracking."}</span></footer>`;
+  const nav = opts.nav === false ? "" : html`<nav class="store-nav"><a class="brand" href="/">${icon("logo")} ourapps</a>${right}</nav>`;
+  const footer = html`<footer class="store-footer"><span>${COPYRIGHT} · <a href="/terms">Terms</a></span><span>${opts.footnote ?? "Share links are private. Install pages are not listed or searchable. No tracking."}</span></footer>`;
   return html`<div class="store fade-in">${nav}${body}${footer}</div>`;
 }
 
@@ -40,14 +39,15 @@ export async function landing(root: HTMLElement): Promise<void> {
       html`
         <section class="hero">
           <div>
-            <span class="pill accent">${icon("bot", "icon-16")} Software for your business, club, home and shop</span>
+            <span class="pill accent">${icon("bot", "icon-16")} Apps for your business, club, home and shop</span>
             <h1 style="margin-top:14px">${TAGLINE}</h1>
-            <p class="lead">Our apps for our businesses, our club, our home, our shop. Pick a <a href="/recipes">recipe</a> from the library, or compose your own from <a href="/components">components</a> in the catalogue. A coding agent builds the application in minutes from reviewed parts, on your own accounts. Send one link, and your staff, members, customers or family open it on the phone, tablet, computer or television they already use.</p>
+            <p class="lead">Our apps for our businesses, our club, our home, our shop. Build an app with any coding agent. ourapps signs it, uploads it and offers it on iPhone, iPad, Mac, Apple TV, Android, Windows and the web. Send one private link, and your staff, members, customers or family install it on the phone, tablet, computer or television they already use.</p>
             <div class="ctas">
               ${me ? html`<a class="btn lg" href="/dev">Open your console ${icon("arrow")}</a>` : html`<a class="btn lg" href="/api/auth/github">${icon("github")} Sign in with GitHub</a>`}
+              <a class="btn lg secondary" href="#how">How it works</a>
               <a class="btn lg secondary" href="/example">See an example: Poker Night</a>
             </div>
-            <p class="small faint mt">Free. No ourapps accounts for the people you share with. Install paths for iPhone, iPad, Android, Mac, Windows, Apple TV and web apps. Credentials encrypted per account, nothing sold or tracked: <a href="/dev/guide#security">how we keep it safe</a>.</p>
+            <p class="small faint mt">Free. No accounts for the people you share with. Updates reach every device through the same link. Your own Apple, GitHub and Cloudflare accounts; credentials encrypted per account, nothing sold or tracked: <a href="/dev/guide#security">how we keep it safe</a>.</p>
           </div>
           <a class="phone" href="/example/poker-night" aria-label="Open the Poker Night example page">
             <div class="screen">
@@ -61,11 +61,12 @@ export async function landing(root: HTMLElement): Promise<void> {
         <section class="how" id="benefits">
           <div class="section-title"><h2>Why ourapps</h2></div>
           <div class="grid-3">
-            <div class="card"><h3>Fast</h3><p class="muted">An application from a recipe in minutes, rather than days of building.</p></div>
-            <div class="card"><h3>Low cost</h3><p class="muted">Little AI spending. A clinic of fewer than ten people can run on free plans; a larger business pays only for the provider tier it needs, chosen from one answer about size.</p></div>
-            <div class="card"><h3>Maintainable and safe</h3><p class="muted">Reviewed components, small updates you approve, security tests built in, a record of what is inside, and data you can move.</p></div>
-            <div class="card"><h3>Yours</h3><p class="muted">Your accounts and your data. Your application's servers and databases run on your own accounts, not ours, and there is no lock-in.</p></div>
-            <div class="card"><h3>Delivered to your people</h3><p class="muted">Staff, members and customers get it on phones, tablets, computers and televisions through one link.</p></div>
+            <div class="card"><h3>Any coding agent</h3><p class="muted">Build with Claude Code, Codex, Cursor, opencode or any other agent. One prompt from the console sets up the repository to publish releases ourapps delivers.</p></div>
+            <div class="card"><h3>Every device</h3><p class="muted">iPhone and iPad, Mac and Apple TV through TestFlight; Android by direct download; Windows by installer; the web as an app on the home screen.</p></div>
+            <div class="card"><h3>One private link</h3><p class="muted">One link per audience, with a label, an expiry, a QR code and a revoke button. Install pages are not listed or searchable.</p></div>
+            <div class="card"><h3>No accounts for your people</h3><p class="muted">Staff, members, customers and family open the link and install. They sign up for nothing, and nothing about them is recorded.</p></div>
+            <div class="card"><h3>Updates on every platform</h3><p class="muted">Publish a release and the same link serves it. TestFlight updates Apple devices by itself, and ourapps asks for a fresh build before a TestFlight build expires.</p></div>
+            <div class="card"><h3>Yours</h3><p class="muted">Your accounts and your repositories. App files stay in your GitHub releases, web apps run on your own Cloudflare account, and there is no lock-in. ourapps is free.</p></div>
           </div>
         </section>
 
@@ -86,52 +87,29 @@ export async function landing(root: HTMLElement): Promise<void> {
             <div style="flex:1 1 300px">
               <span class="pill">Worked example</span>
               <h2 style="margin-top:8px">Poker Night: a club league night for eight people</h2>
-              <p class="muted">Just the three options the club uses, house rules written the way members say them, a page of help for the member who has never played, and the club's own photos on the felt. Built by an agent, from a recipe or from components, and installed from one link.</p>
+              <p class="muted">Just the three options the club uses, house rules written the way members say them, a page of help for the member who has never played, and the club's own photos on the felt. Built with a coding agent in an evening, and installed by every member from one link.</p>
             </div>
             <div class="stack" style="flex:0 0 auto"><a class="btn" href="/example">Read the story ${icon("arrow")}</a><a class="btn secondary" href="/example/poker-night">See the install page</a></div>
           </div>
         </section>
 
-        <section class="card pad-l" style="margin-top:14px">
-          <div class="row wrap top" style="gap:20px">
-            <div style="flex:1 1 300px">
-              <span class="pill accent">Recipe library</span>
-              <h2 style="margin-top:8px">Start from a recipe</h2>
-              <p class="muted">A recipe asks a few questions and an agent assembles the application from reviewed components for the devices you choose. Browse recipes by category and device, search by what an application does, and read the components behind each one.</p>
-            </div>
-            <div class="stack" style="flex:0 0 auto"><a class="btn" href="/recipes">Browse recipes ${icon("arrow")}</a><a class="btn secondary" href="/components">Component catalogue</a></div>
-          </div>
-        </section>
-
-        <section class="card pad-l" style="margin-top:14px">
-          <div class="row wrap top" style="gap:20px">
-            <div style="flex:1 1 300px">
-              <span class="pill accent">Why small is powerful</span>
-              <h2 style="margin-top:8px">At a small organisation's size, the expensive parts are free</h2>
-              <p class="muted">Video calls, live multiplayer, databases and AI cost a public app money every month. For a household, a club or a practice of fewer than ten people they fit inside free plans: LiveKit's 5,000 free video minutes a month is about twenty one-hour calls for four, and Cloudflare's free plan runs about 80 hours of four-player play a day. A larger organisation answers one question about its size, and the recipe picks the provider tier that fits.</p>
-            </div>
-            <div class="stack" style="flex:0 0 auto"><a class="btn" href="/small">How it works ${icon("arrow")}</a><a class="btn secondary" href="/free-tiers.md">The list of free services</a></div>
-          </div>
-        </section>
-
         <section class="how" id="how">
-          <div class="section-title"><h2>How a recipe is cooked</h2></div>
-          <p class="muted">Your agent answers a recipe's questions with you. The answers decide which reviewed components go in and which providers they use. aepm downloads each one from its publisher, checks it and installs it without running its code. The application runs on your own accounts and reaches your people through one link, and every update waits for your approval.</p>
-          ${cookingFigure()}
+          <div class="section-title"><h2>How it works</h2></div>
+          <p class="muted">Your coding agent builds the app and its release workflow. ourapps reads each release, signs and uploads the Apple builds, and gives every device the right install through one private link.</p>
           <div class="section-title"><h2>For you, the developer</h2></div>
           <div class="grid-3">
-            <div class="card"><div class="num">1</div><h3>Choose how to start</h3><p class="muted">Pick a <a href="/recipes">recipe</a> and answer its questions, or compose your own from the <a href="/components">component catalogue</a>. A recipe you compose can be published for others to use.</p></div>
-            <div class="card"><div class="num">2</div><h3>Add your app</h3><p class="muted">Sign in with GitHub. Give the app a name, icon, screenshots and a few lines of text, and point it at the GitHub repository that publishes releases.</p></div>
-            <div class="card"><div class="num">3</div><h3>Share it</h3><p class="muted">Create one share link per person or group, with a label, an expiry and a revoke button. Each has a QR code. ourapps signs each iPhone build, sends it through TestFlight and asks for a fresh build before one expires.</p></div>
+            <div class="card"><div class="num">1</div><h3>Build and release</h3><p class="muted">Your coding agent builds the app in your GitHub repository and publishes releases with my-app.json, which names the file for each device. The repository prompt in the console sets that up.</p></div>
+            <div class="card"><div class="num">2</div><h3>ourapps signs and uploads</h3><p class="muted">For iPhone, iPad, Mac and Apple TV, ourapps signs each build, uploads it to TestFlight and sends it to your testers' group. The repository holds no Apple secrets.</p></div>
+            <div class="card"><div class="num">3</div><h3>Share one link</h3><p class="muted">Sign in with GitHub, add the app with a name, icon, screenshots and a few lines of text, and create one share link per person or group. Each has a QR code.</p></div>
           </div>
           <div class="section-title"><h2>For your people: staff, members, customers, family</h2></div>
           <div class="grid-3">
             <div class="card"><div class="num">1</div><h3>Open the link</h3><p class="muted">A link or QR code from your organisation opens an install page that looks and feels like the store they already use.</p></div>
-            <div class="card"><div class="num">2</div><h3>Choose your version</h3><p class="muted">Android, Mac and Windows offer direct packages. Apple devices use matching TestFlight invitations when ready. Web apps open in your browser.</p></div>
-            <div class="card"><div class="num">3</div><h3>Follow the install steps</h3><p class="muted">The page shows system requirements, package choices and instructions. Updates arrive through TestFlight or a fresh download.</p></div>
+            <div class="card"><div class="num">2</div><h3>Install</h3><p class="muted">Apple devices install through Apple's free TestFlight app. Android, Mac and Windows download the app directly, and web apps open in the browser and go on the home screen.</p></div>
+            <div class="card"><div class="num">3</div><h3>Get updates</h3><p class="muted">TestFlight keeps Apple devices up to date by itself. The same link serves each new version for Android, Mac, Windows and the web, and an app can offer it when it opens.</p></div>
           </div>
           <div class="card mt pad-l row wrap" style="justify-content:space-between">
-            <div style="flex:1 1 260px"><h3>Agents welcome</h3><p class="muted small">Everything in the console is also an API. Give your coding agent an API key and the prompts on the Agents and API page, and it can search recipes and components, publish your own, register apps, publish releases and hand you share links.</p></div>
+            <div style="flex:1 1 260px"><h3>Agents welcome</h3><p class="muted small">Everything in the console is also an API. Give your coding agent an API key and the prompts on the Agents and API page, and it can register apps, set up the release workflow, check TestFlight and hand you share links.</p></div>
             <div class="row wrap"><a class="btn secondary" href="/reference">Technical reference</a><a class="btn secondary" href="/agents.md">Read agents.md ${icon("external")}</a></div>
           </div>
         </section>
@@ -155,7 +133,7 @@ export async function devPage(root: HTMLElement, slug: string): Promise<void> {
           ${owner ? html`<div class="owner-bar"><span class="pill">You</span> This is your public page. Apps appear here when "Show on my public page" is on. <a href="/dev/apps">Manage apps</a></div>` : ""}
           <div class="dev-hero">
             ${avatar(data.developer.displayName, null, "lg")}
-            <div><h1>${data.developer.displayName}</h1><p class="muted" style="margin:2px 0 0">Delivers applications built from recipes and components to its own people.</p></div>
+            <div><h1>${data.developer.displayName}</h1><p class="muted" style="margin:2px 0 0">Delivers the apps it builds to its own people.</p></div>
           </div>
           <div class="card">
             ${data.apps.length === 0 ? html`<p class="muted center" style="padding:20px 0">Nothing listed yet.</p>` : data.apps.map((a) => html`

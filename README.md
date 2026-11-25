@@ -1,22 +1,20 @@
-# ourapps - Delivering Our Applications, built from Our Recipes, using Our Agentically-Engineered Components
+# ourapps - Deliver the apps you build to every device, through one private link
 
 Our apps for our businesses, our club, our home, our shop. A small business, a club or society, a
-household, a shop or practice picks a recipe from the public library, or composes an application
-from catalogue components and may publish the recipe. An agent builds the application, and the
+household, a shop or practice builds an app with any coding agent, and ourapps delivers it: the
 developer sends a link or a QR code; staff, members, customers or family tap it and the app lands
 on their device. Share links are private and apps are not listed or searchable. No App Store, no
-Google Play, no accounts for the people you share with. The recipe library and component catalogue
-are public and described below.
+Google Play, no accounts for the people you share with.
 
-- Fast: an application from a recipe in minutes rather than days of building.
-- Low cost: little AI spending; a clinic of fewer than ten people can run on free plans, and a
-  larger business pays only for the provider tier it needs, chosen from one answer about size.
-- Maintainable and safe: reviewed components, small updates you approve, security tests built in,
-  a record of what is inside, and data you can move.
-- Yours: your accounts and your data; your application's servers and databases run on your own
-  accounts, with no lock-in.
-- Delivered to staff, members and customers on phones, tablets, computers and televisions through
-  one link.
+- Any coding agent: one prompt sets up the app's repository to publish releases ourapps delivers.
+- Every device: iPhone and iPad, Mac and Apple TV through TestFlight; Android by APK; Windows by
+  installer; the web as an installable app.
+- One private link per audience, with a label, an expiry, a QR code and a revoke button.
+- Updates on every platform through the same link.
+- Yours: your accounts and your repositories; app files stay in your GitHub releases, with no
+  lock-in.
+
+## How people install
 
 - iPhone and iPad: Apple's TestFlight. The person gets Apple's free TestFlight app, opens the
   invitation on the install page and taps Install. ourapps signs each build, the workflow uploads
@@ -24,28 +22,10 @@ are public and described below.
   the 90-day expiry.
 - Android: a direct APK download with a one-time walkthrough of the "allow from this
   source" and Play Protect prompts.
+- Mac and Apple TV: matching TestFlight invitations once they are ready; Mac also takes a `.dmg`
+  download.
+- Windows: an `.exe` installer download.
 - Web apps: an "add to home screen" walkthrough when the app lists a web version.
-
-## Recipe library and component catalogue
-
-- `/recipes` and `/components` list, filter (category, device, tag) and search published recipes
-  and components. A recipe page shows its description, diagram, questions (with the condition that asks each), components with the condition that includes each and their
-  suitability and guardians, jobs, targets, tested answer sets and versions. Every public page has
-  a plain-text and a JSON variant (`/recipes/<name>.txt`, `.json`; a recipe's bulky parts are at
-  `/recipes/<name>/details.txt` and `/components/<name>/details.txt`) and the API is under
-  `/api/recipes` and `/api/components`.
-- Developers publish with `POST /api/dev/recipes` and `POST /api/dev/components` (signed in, or a
-  `manage` key). The database stores the entry and a pointer to the publisher's GitHub release;
-  the package stays in the release and is handed out through a signed one-hour link.
-- A developer can deprecate their own entry (`POST /api/dev/{recipes,components}/:name/deprecate`,
-  optional `replacement`, reversed by `undeprecate`). Deleting an account does not delete entries:
-  they lose their owner and are marked orphaned. Deprecated and orphaned entries stay listed and
-  downloadable (an orphaned bundle needs a public release). Every response and page for them, and
-  for anything that uses them, carries a `deprecations` array and a banner; lists filter with
-  `deprecated=exclude|include|only`, and `GET /api/recipes/:name/:version/deprecations` resolves
-  the whole tree.
-- What a recipe or component repository implements: `CONTRACT.md`. Storage and routes:
-  `.opencode/knowledge/recipes.md`.
 
 ## Two faces
 
@@ -53,8 +33,7 @@ are public and described below.
   about, what's new, privacy, information, share. Blank fields get generated placeholders so a
   bare listing still looks finished. The page detects iPhone, Android, desktop and in-app
   browsers and shows the right install steps.
-- Developers see a console at `/dev`: overview with a setup checklist and stats, apps, links to the
-  recipe library and component catalogue, share
+- Developers see a console at `/dev`: overview with a setup checklist and stats, apps, share
   links with QR codes, a TestFlight card per iPhone app, settings, an A to Z guide, and an agents page with API keys
   and prompts. Signed-in developers see an owner bar on their own install pages.
 
@@ -71,8 +50,7 @@ TestFlight, share). `llms.txt` points agents at both documents.
 The guide's Security section (`/dev/guide#security`) explains how credentials, account access
 and app files are protected; nothing is recorded about the people you share with. Developers accept the terms and data
 statement (`/terms`, version in `shared/src/terms.ts`) at first sign-in and after any change;
-the accepted version is shown in the profile, which also offers account deletion (recipes and
-components stay, orphaned).
+the accepted version is shown in the profile, which also offers account deletion.
 
 Credentials are encrypted field by field (AES-256-GCM, key derived per developer from a Worker
 secret, authenticated data binding each field to its owner); API keys, build tokens and session
@@ -86,10 +64,8 @@ steps: `SECURITY.md`.
 |------------|-----------------------------------------------------------------|
 | `worker/`  | Cloudflare Worker: sign-in, dashboard API, TestFlight, build hooks, artefact proxy |
 | `site/`    | Vite + TypeScript site served by the worker                      |
-| `shared/`  | my-app.json validation, recipe and component validation, the terms version |
+| `shared/`  | my-app.json validation, the terms version                        |
 | `site/public/agents.md` | API reference for agents, served at /agents.md            |
-| `site/public/cloud-assembly.md`, `aepm-assemble.yml` | Building from a recipe in GitHub Actions, served at /cloud-assembly.md |
-| `site/src/freeTiers.ts` | Free-service catalogue: guide section, /small, /free-tiers.md |
 | `CONTRACT.md` | what an app repository must implement                         |
 
 ## What kinds of app
@@ -144,8 +120,7 @@ right steps. In-app browsers (Instagram, Facebook, Gmail) cannot install; the pa
 the person to open it in Safari or Chrome.
 
 Your public page `/<your-slug>` lists only apps you switch on, details only, no install
-links, and is marked noindex. The names `recipes`, `components` and `sitemap.xml` are not
-available as page names.
+links, and is marked noindex.
 
 ## Limits you must know
 

@@ -1,6 +1,5 @@
 // A worked example: Poker Night, an imaginary app for a club's league night of eight members.
 import { whoAmI, type LinkPage } from "../api.js";
-import { cookingFigure } from "../figures.js";
 import { html, mount } from "../html.js";
 import { setTheme } from "../theme.js";
 import { icon, wireCopy, wireImages } from "../ui.js";
@@ -67,7 +66,7 @@ export async function examplePage(root: HTMLElement): Promise<void> {
           <div style="padding:24px 0 8px">
             <span class="pill accent">Worked example</span>
             <h1 style="font-size:40px;margin-top:12px">Poker Night</h1>
-            <p class="lead muted" style="font-size:19px">One example among many: a club's league night for eight members. The same pattern serves a clinic's appointment board, a shop's order screen, a household's chores planner or a restaurant's table display. An agent builds it from a recipe or from components, and the members install it from one link. Imaginary, but every detail is something ourapps does.</p>
+            <p class="lead muted" style="font-size:19px">One example among many: a club's league night for eight members. The same pattern serves a clinic's appointment board, a shop's order screen, a household's chores planner or a restaurant's table display. The club builds it with a coding agent, and every member installs it from one link. Imaginary, but every detail is something ourapps does.</p>
             <div class="ctas row wrap"><a class="btn" href="/example/poker-night">See the page your members get ${icon("arrow")}</a>${me ? html`<a class="btn secondary" href="/dev">Open your console</a>` : html`<a class="btn secondary" href="/api/auth/github">${icon("github")} Build yours</a>`}</div>
           </div>
 
@@ -101,18 +100,14 @@ export async function examplePage(root: HTMLElement): Promise<void> {
           <p class="small muted">The audience is the club's own members, but the images are your responsibility: use photos you took or were given, and keep anything you borrowed inside the club. The moment the app is for strangers, swap in art you own.</p>
 
           <h2>Test a real app with real people</h2>
-          <p>The same mechanism carries serious projects. Before an app ever meets an App Store listing you can put it on up to 10,000 iPhones and iPads through TestFlight, which ourapps keeps fresh for you, and on as many Android phones as you like: real phones, real people, real feedback. A staff pilot, a club trial, the first ten customers.</p>
+          <p>The same mechanism carries serious projects. Through TestFlight, which ourapps keeps fresh for you, an app reaches up to 10,000 iPhones and iPads, and as many Android phones, Macs and Windows computers as you like: real devices, real people, real feedback. A staff pilot, a club trial, the first ten customers.</p>
 
           <h2>How it got built: an agent and an evening</h2>
           <p>Describe the table to a coding agent (Claude Code, Codex, Cursor, opencode): who sits where, the three blind structures, the four rules, the slang. It writes the app. Paste the ourapps prompt from the console and it writes the release workflow too, including the TestFlight upload. You spend the evening on the house rules and the help text, which is the part only you can do.</p>
 
-          <h2>The app can come from a recipe</h2>
-          <p>A <a href="/recipes">recipe</a> for a card game asks a few questions: which devices, how many chips to start with, whether new players get lessons. It names the <a href="/components">components</a> it is made from, such as a card deck, a seating plan and a guided tour, and an agent assembles the app from them. Dana could pick that recipe from the library and answer the questions for her table, or compose the same app from catalogue components and publish the recipe for other tables. A part that carries a deprecation warning shows it on its page and in every response, so the agent reads it before building. The <a href="/dev/guide#how-it-works">guide</a> explains both routes.</p>
-          ${cookingFigure()}
-
           <h2>How ourapps helps</h2>
           <ol class="steps">
-            <li><b>Start from a recipe or from components.</b> Pick a recipe and answer its questions, or compose the app from the component catalogue. An agent builds it in your GitHub repository.</li>
+            <li><b>Build it with a coding agent.</b> The agent writes the app in your GitHub repository, and the ourapps prompt adds the release workflow.</li>
             <li><b>Add the app.</b> Name, icon, a few lines, the GitHub repository. Blank fields get placeholders, so the page looks finished from day one.</li>
             <li><b>Create a share link.</b> One for the table, labelled "Thursday". It has a QR code for the fridge.</li>
             <li><b>Members tap.</b> Android downloads and installs. iPhones get Apple's free TestFlight app, open the invitation on the page, and tap Install.</li>
@@ -140,7 +135,7 @@ export async function examplePage(root: HTMLElement): Promise<void> {
               </ul>
             </div>
           </div>
-          <p class="small muted">Share links themselves are unlimited and never expire unless you say so. Small organisations run on free tiers; the only cost is Apple's developer membership, which you need for iPhone apps anyway.</p>
+          <p class="small muted">Share links themselves are unlimited and never expire unless you say so. ourapps is free; the only cost is Apple's developer membership, which you need for iPhone apps anyway.</p>
 
           <h2>How updates happen</h2>
           <p><b>iPhone updates itself; Android waits for a tap.</b> TestFlight installs new iPhone builds; on Android no store runs in the background, so an installed copy stays as it is until the person taps Update. What that takes:</p>
@@ -169,12 +164,9 @@ export async function examplePage(root: HTMLElement): Promise<void> {
           </ol>
           <p>The <a href="/dev/guide#updates">guide</a> has the Swift and Kotlin snippets, and the agent prompt asks your coding agent to add the check for you.</p>
 
-          <h2>And the path to the real store later</h2>
-          <p>When Poker Night is ready for strangers, nothing is thrown away. The same code and the same release workflow already sign for the App Store and upload to TestFlight; the private photos make way for art you own, a privacy policy gets written, and the build goes to App Store review. Your members keep installing from their link the whole time, and afterwards too, if you like.</p>
-
           <div class="card pad-l mt center">
             <h2 style="margin-top:0">Your Poker Night is something else</h2>
-            <p class="muted">A clinic's appointment board, a shop's order screen, a household's chores planner, a restaurant's table display, a scoreboard for the five-a-side. The pattern is the same: a recipe or components, an agent, a link to the people who will use it.</p>
+            <p class="muted">A clinic's appointment board, a shop's order screen, a household's chores planner, a restaurant's table display, a scoreboard for the five-a-side. The pattern is the same: a coding agent, a release, a link to the people who will use it.</p>
             <div class="ctas row wrap" style="justify-content:center">${me ? html`<a class="btn lg" href="/dev">Open your console</a>` : html`<a class="btn lg" href="/api/auth/github">${icon("github")} Sign in with GitHub</a>`}<a class="btn lg secondary" href="/example/poker-night">See the install page</a></div>
           </div>
         </article>

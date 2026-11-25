@@ -1,14 +1,6 @@
 export interface Env {
   DB: D1Database;
   WEBAPP_FILES: KVNamespace;
-  CATALOGUE: R2Bucket;
-  // Numeric GitHub user ids, comma-separated, who may set quality and publish the category tree.
-  CATALOGUE_CURATORS?: string;
-  OSV_API_BASE?: string;
-  // Images one developer may upload in 24 hours (default 300).
-  IMAGE_UPLOADS_PER_DAY?: string;
-  // Bundle links one address may ask for in a minute (default 60).
-  BUNDLE_LINKS_PER_MINUTE?: string;
   ASSETS?: Fetcher;
   PUBLIC_ORIGIN: string;
   APPLE_API_BASE: string;

@@ -1,0 +1,29 @@
+-- Delivery only: every recipe, component, class, category, image, download, vulnerability and build report table goes,
+-- with its indexes. Tables that reference another go first; each vocabulary table goes before its full-text table.
+DROP TABLE recipe_vocab;
+DROP TABLE component_vocab;
+DROP TABLE recipe_fts;
+DROP TABLE component_fts;
+DROP TABLE recipe_slots;
+DROP TABLE component_interfaces;
+DROP TABLE component_dependencies;
+DROP TABLE recipe_versions;
+DROP TABLE component_versions;
+DROP TABLE recipes;
+DROP TABLE components;
+DROP TABLE class_versions;
+DROP TABLE classes;
+DROP TABLE categories;
+DROP TABLE image_uploaders;
+DROP TABLE images;
+DROP TABLE downloads_daily;
+DROP TABLE downloads_seen;
+DROP TABLE version_purls;
+DROP TABLE purls;
+DROP TABLE advisories;
+DROP TABLE build_reports;
+DROP TABLE published_digests;
+DROP TABLE listing_totals;
+DROP TABLE job_progress;
+DROP TABLE rate_limits;
+DROP TABLE developer_orgs;
