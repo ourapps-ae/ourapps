@@ -530,37 +530,75 @@ export class AppleClient {
     await this.call("POST", "/v1/appStoreVersionReleaseRequests", { data: { type: "appStoreVersionReleaseRequests", relationships: { appStoreVersion: { data: { type: "appStoreVersions", id: versionId } } } } });
   }
 
-  async screenshotSets(localizationId: string): Promise<{ id: string; displayType: string }[]> {
-    const res = await this.call<{ data: Resource<{ screenshotDisplayType?: string }>[] }>("GET", `/v1/appStoreVersionLocalizations/${localizationId}/appScreenshotSets?limit=50`);
-    return res.data.map((s) => ({ id: s.id, displayType: s.attributes.screenshotDisplayType ?? "" }));
+  // The App Asset Library: an image is uploaded once into the app's library, then placed on a version localization.
+
+  async assetLibrary(appId: string): Promise<string> {
+    return (await this.call<{ data: Resource }>("GET", `/v1/apps/${appId}/assetLibrary`)).data.id;
   }
 
-  async createScreenshotSet(localizationId: string, displayType: string): Promise<string> {
-    const res = await this.call<{ data: Resource }>("POST", "/v1/appScreenshotSets", {
-      data: { type: "appScreenshotSets", attributes: { screenshotDisplayType: displayType }, relationships: { appStoreVersionLocalization: { data: { type: "appStoreVersionLocalizations", id: localizationId } } } },
+  // Apple's catalog of placement groups and image sizes for App Store version screenshots.
+  async assetReferenceData(): Promise<AssetReferenceData> {
+    const res = await this.call<{ data: Resource<AssetReferenceData>[] }>("GET", "/v1/appAssetLibraryRefData?filter[features]=APP_STORE_VERSIONS&fields[appAssetLibraryRefData]=features,placementProfileGroups,imageSpecs,placementTypes,displayClasses");
+    return res.data[0]?.attributes ?? {};
+  }
+
+  // The screenshot placements on a version localization, in display order, with the image each places and its state.
+  async screenshotPlacements(localizationId: string): Promise<{ id: string; group: string; state: string; imageId: string | null; imageState: string | null; imageDetails: string[] }[]> {
+    const res = await this.call<{ data: Resource<{ placementGroup?: string; state?: string }>[]; included?: Resource<{ state?: string; stateDetails?: { code?: string; description?: string }[] | null }>[] }>(
+      "GET",
+      `/v1/appStoreVersionLocalizations/${localizationId}/placements?filter[placementType]=APP_SCREENSHOT&sort=placementGroupPosition&include=image&fields[appAssetLibraryImages]=state,stateDetails&limit=200`,
+    );
+    return res.data.map((p) => {
+      const imageId = asList(p.relationships?.image?.data)[0]?.id ?? null;
+      const image = res.included?.find((i) => i.type === "appAssetLibraryImages" && i.id === imageId);
+      return { id: p.id, group: p.attributes.placementGroup ?? "", state: p.attributes.state ?? "", imageId, imageState: image?.attributes.state ?? null, imageDetails: (image?.attributes.stateDetails ?? []).map((d) => d.description ?? d.code ?? "error") };
     });
-    return res.data.id;
   }
 
-  async screenshotsInSet(setId: string): Promise<{ id: string; state: string; errors: string[] }[]> {
-    const res = await this.call<{ data: Resource<{ assetDeliveryState?: { state?: string; errors?: { description?: string; code?: string }[] } }>[] }>("GET", `/v1/appScreenshotSets/${setId}/appScreenshots?limit=50`);
-    return res.data.map((s) => ({ id: s.id, state: s.attributes.assetDeliveryState?.state ?? "UNKNOWN", errors: (s.attributes.assetDeliveryState?.errors ?? []).map((e) => e.description ?? e.code ?? "error") }));
+  async deletePlacement(placementId: string): Promise<void> {
+    await this.call("DELETE", `/v1/appAssetLibraryPlacements/${placementId}`);
   }
 
-  async deleteScreenshot(screenshotId: string): Promise<void> {
-    await this.call("DELETE", `/v1/appScreenshots/${screenshotId}`);
+  async imageIsPlaced(imageId: string): Promise<boolean> {
+    return (await this.call<{ data: Linkage[] }>("GET", `/v1/appAssetLibraryImages/${imageId}/relationships/placements?limit=1`)).data.length > 0;
   }
 
-  // Reserves a screenshot in its set; the bytes go to the returned operations, then commitScreenshot.
-  async reserveScreenshot(setId: string, fileName: string, fileSize: number): Promise<{ id: string; operations: UploadOperation[] }> {
-    const res = await this.call<{ data: Resource<{ uploadOperations?: UploadOperation[] }> }>("POST", "/v1/appScreenshots", {
-      data: { type: "appScreenshots", attributes: { fileName, fileSize }, relationships: { appScreenshotSet: { data: { type: "appScreenshotSets", id: setId } } } },
+  async deleteImage(imageId: string): Promise<void> {
+    await this.call("DELETE", `/v1/appAssetLibraryImages/${imageId}`);
+  }
+
+  // Reserves an image in the library; the bytes go to the returned operations, then commitImage.
+  async reserveImage(libraryId: string, fileName: string, fileSize: number, referenceName: string): Promise<{ id: string; operations: UploadOperation[] }> {
+    const res = await this.call<{ data: Resource<{ uploadOperations?: UploadOperation[] }> }>("POST", "/v1/appAssetLibraryImages", {
+      data: { type: "appAssetLibraryImages", attributes: { fileName, fileSize, category: "APP_SCREENSHOTS_AND_PREVIEWS", referenceName }, relationships: { assetLibrary: { data: { type: "appAssetLibraries", id: libraryId } } } },
     });
     return { id: res.data.id, operations: res.data.attributes.uploadOperations ?? [] };
   }
 
-  async commitScreenshot(screenshotId: string, md5: string): Promise<void> {
-    await this.call("PATCH", `/v1/appScreenshots/${screenshotId}`, { data: { type: "appScreenshots", id: screenshotId, attributes: { uploaded: true, sourceFileChecksum: md5 } } });
+  // Apple checks the bytes against the reserved file size; the asset library takes no checksum.
+  async commitImage(imageId: string): Promise<void> {
+    await this.call("PATCH", `/v1/appAssetLibraryImages/${imageId}`, { data: { type: "appAssetLibraryImages", id: imageId, attributes: { uploaded: true } } });
+  }
+
+  async placeScreenshot(localizationId: string, imageId: string, group: string): Promise<string> {
+    const res = await this.call<{ data: Resource }>("POST", "/v1/appAssetLibraryPlacements", {
+      data: {
+        type: "appAssetLibraryPlacements",
+        attributes: { placementType: "APP_SCREENSHOT", placementGroup: group },
+        relationships: { image: { data: { type: "appAssetLibraryImages", id: imageId } }, appStoreVersionLocalization: { data: { type: "appStoreVersionLocalizations", id: localizationId } } },
+      },
+    });
+    return res.data.id;
+  }
+
+  async orderPlacements(localizationId: string, group: string, placementIds: string[]): Promise<void> {
+    await this.call("POST", "/v1/appAssetLibraryPlacementOrderingRequests", {
+      data: {
+        type: "appAssetLibraryPlacementOrderingRequests",
+        attributes: { placementGroup: group },
+        relationships: { orderedPlacements: { data: placementIds.map((id) => ({ type: "appAssetLibraryPlacements", id })) }, appStoreVersionLocalization: { data: { type: "appStoreVersionLocalizations", id: localizationId } } },
+      },
+    });
   }
 
   // An Apple Distribution certificate signs the iPhone and iPad builds that go to TestFlight.

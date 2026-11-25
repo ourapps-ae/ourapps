@@ -1,5 +1,5 @@
 // Typed D1 access. Rows are snake_case in SQL and camelCase in code.
-import { APP_TARGET_KEYS, isAppTarget, type AgeRatingAnswers, type AppTarget, type AppTargets, type ScreenshotPlatform } from "@my/store-shared";
+import { APP_TARGET_KEYS, isAppTarget, type AgeRatingAnswers, type AppTarget, type AppTargets, type ScreenshotGroup, type ScreenshotPlatform } from "@my/store-shared";
 import type { Env } from "./env.js";
 import type { ApplePlatform } from "./apple-platform.js";
 import { BuildNumberError, numericBuildNumber } from "./build-number.js";
@@ -221,10 +221,12 @@ export interface AppStoreSynced {
 
 export interface ScreenshotItem {
   url: string;
-  displayType: string | null;
+  group: string | null;
   width?: number;
   height?: number;
-  screenshotId?: string;
+  // The library image ourapps uploaded for it and the placement that puts it on the version.
+  imageId?: string;
+  placementId?: string;
   done: boolean;
   error?: string;
 }
@@ -234,12 +236,17 @@ export interface ScreenshotState {
   source: string;
   runsOnIpad: boolean;
   items: ScreenshotItem[];
-  // Apple's screenshot set per display type, once read; the display types emptied of earlier screenshots;
-  // and whether Apple's processing of the uploads has been read.
-  sets: Record<string, string>;
-  setsRead: boolean;
-  cleared: string[];
+  // Apple's placement groups for the platform, from its reference data or the fallback table.
+  groups: ScreenshotGroup[];
+  groupsFrom: "apple" | "fallback";
+  libraryId: string | null;
+  // Images ourapps uploaded for earlier screenshots, deleted once nothing places them.
+  previous: string[];
+  // The version's earlier screenshot placements removed; the placements put in order; Apple's processing read back.
+  cleared: boolean;
+  ordered: boolean;
   checked: boolean;
+  processing: number;
 }
 
 export interface AppStoreVersionRow {
@@ -688,6 +695,19 @@ export class Db {
   async followedAppStoreVersions(limit = 4): Promise<AppStoreVersionRow[]> {
     const res = await this.d1
       .prepare("SELECT * FROM app_store_versions WHERE stage IN ('waiting', 'in-review', 'rejected', 'pending-release', 'releasing') AND apple_version_id IS NOT NULL ORDER BY checked_at LIMIT ?")
+      .bind(limit)
+      .all<Raw>();
+    return res.results.map((r) => row<AppStoreVersionRow>(r, appStoreVersionConvert)!);
+  }
+
+  // Versions being prepared whose screenshots are unfinished or not yet processed by Apple, least recently changed first.
+  async appStoreScreenshotWork(limit = 5): Promise<AppStoreVersionRow[]> {
+    const res = await this.d1
+      .prepare(
+        `SELECT * FROM app_store_versions WHERE stage IN ('draft', 'rejected') AND screenshots_json IS NOT NULL
+         AND (json_extract(screenshots_json, '$.checked') = 0 OR EXISTS (SELECT 1 FROM json_each(screenshots_json, '$.items') WHERE json_extract(value, '$.done') = 0))
+         ORDER BY updated_at LIMIT ?`,
+      )
       .bind(limit)
       .all<Raw>();
     return res.results.map((r) => row<AppStoreVersionRow>(r, appStoreVersionConvert)!);

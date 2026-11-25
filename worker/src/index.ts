@@ -142,15 +142,17 @@ async function route(request: Request, env: Env, deps: Deps): Promise<Response> 
   throw new HttpError(404, "not found");
 }
 
-// Every ten minutes: TestFlight builds into the testers' group and fresh builds before expiry, then the
-// versions with Apple's App Review.
-async function scheduled(env: Env, deps: Deps): Promise<void> {
+// Every ten minutes: TestFlight builds into the testers' group and fresh builds before expiry, then App Store work with
+// the outbound calls left of the free plan's 50.
+export async function scheduled(env: Env, deps: Deps): Promise<void> {
+  let used = 0;
+  const counted: Deps = { ...deps, fetch: (input, init) => { used++; return deps.fetch(input, init); } };
   try {
-    await tickTestflight(env, deps);
+    await tickTestflight(env, counted);
   } catch (err) {
     console.error(`testflight schedule: ${err instanceof Error ? err.message : String(err)}`);
   }
-  await tickAppStore(env, deps);
+  await tickAppStore(env, deps, 45 - used);
 }
 
 export default {

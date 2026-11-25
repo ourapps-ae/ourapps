@@ -2,11 +2,12 @@
 // platform, with the developer's own App Store Connect key. The developer's answers are saved here and written to
 // Apple step by step; the ten-minute schedule follows each submitted version until it is on the store.
 import {
-  AGE_RATING_FREQUENCY, AGE_RATING_LEVELS, AGE_RATING_YES_NO, APP_STORE_CATEGORIES, DISPLAY_TYPES, POLICY_COLLECTS, POLICY_STORAGE,
-  ageRatingAnswers, displayTypeFor, requiredDisplayTypes, sizeText, type AgeRatingAnswers, type AppManifest,
+  AGE_RATING_FREQUENCY, AGE_RATING_LEVELS, AGE_RATING_YES_NO, APP_STORE_CATEGORIES, FALLBACK_SCREENSHOT_GROUPS, POLICY_COLLECTS, POLICY_STORAGE,
+  ageRatingAnswers, groupFor, requiredScreenshots, sizeText, type AgeRatingAnswers, type AppManifest, type ScreenshotGroup,
 } from "@my/store-shared";
 import { AppleClient, AppleError, type UploadOperation } from "./apple.js";
 import type { ApplePlatform } from "./apple-platform.js";
+import { screenshotGroups } from "./asset-library.js";
 import { audit } from "./audit.js";
 import { randomId } from "./crypto.js";
 import { Db, type AppRow, type AppStoreAppRow, type AppStoreDraft, type AppStoreVersionRow, type DefaultPolicy, type Developer, type ReleaseType, type ScreenshotState, type TestflightBuildRow } from "./db.js";
@@ -15,7 +16,7 @@ import { appleClient } from "./flow.js";
 import { HttpError, httpsUrlOrEmpty } from "./http.js";
 import { imageInfo } from "./image.js";
 import { loadSecrets } from "./secrets.js";
-import { requireTarget } from "./targets.js";
+import { requireTarget, TargetDisabledError } from "./targets.js";
 import { reviewContact } from "./testflight.js";
 import { fetchUpstream, loadManifest } from "./upstream.js";
 
@@ -23,8 +24,10 @@ export const UNLISTED_REQUEST = "https://developer.apple.com/support/unlisted-ap
 // Apple asks for this in the review notes of an app meant for unlisted distribution.
 export const UNLISTED_NOTE = "This app is intended for unlisted distribution.";
 const DEFAULT_NOTES = "Shared with the people we work with through ourapps.app. No sign-in is needed to use the app.";
-// Outbound calls one screenshots request may make; the Workers free plan allows 50.
-const SCREENSHOT_BUDGET = 40;
+// What one screenshots request may do: outbound calls (the Workers free plan allows 50) and image bytes held and sent,
+// which cost CPU time against the free plan's 10 ms. At least one image is handled per request.
+export const SCREENSHOT_CALLS = 40;
+export const SCREENSHOT_BYTES = 2_000_000;
 
 export const storeUrl = (appleAppId: string) => `https://apps.apple.com/app/id${appleAppId}`;
 const connectUrl = (appleAppId: string, page = "") => `https://appstoreconnect.apple.com/apps/${appleAppId}/distribution${page}`;
@@ -129,20 +132,24 @@ async function save(env: Env, deps: Deps, info: AppStoreAppRow, v: AppStoreVersi
 
 function screenshotSummary(v: AppStoreVersionRow, platform: ApplePlatform) {
   const s = v.screenshots && v.screenshots.version === v.draft.version ? v.screenshots : null;
-  const required = requiredDisplayTypes(platform, s?.runsOnIpad ?? platform === "ios");
-  const uploaded = (type: string) => s?.items.filter((i) => i.done && !i.error && i.displayType === type).length ?? 0;
-  const missing = required.filter((r) => !r.types.some((t) => uploaded(t) > 0)).map((r) => {
-    const types = r.types.map((id) => DISPLAY_TYPES.find((t) => t.id === id)!);
-    const either = types.some((t) => !t.fixed) ? " (upright or turned)" : "";
-    return `${r.label} is missing: add a screenshot of ${types.map(sizeText).join(", or ")} pixels${either}.`;
+  const groups = s?.groups ?? FALLBACK_SCREENSHOT_GROUPS;
+  const required = requiredScreenshots(groups, platform, s?.runsOnIpad ?? platform === "ios");
+  const placed = (group: string) => s?.items.filter((i) => i.done && !i.error && i.group === group).length ?? 0;
+  const group = (id: string) => groups.find((g) => g.id === id)!;
+  const missing = required.filter((r) => !r.groups.some((id) => placed(id) > 0)).map((r) => {
+    const either = r.groups.some((id) => group(id).turnable) ? " (upright or turned)" : "";
+    return `${r.label} is missing: add a screenshot of ${r.groups.map((id) => sizeText(group(id))).join(", or ") || "a size Apple lists"} pixels${either}.`;
   });
   const pending = s?.items.filter((i) => !i.done).length ?? 0;
   return {
-    required: required.map((r) => ({ label: r.label, displayTypes: r.types.map((id) => { const t = DISPLAY_TYPES.find((d) => d.id === id)!; return { id, label: t.label, sizes: sizeText(t), uploaded: uploaded(id) }; }) })),
+    required: required.map((r) => ({ label: r.label, groups: r.groups.map((id) => ({ id, label: group(id).label, sizes: sizeText(group(id)), uploaded: placed(id) })) })),
     missing,
     pending,
     started: Boolean(s),
-    items: (s?.items ?? []).map((i) => ({ url: i.url, displayType: i.displayType, width: i.width ?? null, height: i.height ?? null, uploaded: i.done && !i.error && Boolean(i.screenshotId), error: i.error ?? null })),
+    // Screenshots Apple is still processing; the step is done once Apple has processed them all.
+    processing: s && pending === 0 && !s.checked ? s.processing : 0,
+    checked: Boolean(s?.checked),
+    items: (s?.items ?? []).map((i) => ({ url: i.url, group: i.group, width: i.width ?? null, height: i.height ?? null, uploaded: i.done && !i.error && Boolean(i.placementId), error: i.error ?? null })),
     done: Boolean(s) && pending === 0 && missing.length === 0 && s!.checked,
   };
 }
@@ -465,21 +472,30 @@ async function screenshotSource(env: Env, deps: Deps, app: AppRow, githubToken: 
   return { urls: [...new Set(urls)].slice(0, 40), runsOnIpad: platform === "ios" && (!devices?.length || devices.includes("ipad")) };
 }
 
-async function md5Hex(bytes: Uint8Array): Promise<string> {
-  const digest = new Uint8Array(await crypto.subtle.digest("MD5", bytes));
-  return Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
 async function uploadPart(deps: Deps, op: UploadOperation, bytes: Uint8Array): Promise<void> {
   if (!op.url.startsWith("https://")) throw new HttpError(502, "Apple gave an upload address that is not https; upload again.");
   const headers = new Headers();
   for (const h of op.requestHeaders ?? []) headers.set(h.name, h.value);
-  const res = await deps.fetch(op.url, { method: op.method, headers, body: bytes.slice(op.offset, op.offset + op.length), redirect: "manual" });
+  const body = op.offset === 0 && op.length === bytes.length ? bytes : bytes.subarray(op.offset, op.offset + op.length);
+  const res = await deps.fetch(op.url, { method: op.method, headers, body, redirect: "manual" });
   if (!res.ok) throw new HttpError(502, `Apple's upload address refused a screenshot (status ${res.status}); upload again.`);
 }
 
-// POST /api/dev/apps/:id/appstore/:platform/screenshots - checks the app's screenshots against Apple's sizes and uploads
-// them. Each request stays inside the free plan's outbound calls; while `pending` is above 0, call it again.
+// Apple's placement groups for screenshots, from its reference data; the fallback table only when that cannot be read.
+async function loadGroups(apple: AppleClient): Promise<{ groups: ScreenshotGroup[]; from: "apple" | "fallback" }> {
+  try {
+    const groups = screenshotGroups(await apple.assetReferenceData());
+    if (groups.length) return { groups, from: "apple" };
+  } catch (err) {
+    if (err instanceof AppleError && (err.status === 401 || err.status === 403)) throw err;
+    console.error(`asset library reference data: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  return { groups: FALLBACK_SCREENSHOT_GROUPS, from: "fallback" };
+}
+
+// POST /api/dev/apps/:id/appstore/:platform/screenshots - checks the app's screenshots against Apple's sizes, uploads them
+// to the app's asset library and places them on the version. Each request does a bounded share; while `pending` is above 0,
+// or Apple is still processing them, call it again. The ten-minute schedule continues unfinished uploads too.
 export async function uploadScreenshots(request: Request, env: Env, deps: Deps, dev: Developer, app: AppRow, body: { restart?: unknown }) {
   await requireReady(env, app);
   if (body.restart !== undefined && typeof body.restart !== "boolean") throw new HttpError(400, "restart must be true or false");
@@ -488,100 +504,132 @@ export async function uploadScreenshots(request: Request, env: Env, deps: Deps, 
   const { info, v } = await loadState(env, deps, dev, app, builds);
   requireEditable(v);
   requireVersionText(v);
+  await runScreenshots(env, deps, app, info, v, { calls: SCREENSHOT_CALLS, bytes: SCREENSHOT_BYTES, restart: body.restart === true });
+  const view = await appStoreView(env, deps, dev, app);
+  if (view.screenshots.pending === 0 && view.screenshots.checked) await audit(request, env, deps, dev.id, "app-store-screenshots-uploaded", `${app.name} ${platform}: ${view.screenshots.items.filter((i) => i.uploaded).length} uploaded`);
+  return view;
+}
+
+async function runScreenshots(env: Env, deps: Deps, app: AppRow, info: AppStoreAppRow, v: AppStoreVersionRow, limits: { calls: number; bytes: number; restart?: boolean }): Promise<void> {
   let used = 0;
   const counted: Deps = { ...deps, fetch: (input, init) => { used++; return deps.fetch(input, init); } };
-  const remaining = () => SCREENSHOT_BUDGET - used;
+  const budget = { calls: () => limits.calls - used, bytes: limits.bytes };
   try {
     const secrets = await loadSecrets(env, app.developerId, ["appleIssuerId", "appleKeyId", "applePrivateKey", "githubToken"]);
     const apple = appleClient(env, counted, secrets);
     const source = await screenshotSource(env, counted, app, secrets.githubToken);
     const key = source.urls.join("\n");
     let s: ScreenshotState | null = v.screenshots;
-    if (body.restart === true || !s || s.version !== v.draft.version || s.source !== key) {
-      s = { version: v.draft.version, source: key, runsOnIpad: source.runsOnIpad, items: source.urls.map((url) => ({ url, displayType: null, done: false })), sets: {}, setsRead: false, cleared: [], checked: false };
+    if (limits.restart || !s || s.version !== v.draft.version || s.source !== key) {
+      const loaded = await loadGroups(apple);
+      const previous = [...(s?.previous ?? []), ...(s?.items.flatMap((i) => (i.imageId ? [i.imageId] : [])) ?? [])];
+      s = { version: v.draft.version, source: key, runsOnIpad: source.runsOnIpad, items: source.urls.map((url) => ({ url, group: null, done: false })), groups: loaded.groups, groupsFrom: loaded.from, libraryId: s?.libraryId ?? null, previous, cleared: false, ordered: false, checked: false, processing: 0 };
     }
     s.runsOnIpad = source.runsOnIpad;
     v.screenshots = s;
-    await placeScreenshots(apple, counted, env, secrets.githubToken, v, s, platform, remaining);
+    await placeScreenshots(apple, counted, env, secrets.githubToken, app, v, s, budget);
     delete v.errors.screenshots;
   } catch (err) {
+    if (err instanceof TargetDisabledError) throw err;
     const message = appStoreProblem(err);
     v.errors.screenshots = message;
     await save(env, deps, info, v);
     throw new HttpError(err instanceof HttpError ? err.status : 502, message);
   }
   await save(env, deps, info, v);
-  const view = await appStoreView(env, deps, dev, app);
-  if (view.screenshots.pending === 0) await audit(request, env, deps, dev.id, "app-store-screenshots-uploaded", `${app.name} ${platform}: ${view.screenshots.items.filter((i) => i.uploaded).length} uploaded`);
-  return view;
 }
 
-async function placeScreenshots(apple: AppleClient, deps: Deps, env: Env, githubToken: string | undefined, v: AppStoreVersionRow, s: ScreenshotState, platform: ApplePlatform, remaining: () => number): Promise<void> {
+async function placeScreenshots(apple: AppleClient, deps: Deps, env: Env, githubToken: string | undefined, app: AppRow, v: AppStoreVersionRow, s: ScreenshotState, budget: { calls: () => number; bytes: number }): Promise<void> {
+  const platform = v.platform;
   const localizationId = v.synced.localizationId!;
-  const types = DISPLAY_TYPES.filter((t) => t.platform === platform);
-  if (!s.setsRead) {
-    for (const set of await apple.screenshotSets(localizationId)) if (types.some((t) => t.id === set.displayType)) s.sets[set.displayType] ??= set.id;
-    s.setsRead = true;
-  }
-  // Screenshots already in the sets (an earlier upload, or copied from the previous version) are replaced.
-  for (const t of types) {
-    if (s.cleared.includes(t.id)) continue;
-    if (s.sets[t.id]) {
-      if (remaining() < 6) return;
-      const old = await apple.screenshotsInSet(s.sets[t.id]);
-      for (const shot of old) {
-        if (remaining() < 6) return;
-        await apple.deleteScreenshot(shot.id);
-      }
+  s.libraryId ??= await apple.assetLibrary(app.ascAppId!);
+  // The version's earlier screenshots are replaced: their placements go first, then the images ourapps uploaded,
+  // only once nothing else places them.
+  if (!s.cleared) {
+    for (const placement of await apple.screenshotPlacements(localizationId)) {
+      if (budget.calls() < 6) return;
+      await apple.deletePlacement(placement.id);
     }
-    s.cleared.push(t.id);
+    for (const imageId of [...s.previous]) {
+      if (budget.calls() < 6) return;
+      if (!(await apple.imageIsPlaced(imageId))) {
+        try {
+          await apple.deleteImage(imageId);
+        } catch (err) {
+          if (!(err instanceof AppleError && err.status === 404)) throw err;
+        }
+      }
+      s.previous = s.previous.filter((id) => id !== imageId);
+    }
+    s.cleared = true;
   }
+  let bytesUsed = 0;
   for (const [index, item] of s.items.entries()) {
     if (item.done) continue;
-    if (remaining() < 10) return;
+    if (budget.calls() < 8 || bytesUsed >= budget.bytes) return;
     const res = await fetchUpstream(env, deps, item.url, githubToken);
     if (!res.ok) {
+      await res.body?.cancel();
       Object.assign(item, { done: true, error: `could not be downloaded (status ${res.status})` });
       continue;
     }
+    const declared = Number(res.headers.get("Content-Length") ?? "");
+    if (bytesUsed > 0 && declared > 0 && bytesUsed + declared > budget.bytes) {
+      await res.body?.cancel();
+      return;
+    }
     const bytes = new Uint8Array(await res.arrayBuffer());
+    bytesUsed += bytes.length;
     const image = imageInfo(bytes);
     if (!image) {
       Object.assign(item, { done: true, error: "is not a PNG or JPEG image, which is what Apple takes" });
       continue;
     }
     Object.assign(item, { width: image.width, height: image.height });
-    const type = displayTypeFor(platform, image.width, image.height);
-    if (!type) {
+    const found = groupFor(s.groups, platform, image.width, image.height);
+    if (!found) {
       Object.assign(item, { done: true, error: `is ${image.width} x ${image.height} pixels, a size Apple does not take for ${PLATFORM_NAMES[platform]}` });
       continue;
     }
-    item.displayType = type.id;
-    if (image.alpha) {
+    item.group = found.group.id;
+    if (image.alpha && !found.alphaAllowed) {
       Object.assign(item, { done: true, error: "has transparency, which Apple does not take; save it without an alpha channel" });
       continue;
     }
-    if (s.items.filter((i) => i.done && !i.error && i.displayType === type.id).length >= 10) {
-      Object.assign(item, { done: true, error: `is more than the 10 screenshots Apple takes for ${type.label}` });
+    if (s.items.filter((i) => i.done && !i.error && i.group === found.group.id).length >= found.group.maxCount) {
+      Object.assign(item, { done: true, error: `is more than the ${found.group.maxCount} screenshots Apple takes for ${found.group.label}` });
       continue;
     }
-    s.sets[type.id] ??= await apple.createScreenshotSet(localizationId, type.id);
-    const reserved = await apple.reserveScreenshot(s.sets[type.id], `${type.id.toLowerCase()}-${index + 1}.${image.type === "png" ? "png" : "jpg"}`, bytes.length);
+    // An image reserved by an earlier request that did not finish is left for the next replacement to delete.
+    if (item.imageId) s.previous.push(item.imageId);
+    const reserved = await apple.reserveImage(s.libraryId, `${found.group.id.toLowerCase()}-${index + 1}.${image.type === "png" ? "png" : "jpg"}`, bytes.length, `${app.name} ${found.group.label} ${index + 1}`.slice(0, 64));
+    item.imageId = reserved.id;
     for (const op of reserved.operations) await uploadPart(deps, op, bytes);
-    await apple.commitScreenshot(reserved.id, await md5Hex(bytes));
-    Object.assign(item, { done: true, screenshotId: reserved.id });
+    await apple.commitImage(reserved.id);
+    item.placementId = await apple.placeScreenshot(localizationId, reserved.id, found.group.id);
+    item.done = true;
   }
-  if (s.checked) return;
-  // Apple checks each upload after it is committed; a failure there is shown on the screenshot.
-  const sets = [...new Set(s.items.filter((i) => i.screenshotId && i.displayType).map((i) => s.sets[i.displayType!]))];
-  if (remaining() < sets.length) return;
-  for (const setId of sets) {
-    for (const shot of await apple.screenshotsInSet(setId)) {
-      const item = s.items.find((i) => i.screenshotId === shot.id);
-      if (item && shot.state === "FAILED") item.error = `was not accepted by Apple: ${shot.errors.join("; ") || "no reason given"}`;
+  if (!s.ordered) {
+    const groups = [...new Set(s.items.flatMap((i) => (i.placementId && i.group ? [i.group] : [])))];
+    if (budget.calls() < groups.length + 1) return;
+    for (const group of groups) {
+      const placements = s.items.filter((i) => i.group === group && i.placementId).map((i) => i.placementId!);
+      if (placements.length > 1) await apple.orderPlacements(localizationId, group, placements);
     }
+    s.ordered = true;
   }
-  s.checked = true;
+  if (s.checked || budget.calls() < 1) return;
+  // Apple processes each image after it is committed; a failure there is shown on the screenshot.
+  const placed = await apple.screenshotPlacements(localizationId);
+  let processing = 0;
+  for (const item of s.items) {
+    const placement = placed.find((p) => p.id === item.placementId);
+    if (!item.placementId || !placement) continue;
+    if (placement.imageState === "FAILED" || placement.state === "FAILED") item.error = `was not accepted by Apple: ${placement.imageDetails.join("; ") || "no reason given"}`;
+    else if (placement.imageState === "AWAITING_UPLOAD" || placement.imageState === "UPLOAD_COMPLETE" || placement.state === "ASSET_PROCESSING") processing++;
+  }
+  s.processing = processing;
+  s.checked = processing === 0;
 }
 
 // Submit and release
@@ -669,15 +717,19 @@ async function followVersion(apple: AppleClient, v: AppStoreVersionRow, now: str
   delete v.errors.follow;
 }
 
-// Run on the ten-minute schedule: a few submitted versions per run, read from Apple, least recently checked first.
-export async function tickAppStore(env: Env, deps: Deps): Promise<void> {
+// Run on the ten-minute schedule after TestFlight, with the outbound calls the run has left: a few submitted versions
+// read from Apple, least recently checked first, then one version's unfinished screenshots.
+export async function tickAppStore(env: Env, deps: Deps, calls = 45): Promise<void> {
+  let used = 0;
+  const counted: Deps = { ...deps, fetch: (input, init) => { used++; return deps.fetch(input, init); } };
   const db = Db.from(env);
   const clients = new Map<string, AppleClient>();
   for (const v of await db.followedAppStoreVersions(4)) {
+    if (calls - used < 2) return;
     try {
       const app = await db.appById(v.appId);
       if (!app) continue;
-      if (!clients.has(app.developerId)) clients.set(app.developerId, appleClient(env, deps, await loadSecrets(env, app.developerId, ["appleIssuerId", "appleKeyId", "applePrivateKey"])));
+      if (!clients.has(app.developerId)) clients.set(app.developerId, appleClient(env, counted, await loadSecrets(env, app.developerId, ["appleIssuerId", "appleKeyId", "applePrivateKey"])));
       await followVersion(clients.get(app.developerId)!, v, deps.now().toISOString());
     } catch (err) {
       v.checkedAt = deps.now().toISOString();
@@ -686,6 +738,20 @@ export async function tickAppStore(env: Env, deps: Deps): Promise<void> {
     }
     v.updatedAt = deps.now().toISOString();
     await db.putAppStoreVersion(v);
+  }
+  const left = calls - used;
+  if (left < 12) return;
+  const v = (await db.appStoreScreenshotWork()).find((row) => row.screenshots && row.screenshots.version === row.draft.version && (row.screenshots.items.some((i) => !i.done) || !row.screenshots.checked));
+  if (!v) return;
+  try {
+    const base = await db.appById(v.appId);
+    if (!base) return;
+    const app = await db.platformApp(base, v.platform);
+    await requireReady(env, app);
+    const info = (await db.appStoreApp(v.appId))!;
+    await runScreenshots(env, deps, app, info, v, { calls: Math.min(left, SCREENSHOT_CALLS), bytes: SCREENSHOT_BYTES });
+  } catch (err) {
+    console.error(`app store screenshots ${v.appId} ${v.platform}: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
