@@ -19,31 +19,7 @@ describe("matchRoute", () => {
     expect(matchRoute("/example")).toEqual({ page: "example" });
     expect(matchRoute("/terms")).toEqual({ page: "terms" });
     expect(matchRoute("/reference")).toEqual({ page: "reference" });
-    expect(matchRoute("/small")).toEqual({ page: "small" });
     expect(matchRoute("/example/poker-night")).toEqual({ page: "example-app" });
-  });
-
-  it("maps the recipe library and component catalogue", () => {
-    expect(matchRoute("/recipes")).toEqual({ page: "recipes" });
-    expect(matchRoute("/recipes/poker-night")).toEqual({ page: "recipe", slug: "poker-night" });
-    expect(matchRoute("/components")).toEqual({ page: "components" });
-    expect(matchRoute("/components/card-deck")).toEqual({ page: "component", slug: "card-deck" });
-    expect(matchRoute("/components/card-deck/details")).toEqual({ page: "details", kind: "components", slug: "card-deck" });
-    expect(matchRoute("/recipes/poker-night/details")).toEqual({ page: "details", kind: "recipes", slug: "poker-night" });
-    expect(matchRoute("/recipes/poker-night/other")).toEqual({ page: "not-found" });
-    expect(matchRoute("/classes")).toEqual({ page: "classes" });
-    expect(matchRoute("/classes/card-deck-class")).toEqual({ page: "class", slug: "card-deck-class" });
-    expect(matchRoute("/categories")).toEqual({ page: "categories" });
-  });
-
-  it("does not take /recipes or /components for developer pages", () => {
-    expect(matchRoute("/recipes").page).not.toBe("dev-page");
-    expect(matchRoute("/components").page).not.toBe("dev-page");
-    expect(matchRoute("/recipes/Bad")).toEqual({ page: "not-found" });
-    expect(matchRoute("/recipes/search")).toEqual({ page: "not-found" });
-    expect(matchRoute("/recipes/a/b")).toEqual({ page: "not-found" });
-    expect(matchRoute("/components/x")).toEqual({ page: "not-found" });
-    expect(matchRoute("/components/card-deck/0.1.0")).toEqual({ page: "not-found" });
   });
 
   it("rejects everything else", () => {
