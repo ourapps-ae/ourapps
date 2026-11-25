@@ -258,6 +258,15 @@ async function keyedChecks() {
     record(signing.status === 404 && typeof signing.json?.error === "string", "GET /api/build/:id/signing explains why it is not ready", signing.json?.error);
     const upload = await call("POST", P("/api/build/:id/testflight/upload"), { token: newToken, body: { version: "0", buildNumber: "0", fileName: "x.ipa", fileSize: 1 }, pattern: "/api/build/:id/testflight/upload" });
     expectStatus("POST /api/build/:id/testflight/upload before TestFlight is set up is a 409", upload, 409);
+    // The same routes per Apple platform, before set-up: nothing reaches Apple.
+    const platformSigning = await call("GET", P("/api/build/:id/tvos/signing"), { token: newToken, pattern: "/api/build/:app/:platform/signing" });
+    record(platformSigning.status === 404 && typeof platformSigning.json?.error === "string", "GET /api/build/:app/:platform/signing explains why it is not ready", `${platformSigning.status} ${platformSigning.json?.error}`);
+    const platformUpload = await call("POST", P("/api/build/:id/tvos/testflight/upload"), { token: newToken, body: { version: "0", buildNumber: "0", fileName: "x.ipa", fileSize: 1 }, pattern: "/api/build/:app/:platform/testflight/upload" });
+    expectStatus("POST /api/build/:app/:platform/testflight/upload before TestFlight is set up is a 409", platformUpload, 409);
+    const fileStatus = await call("GET", P("/api/build/:id/tvos/testflight/upload/unknown-file/status"), { token: newToken, pattern: "/api/build/:app/:platform/testflight/upload/:file/status" });
+    expectStatus("GET /api/build/:app/:platform/testflight/upload/:file/status for an unknown file is a 404", fileStatus, 404);
+    const fileOperations = await call("POST", P("/api/build/:id/tvos/testflight/upload/unknown-file/operations"), { token: newToken, body: { version: "0", buildNumber: "0", fileSize: 1 }, pattern: "/api/build/:app/:platform/testflight/upload/:file/operations" });
+    expectStatus("POST /api/build/:app/:platform/testflight/upload/:file/operations for an unknown file is a 404", fileOperations, 404);
 
     // The throwaway app has no bundle ID, so neither call reaches Apple.
     const tf = await call("GET", P("/api/dev/apps/:id/testflight"), { pattern: "/api/dev/apps/:id/testflight" });
@@ -268,6 +277,13 @@ async function keyedChecks() {
     record(tfSetUp.status === 200 && tfSetUp.json?.needs === "bundle-id", "POST /api/dev/apps/:id/testflight names the missing bundle ID", `${tfSetUp.status} ${tfSetUp.json?.needs}`);
     const tfBuild = await call("POST", P("/api/dev/apps/:id/testflight/build"), { pattern: "/api/dev/apps/:id/testflight/build" });
     expectStatus("POST /api/dev/apps/:id/testflight/build before set-up is a 409", tfBuild, 409);
+    const tvTf = await call("GET", P("/api/dev/apps/:id/testflight/tvos"), { pattern: "/api/dev/apps/:id/testflight/:platform" });
+    expectStatus("GET /api/dev/apps/:id/testflight/:platform", tvTf, 200);
+    record(tvTf.json?.setUp === false && tvTf.json?.needs === "bundle-id", "Apple TV TestFlight needs its bundle ID first", tvTf.json?.needs);
+    const tvSetUp = await call("POST", P("/api/dev/apps/:id/testflight/tvos"), { pattern: "/api/dev/apps/:id/testflight/:platform" });
+    record(tvSetUp.status === 200 && tvSetUp.json?.needs === "bundle-id", "POST /api/dev/apps/:id/testflight/:platform names the missing bundle ID", `${tvSetUp.status} ${tvSetUp.json?.needs}`);
+    const tvBuild = await call("POST", P("/api/dev/apps/:id/testflight/tvos/build"), { pattern: "/api/dev/apps/:id/testflight/:platform/build" });
+    expectStatus("POST /api/dev/apps/:id/testflight/:platform/build before set-up is a 409", tvBuild, 409);
     // Without TestFlight, App Store work stops before Apple: status only, then the plain refusal.
     const store = await call("GET", P("/api/dev/apps/:id/appstore/ios"), { pattern: "/api/dev/apps/:id/appstore/:platform" });
     expectStatus("GET /api/dev/apps/:id/appstore/:platform", store, 200);
