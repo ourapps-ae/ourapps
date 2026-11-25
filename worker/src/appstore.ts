@@ -396,19 +396,29 @@ function startVersion(v: AppStoreVersionRow): void {
   v.draft.buildNumber = null;
 }
 
+// Writes only what differs from what Apple holds, so saving the same answers again sends Apple nothing.
 async function writeAppInfo(apple: AppleClient, env: Env, app: AppRow, info: AppStoreAppRow): Promise<void> {
   const appleAppId = app.ascAppId!;
   const answers = info.info!;
-  const appInfoId = await apple.editableAppInfo(appleAppId);
-  await apple.setCategory(appInfoId, answers.category);
-  await apple.setAgeRating(appInfoId, answers.ageRating);
+  const current = await apple.editableAppInfo(appleAppId);
+  const settings = await apple.appSettings(appleAppId);
+  if (current.category !== answers.category) await apple.setCategory(current.id, answers.category);
+  const age = current.ageRating?.attributes ? current.ageRating as { id: string; attributes: Record<string, unknown> } : await apple.ageRatingDeclaration(current.id);
+  const ageChanges = Object.fromEntries(Object.entries(answers.ageRating).filter(([key, value]) => age.attributes[key] !== value));
+  if (Object.keys(ageChanges).length) await apple.updateAgeRating(age.id, ageChanges);
   const policyUrl = answers.privacyPolicyUrl || `${env.PUBLIC_ORIGIN}/privacy/${info.policyId}`;
   // Apple TV shows the policy's text rather than its address.
   const tv = app.platform === "tvos" || Boolean((await Db.from(env).platformApp(app, "tvos")).ascAppId);
-  const text = !tv ? undefined : info.policy && !answers.privacyPolicyUrl ? policyText(app.name, info.policy) : `The privacy policy for ${app.name} is at ${policyUrl}`;
-  await apple.setPrivacyPolicy(appInfoId, await apple.primaryLocale(appleAppId), app.name, policyUrl, text);
-  await apple.setContentRights(appleAppId, answers.thirdPartyContent);
-  await apple.makeFree(appleAppId);
+  const policy: Record<string, string> = { privacyPolicyUrl: policyUrl };
+  if (tv) policy.privacyPolicyText = info.policy && !answers.privacyPolicyUrl ? policyText(app.name, info.policy) : `The privacy policy for ${app.name} is at ${policyUrl}`;
+  for (const l of current.localizations) {
+    const changes = Object.fromEntries(Object.entries(policy).filter(([key, value]) => l[key as "privacyPolicyUrl" | "privacyPolicyText"] !== value));
+    if (Object.keys(changes).length) await apple.updateAppInfoLocalization(l.id, changes);
+  }
+  if (!current.localizations.some((l) => l.locale === settings.primaryLocale)) await apple.createAppInfoLocalization(current.id, settings.primaryLocale, app.name, policy);
+  const rights = answers.thirdPartyContent ? "USES_THIRD_PARTY_CONTENT" : "DOES_NOT_USE_THIRD_PARTY_CONTENT";
+  if (settings.contentRightsDeclaration !== rights) await apple.setContentRights(appleAppId, rights);
+  if (!(await apple.isFree(appleAppId))) await apple.makeFree(appleAppId);
   await apple.makeAvailableEverywhere(appleAppId);
 }
 

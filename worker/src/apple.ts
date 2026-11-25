@@ -343,40 +343,84 @@ export class AppleClient {
   // App Store
 
   async primaryLocale(appId: string): Promise<string> {
-    const app = await this.call<{ data: Resource<{ primaryLocale?: string }> }>("GET", `/v1/apps/${appId}?fields[apps]=primaryLocale`);
-    return app.data.attributes.primaryLocale ?? "en-US";
+    return (await this.appSettings(appId)).primaryLocale;
   }
 
-  // The app information that goes live with the next version, not the one on the store now.
-  async editableAppInfo(appId: string): Promise<string> {
-    const res = await this.call<{ data: Resource<{ state?: string; appStoreState?: string }>[] }>("GET", `/v1/apps/${appId}/appInfos?limit=10`);
+  async appSettings(appId: string): Promise<{ primaryLocale: string; contentRightsDeclaration: string | null }> {
+    const app = await this.call<{ data: Resource<{ primaryLocale?: string; contentRightsDeclaration?: string | null }> }>("GET", `/v1/apps/${appId}?fields[apps]=primaryLocale,contentRightsDeclaration`);
+    return { primaryLocale: app.data.attributes.primaryLocale ?? "en-US", contentRightsDeclaration: app.data.attributes.contentRightsDeclaration ?? null };
+  }
+
+  // The app information that goes live with the next version, not the one on the store now, with what Apple holds for it:
+  // the primary category, the age rating answers and each localization's privacy policy.
+  async editableAppInfo(appId: string): Promise<AppInfoState> {
+    const res = await this.call<{ data: Resource<{ state?: string; appStoreState?: string }>[]; included?: Resource<Record<string, unknown>>[] }>(
+      "GET",
+      `/v1/apps/${appId}/appInfos?include=primaryCategory,ageRatingDeclaration,appInfoLocalizations&limit=10&limit[appInfoLocalizations]=50`,
+    );
     const live = ["READY_FOR_DISTRIBUTION", "REPLACED_WITH_NEW_INFO", "READY_FOR_SALE"];
     const info = res.data.find((i) => !live.includes(i.attributes.state ?? i.attributes.appStoreState ?? "")) ?? res.data[0];
     if (!info) throw new AppleError(404, "Apple has no app information for this app.");
-    return info.id;
+    const included = (type: string, id: string | undefined) => res.included?.find((r) => r.type === type && r.id === id);
+    const ageId = asList(info.relationships?.ageRatingDeclaration?.data)[0]?.id;
+    const age = included("ageRatingDeclarations", ageId);
+    return {
+      id: info.id,
+      category: asList(info.relationships?.primaryCategory?.data)[0]?.id ?? null,
+      ageRating: ageId ? { id: ageId, attributes: age?.attributes ?? null } : null,
+      localizations: asList(info.relationships?.appInfoLocalizations?.data).map((l) => {
+        const a = included("appInfoLocalizations", l.id)?.attributes ?? {};
+        return { id: l.id, locale: String(a.locale ?? ""), privacyPolicyUrl: (a.privacyPolicyUrl as string | null | undefined) ?? null, privacyPolicyText: (a.privacyPolicyText as string | null | undefined) ?? null };
+      }),
+    };
   }
 
-  async setAgeRating(appInfoId: string, answers: Record<string, string | boolean>): Promise<void> {
-    const res = await this.call<{ data: Resource }>("GET", `/v1/appInfos/${appInfoId}/ageRatingDeclaration`);
-    await this.call("PATCH", `/v1/ageRatingDeclarations/${res.data.id}`, { data: { type: "ageRatingDeclarations", id: res.data.id, attributes: answers } });
+  async ageRatingDeclaration(appInfoId: string): Promise<{ id: string; attributes: Record<string, unknown> }> {
+    const res = await this.call<{ data: Resource<Record<string, unknown>> }>("GET", `/v1/appInfos/${appInfoId}/ageRatingDeclaration`);
+    return { id: res.data.id, attributes: res.data.attributes ?? {} };
+  }
+
+  async updateAgeRating(declarationId: string, attributes: Record<string, unknown>): Promise<void> {
+    await this.call("PATCH", `/v1/ageRatingDeclarations/${declarationId}`, { data: { type: "ageRatingDeclarations", id: declarationId, attributes } });
   }
 
   async setCategory(appInfoId: string, category: string): Promise<void> {
     await this.call("PATCH", `/v1/appInfos/${appInfoId}`, { data: { type: "appInfos", id: appInfoId, relationships: { primaryCategory: { data: { type: "appCategories", id: category } } } } });
   }
 
-  // Every localization gets the address, and the text Apple TV shows when given; the primary language is added when it has none.
-  async setPrivacyPolicy(appInfoId: string, locale: string, name: string, url: string, text?: string): Promise<void> {
-    const res = await this.call<{ data: Resource<{ locale: string }>[] }>("GET", `/v1/appInfos/${appInfoId}/appInfoLocalizations?limit=50`);
-    const attributes = { privacyPolicyUrl: url, ...(text === undefined ? {} : { privacyPolicyText: text }) };
-    for (const l of res.data) await this.call("PATCH", `/v1/appInfoLocalizations/${l.id}`, { data: { type: "appInfoLocalizations", id: l.id, attributes } });
-    if (!res.data.some((l) => l.attributes.locale === locale)) {
-      await this.call("POST", "/v1/appInfoLocalizations", { data: { type: "appInfoLocalizations", attributes: { locale, name: name.slice(0, 30), ...attributes }, relationships: { appInfo: { data: { type: "appInfos", id: appInfoId } } } } });
-    }
+  async updateAppInfoLocalization(id: string, attributes: Record<string, string>): Promise<void> {
+    await this.call("PATCH", `/v1/appInfoLocalizations/${id}`, { data: { type: "appInfoLocalizations", id, attributes } });
   }
 
-  async setContentRights(appId: string, thirdParty: boolean): Promise<void> {
-    await this.call("PATCH", `/v1/apps/${appId}`, { data: { type: "apps", id: appId, attributes: { contentRightsDeclaration: thirdParty ? "USES_THIRD_PARTY_CONTENT" : "DOES_NOT_USE_THIRD_PARTY_CONTENT" } } });
+  async createAppInfoLocalization(appInfoId: string, locale: string, name: string, attributes: Record<string, string>): Promise<void> {
+    await this.call("POST", "/v1/appInfoLocalizations", { data: { type: "appInfoLocalizations", attributes: { locale, name: name.slice(0, 30), ...attributes }, relationships: { appInfo: { data: { type: "appInfos", id: appInfoId } } } } });
+  }
+
+  async setContentRights(appId: string, declaration: string): Promise<void> {
+    await this.call("PATCH", `/v1/apps/${appId}`, { data: { type: "apps", id: appId, attributes: { contentRightsDeclaration: declaration } } });
+  }
+
+  // Free when every price in the base territory, now or scheduled, is the free price point.
+  async isFree(appId: string): Promise<boolean> {
+    let schedule: { data?: Resource | null };
+    try {
+      schedule = await this.call<{ data?: Resource | null }>("GET", `/v1/apps/${appId}/appPriceSchedule?include=baseTerritory`);
+    } catch (err) {
+      if (err instanceof AppleError && err.status === 404) return false;
+      throw err;
+    }
+    const base = asList(schedule?.data?.relationships?.baseTerritory?.data)[0]?.id;
+    if (!schedule?.data || !base) return false;
+    const prices = await this.call<{ data: Resource<{ startDate?: string | null; endDate?: string | null }>[]; included?: Resource<{ customerPrice?: string }>[] }>(
+      "GET",
+      `/v1/appPriceSchedules/${schedule.data.id}/manualPrices?filter[territory]=${base}&include=appPricePoint&fields[appPricePoints]=customerPrice&limit=200`,
+    );
+    const today = this.deps.now().toISOString().slice(0, 10);
+    const current = prices.data.filter((p) => !p.attributes.endDate || p.attributes.endDate > today);
+    return current.length > 0 && current.every((p) => {
+      const point = prices.included?.find((i) => i.type === "appPricePoints" && i.id === asList(p.relationships?.appPricePoint?.data)[0]?.id);
+      return point?.attributes.customerPrice !== undefined && Number(point.attributes.customerPrice) === 0;
+    });
   }
 
   // Free everywhere: the base territory's free price point, which Apple applies in every territory.
@@ -542,6 +586,23 @@ export class AppleError extends Error {
   constructor(public status: number, message: string, public detail = message, public code = "") {
     super(message);
   }
+}
+
+export interface AppInfoState {
+  id: string;
+  category: string | null;
+  // attributes is null when Apple returned the declaration's id without its answers.
+  ageRating: { id: string; attributes: Record<string, unknown> | null } | null;
+  localizations: { id: string; locale: string; privacyPolicyUrl: string | null; privacyPolicyText: string | null }[];
+}
+
+// The parts of Apple's App Asset Library reference data ourapps reads.
+export interface AssetReferenceData {
+  features?: { featureId?: string; placementPolicies?: { placementType?: string; groupLimits?: { groupIds?: string[]; maxCount?: number }[] }[] }[];
+  placementProfileGroups?: { placementProfileGroupId?: string; platform?: string; displayClassId?: string }[];
+  imageSpecs?: { specId?: string; dimensions?: { minWidth?: number; maxWidth?: number; minHeight?: number; maxHeight?: number }; alphaAllowed?: boolean }[];
+  placementTypes?: { placementTypeId?: string; specMappings?: { placementGroupId?: string; specs?: string[] }[] }[];
+  displayClasses?: { displayClassId?: string; deviceFamily?: string; screenDimensions?: string[] }[];
 }
 
 export interface StoreVersion {
