@@ -15,21 +15,7 @@ export type AuditEvent =
   | "app-created"
   | "app-deleted"
   | "terms-accepted"
-  | "signing-set-up"
-  | "recipe-published"
-  | "recipe-unlisted"
-  | "component-published"
-  | "component-updated"
-  | "component-unlisted"
-  | "recipe-deprecated"
-  | "recipe-undeprecated"
-  | "component-deprecated"
-  | "component-undeprecated"
-  | "recipe-quality"
-  | "component-quality"
-  | "class-published"
-  | "recipe-report-published"
-  | "categories-published";
+  | "signing-set-up";
 
 export async function audit(request: Request | null, env: Env, deps: Deps, developerId: string, event: AuditEvent, detail = ""): Promise<void> {
   const cf = request ? (request as Request & { cf?: { country?: string } }).cf : undefined;

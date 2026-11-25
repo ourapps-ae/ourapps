@@ -16,10 +16,6 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "app-game-store", "database_id": "5b0d8d7d-eae4-4bdb-967a-9bb1c49e076c", "migrations_dir": "migrations" }
   ],
-  // Catalogue documents (one per published version) and images by sha256.
-  "r2_buckets": [
-    { "binding": "CATALOGUE", "bucket_name": "ourapps-catalogue" }
-  ],
   "assets": {
     "directory": "../site/dist",
     "binding": "ASSETS",
@@ -33,13 +29,8 @@
     "GITHUB_API_BASE": "https://api.github.com",
     "GITHUB_OAUTH_BASE": "https://github.com",
     // Google Search Console HTML file name, for example google1234abcd.html; blank disables the route.
-    "GOOGLE_SITE_VERIFICATION": "",
-    // Numeric GitHub user ids, comma-separated, who may set quality and publish the category tree (5442914: george-mcintyre).
-    "CATALOGUE_CURATORS": "5442914",
-    "OSV_API_BASE": "https://api.osv.dev"
+    "GOOGLE_SITE_VERIFICATION": ""
   },
-  // Every 10 minutes: TestFlight. Hourly at 07: the vulnerability check of purls not checked for a day, the day's
-  // download refresh in chunks, and the removal of images nobody named within a day.
-  "triggers": { "crons": ["*/10 * * * *", "7 * * * *"] },
+  "triggers": { "crons": ["*/10 * * * *"] },
   "observability": { "enabled": true }
 }

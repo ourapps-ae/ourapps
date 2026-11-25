@@ -73,7 +73,7 @@ export async function clearDb(env: Env): Promise<void> {
   const kv = await env.WEBAPP_FILES.list();
   await Promise.all(kv.keys.map((k) => env.WEBAPP_FILES.delete(k.name)));
 
-  for (const table of ["build_reports", "published_digests", "developer_orgs", "image_uploaders", "listing_totals", "rate_limits", "downloads_seen", "job_progress", "component_fts", "recipe_fts", "downloads_daily", "version_purls", "purls", "advisories", "images", "class_versions", "classes", "recipes", "components", "categories", "audit_log", "api_keys", "build_run_reservations", "build_number_reservations", "testflight_builds", "app_testflight_platforms", "installer_certificates", "links", "apps", "sessions", "signing_certificates", "developer_secrets", "developers"]) {
+  for (const table of ["audit_log", "api_keys", "build_run_reservations", "build_number_reservations", "testflight_builds", "app_testflight_platforms", "installer_certificates", "links", "apps", "sessions", "signing_certificates", "developer_secrets", "developers"]) {
     await env.DB.prepare(`DELETE FROM ${table}`).run();
   }
 }
@@ -84,11 +84,10 @@ export const apple = (path: string) => `api.appstoreconnect.apple.com${path}`;
 export const jsonRes = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
 
 // Routes that let a GitHub sign-in complete for one user.
-export function oauthRoutes(user = { id: 42, login: "george", name: "George" }, orgs: string[] = []) {
+export function oauthRoutes(user = { id: 42, login: "george", name: "George" }) {
   return {
     "POST github.com/login/oauth/access_token": () => jsonRes({ access_token: "gho_test" }),
     [`GET ${gh("/user")}`]: () => jsonRes(user),
-    [`GET ${gh("/user/memberships/orgs")}`]: () => jsonRes(orgs.map((login) => ({ state: "active", organization: { login } }))),
   };
 }
 
@@ -161,8 +160,8 @@ export async function rsaPem(): Promise<string> {
 export const CSR = "-----BEGIN CERTIFICATE REQUEST-----\nMIIBVzCBwQIBADAYMRYwFAYDVQQDDA1vdXJhcHBzIHRlc3Q=\n-----END CERTIFICATE REQUEST-----\n";
 
 // Sign in through the stubbed OAuth flow; returns the Cookie header to use.
-export async function signIn(env: Env, deps: TestDeps, user?: { id: number; login: string; name: string }, acceptTerms = true, orgs: string[] = []): Promise<string> {
-  const stub = fakeFetch(oauthRoutes(user, orgs));
+export async function signIn(env: Env, deps: TestDeps, user?: { id: number; login: string; name: string }, acceptTerms = true): Promise<string> {
+  const stub = fakeFetch(oauthRoutes(user));
   const start = await handle(new Request(`${BASE}/api/auth/github`), env, deps);
   expect(start.status).toBe(302);
   const stateCookie = start.headers.get("Set-Cookie")!.split(";")[0];

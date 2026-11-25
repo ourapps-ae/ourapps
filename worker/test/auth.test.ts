@@ -19,6 +19,7 @@ describe("GitHub sign-in", () => {
     expect(loc.origin + loc.pathname).toBe("https://github.com/login/oauth/authorize");
     expect(loc.searchParams.get("client_id")).toBe("test-client-id");
     expect(loc.searchParams.get("redirect_uri")).toBe(`${BASE}/api/auth/callback`);
+    expect(loc.searchParams.get("scope")).toBe("read:user");
     expect(res.headers.get("Set-Cookie")).toMatch(/^__Host-oa_state=[0-9a-f]{32}; Path=\/; HttpOnly; SameSite=Lax; Max-Age=600; Secure$/);
   });
 
