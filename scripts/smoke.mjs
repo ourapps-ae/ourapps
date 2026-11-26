@@ -298,9 +298,9 @@ async function keyedChecks() {
     expectStatus("GET /api/dev/apps/:id/applepay", pay, 200);
     expectKeys("Apple Pay shape", pay.json, ["setUp", "needs", "step", "entitlement", "merchant", "certificate", "capability", "profiles"]);
     record(pay.json?.setUp === false && pay.json?.needs === "testflight" && pay.json?.step === null, "Apple Pay needs TestFlight first", pay.json?.needs);
-    for (const [suffix, body] of [["/merchant", {}], ["/certificate", { csr: "-----BEGIN CERTIFICATE REQUEST-----\nAAAA\n-----END CERTIFICATE REQUEST-----" }], ["/confirm"], ["/profiles"]]) {
-      const refused = await call("POST", P(`/api/dev/apps/:id/applepay${suffix}`), { body, pattern: `/api/dev/apps/:id/applepay${suffix}` });
-      record(refused.status === 409 && /^Set up TestFlight for iPhone and iPad first/.test(refused.json?.error ?? ""), `POST /api/dev/apps/:id/applepay${suffix} before TestFlight is a 409`, `${refused.status} ${refused.json?.error ?? ""}`);
+    for (const [suffix, body, pattern = suffix] of [["/merchant", {}], ["/certificate", { csr: "-----BEGIN CERTIFICATE REQUEST-----\nAAAA\n-----END CERTIFICATE REQUEST-----" }], ["/confirm"], ["/profiles"], ["/certificates/unknown/activate", undefined, "/certificates/:certId/activate"]]) {
+      const refused = await call("POST", P(`/api/dev/apps/:id/applepay${suffix}`), { body, pattern: `/api/dev/apps/:id/applepay${pattern}` });
+      record(refused.status === 409 && /^Set up TestFlight for iPhone and iPad first/.test(refused.json?.error ?? ""), `POST /api/dev/apps/:id/applepay${pattern} before TestFlight is a 409`, `${refused.status} ${refused.json?.error ?? ""}`);
     }
     const noCertificate = await call("GET", P("/api/dev/apps/:id/applepay/certificate/unknown"), { pattern: "/api/dev/apps/:id/applepay/certificate/:certId" });
     expectStatus("GET /api/dev/apps/:id/applepay/certificate/:certId for an unknown certificate is a 404", noCertificate, 404);
