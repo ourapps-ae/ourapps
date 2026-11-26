@@ -70,6 +70,13 @@ function payFetch(f: Fake) {
       const identifier = f.merchants.find((x) => x.id === merchantId)!.identifier;
       return jsonRes({ data: { type: "certificates", id: made.id, attributes: { name: `Apple Pay Payment Processing: ${identifier}`, certificateType: "APPLE_PAY", serialNumber: `7A1B${n}`, certificateContent: btoa(CER), expirationDate: "2028-11-16T10:00:00.000+00:00", activated: made.activated } } }, 201);
     }
+    if (m === "PATCH" && (r = p.match(/^\/v1\/certificates\/([\w-]+)$/))) {
+      const cert = f.certificates.find((c) => c.id === r![1]);
+      if (!cert) return jsonRes({ errors: [{ status: "404", code: "NOT_FOUND", detail: "There is no resource" }] }, 404);
+      for (const c of f.certificates) if (c.merchantId === cert.merchantId) c.activated = c === cert && data.attributes.activated === true;
+      return jsonRes({ data: { type: "certificates", id: cert.id, attributes: { activated: cert.activated } } });
+    }
+    if (m === "GET" && (r = p.match(/^\/v1\/merchantIds\/([\w-]+)\/certificates$/))) return jsonRes({ data: f.certificates.filter((c) => c.merchantId === r![1]).map((c) => ({ type: "certificates", id: c.id, attributes: { activated: c.activated } })) });
     if (m === "GET" && p === "/v1/bundleIds") return jsonRes({ data: f.bundleIds.filter((b) => b.identifier === q("filter[identifier]")).map((b) => ({ type: "bundleIds", id: b.id, attributes: { identifier: b.identifier, platform: b.platform } })) });
     if (m === "GET" && (r = p.match(/^\/v1\/bundleIds\/([\w-]+)\/bundleIdCapabilities$/))) return jsonRes({ data: (f.capabilities[r[1]] ?? []).map((c) => ({ type: "bundleIdCapabilities", id: `${r![1]}_${c}`, attributes: { capabilityType: c, settings: [] } })) });
     if (m === "POST" && p === "/v1/bundleIdCapabilities") {
@@ -147,7 +154,7 @@ describe("Apple Pay", () => {
     const other = await handle(api(cookie, "POST", "/api/dev/apps", { name: "Poker Night league table", repo: "club/league", bundleId: "com.example.league" }), env, deps);
     const otherId = ((await other.json()) as { app: { id: string } }).app.id;
     expect(await (await call("GET", `/api/dev/apps/${otherId}/applepay`)).json()).toMatchObject({ setUp: false, needs: "testflight", step: null, entitlement: "com.apple.developer.in-app-payments", merchant: { suggested: { identifier: "merchant.com.example.league", name: "Poker Night league table" } } });
-    for (const [action, body] of [["merchant", {}], ["certificate", { csr: CSR }], ["confirm", undefined], ["profiles", undefined]] as const) {
+    for (const [action, body] of [["merchant", {}], ["certificate", { csr: CSR }], ["confirm", undefined], ["profiles", undefined], ["certificate/C1/activate", undefined]] as const) {
       const res = await call("POST", `/api/dev/apps/${otherId}/applepay/${action}`, body);
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({ error: NOT_SET_UP });
@@ -155,12 +162,12 @@ describe("Apple Pay", () => {
     expect(NOT_SET_UP).toBe("Set up TestFlight for iPhone and iPad first: Apple Pay goes into the App Store profile TestFlight makes.");
 
     const stranger = await signIn(env, deps, { id: 9, login: "sue", name: "Sue" });
-    for (const [method, path] of [["GET", ""], ["POST", "/merchant"], ["POST", "/certificate"], ["POST", "/confirm"], ["POST", "/profiles"], ["GET", "/certificate/C1"]] as const) {
+    for (const [method, path] of [["GET", ""], ["POST", "/merchant"], ["POST", "/certificate"], ["POST", "/confirm"], ["POST", "/profiles"], ["GET", "/certificate/C1"], ["POST", "/certificate/C1/activate"]] as const) {
       expect((await call(method, `${base()}${path}`, method === "POST" ? {} : undefined, stranger)).status).toBe(404);
     }
 
     await Db.from(env).setAppTarget(appId, "ios", false);
-    for (const action of ["merchant", "certificate", "confirm", "profiles"]) {
+    for (const action of ["merchant", "certificate", "confirm", "profiles", "certificate/C1/activate"]) {
       const res = await call("POST", `${base()}/${action}`, {});
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({ error: "Target is disabled." });
@@ -236,6 +243,28 @@ describe("Apple Pay", () => {
     expect(log.events[0]).toMatchObject({ event: "apple-pay-certificate-created", detail: `Poker Night: ${MERCHANT} 7A1B4` });
   });
 
+  it("activates the next certificate and reads which one Apple uses", async () => {
+    await call("POST", `${base()}/merchant`);
+    const first = ((await (await call("POST", `${base()}/certificate`, { csr: CSR })).json()) as Record<string, any>).certificate.items[0];
+    const next = ((await (await call("POST", `${base()}/certificate`, { csr: CSR })).json()) as Record<string, any>).certificate.items[0];
+    expect((await call("POST", `${base()}/certificate/C999/activate`)).status).toBe(404);
+    expect((await call("POST", `${base()}/certificate/${next.id}/activate`, undefined, await signIn(env, deps, { id: 9, login: "sue", name: "Sue" }))).status).toBe(404);
+    const res = await call("POST", `${base()}/certificate/${next.id}/activate`);
+    expect(res.status).toBe(200);
+    expect(sent("PATCH", `/v1/certificates/${next.id}`)).toEqual([{ type: "certificates", id: next.id, attributes: { activated: true } }]);
+    expect(stub.seen.some((s) => s.method === "GET" && s.path === "/v1/merchantIds/M1/certificates")).toBe(true);
+    const after = (await res.json()) as Record<string, any>;
+    expect(after.certificate.activeId).toBe(next.id);
+    expect(after.certificate.items.map((c: Record<string, unknown>) => [c.id, c.activated])).toEqual([[next.id, true], [first.id, false]]);
+    const log = (await (await call("GET", "/api/dev/audit")).json()) as { events: { event: string; detail: string }[] };
+    expect(log.events[0]).toMatchObject({ event: "apple-pay-certificate-activated", detail: `Poker Night: ${MERCHANT} ${next.serialNumber}` });
+    // An expired certificate is not offered to Apple.
+    await env.DB.prepare("UPDATE apple_pay_certificates SET expiration_date = ? WHERE certificate_id = ?").bind("2026-10-01T00:00:00Z", first.id).run();
+    const expired = await call("POST", `${base()}/certificate/${first.id}/activate`);
+    expect(expired.status).toBe(409);
+    expect(sent("PATCH", `/v1/certificates/${first.id}`)).toEqual([]);
+  });
+
   it("waits for the developer's tick, then makes the profiles again until they carry the merchant identifier", async () => {
     await call("POST", `${base()}/merchant`);
     await call("POST", `${base()}/certificate`, { csr: CSR });
@@ -302,6 +331,13 @@ describe("Apple Pay", () => {
     const refused = await call("POST", `${base()}/certificate`, { csr: CSR });
     expect(refused.status).toBe(502);
     expect(await view()).toMatchObject({ step: "certificate", merchant: { error: null }, certificate: { done: false, error } });
+    f.deny = false;
+    const made = ((await (await call("POST", `${base()}/certificate`, { csr: CSR })).json()) as Record<string, any>).certificate.items[0];
+    f.deny = true;
+    const activation = await call("POST", `${base()}/certificate/${made.id}/activate`);
+    expect(activation.status).toBe(502);
+    expect(((await activation.json()) as { error: string }).error).toBe(error);
+    expect((await view()).certificate.error).toBe(error);
   });
 });
 

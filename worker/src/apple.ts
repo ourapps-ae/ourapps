@@ -632,6 +632,17 @@ export class AppleClient {
     return { id: res.data.id, name: a.name, serialNumber: a.serialNumber, certificateContent: a.certificateContent, expirationDate: a.expirationDate ?? null, activated: typeof a.activated === "boolean" ? a.activated : null };
   }
 
+  // Apple uses one Payment Processing certificate of a merchant identifier at a time; activating one deactivates the others.
+  async activateCertificate(certificateId: string, check?: () => Promise<void>): Promise<void> {
+    await this.call("PATCH", `/v1/certificates/${encodeURIComponent(certificateId)}`, { data: { type: "certificates", id: certificateId, attributes: { activated: true } } }, undefined, check);
+  }
+
+  // Which of a merchant identifier's Payment Processing certificates Apple uses.
+  async paymentCertificates(merchantId: string): Promise<{ id: string; activated: boolean | null }[]> {
+    const res = await this.call<{ data: Resource<{ activated?: boolean }>[] }>("GET", `/v1/merchantIds/${encodeURIComponent(merchantId)}/certificates?filter[certificateType]=APPLE_PAY&fields[certificates]=activated&limit=200`);
+    return res.data.map((c) => ({ id: c.id, activated: typeof c.attributes?.activated === "boolean" ? c.attributes.activated : null }));
+  }
+
   // Turns a capability on for an App ID unless it is on already; true when it was turned on now. Apple has no setting
   // that assigns a merchant identifier.
   async ensureCapability(bundleIdRes: string, capabilityType: string, check?: () => Promise<void>): Promise<boolean> {
