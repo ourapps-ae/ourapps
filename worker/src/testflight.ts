@@ -107,13 +107,13 @@ export async function ensureInstallerSigning(env: Env, deps: Deps, developerId: 
   await db.putSigningCertificate({ developerId, certificateId: made.id, name: made.name, serialNumber: made.serialNumber, certificateBase64: made.certificateContent, expirationDate: made.expirationDate, createdAt: deps.now().toISOString() }, true);
 }
 
-// After a new certificate, an app already on TestFlight gets its App Store profile made again with it.
-export async function renewStoreProfile(env: Env, apple: AppleClient, app: AppRow, certificateId: string): Promise<void> {
+// After a new certificate, an app already on TestFlight gets its App Store profile made again with it; keep can ask more of the profile.
+export async function renewStoreProfile(env: Env, apple: AppleClient, app: AppRow, certificateId: string, keep?: (profileContent: string) => boolean): Promise<void> {
   const check = () => requireTarget(env, app);
   await check();
   const bundleRes = await apple.ensureBundleId(app.bundleId, app.name, app.platform === "macos" && app.nativeMac, check);
   const name = platformProfileName(app);
-  const profile = await apple.ensureStoreProfile(name, bundleRes, certificateId, profileType(app.platform ?? "ios", app.nativeMac), check);
+  const profile = await apple.ensureStoreProfile(name, bundleRes, certificateId, profileType(app.platform ?? "ios", app.nativeMac), check, keep);
   await check();
   Object.assign(app, { storeProfileId: profile.id, storeProfileUuid: profile.uuid, storeProfileName: name, storeProfileBase64: profile.profileContent });
   await Db.from(env).setAppTestflight(app);
