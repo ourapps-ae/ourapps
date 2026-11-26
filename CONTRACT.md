@@ -296,8 +296,8 @@ on:
 ## Android version codes
 
 Android refuses an update whose `versionCode` is lower than the installed one, and Google Play a
-code it already has, so take it from ourapps rather than from the workflow's run number. Once per build, in the job that builds the
-APK and the bundle:
+code it already has, so take it from ourapps rather than from the workflow's run number. Once
+per build, in the job that builds the APK and the bundle:
 
 ```
 POST https://ourapps.app/api/build/<STORE_APP_ID>/android/version-code
@@ -305,7 +305,7 @@ Authorization: Bearer $STORE_BUILD_TOKEN
 { "version": "1.2.0", "runId": "$GITHUB_RUN_ID", "runAttempt": "$GITHUB_RUN_ATTEMPT" }
 ```
 
-The no-store answer is `{ "versionCode": 7 }`, a whole number of at most 2100000000 (Google Play's
+The answer, never cached, is `{ "versionCode": 7 }`, a whole number of at most 2100000000 (Google Play's
 largest). It is above every code ourapps gave the app, and above the highest version code in
 Google Play when the developer's Google service account is saved and can read the app (read at most
 every ten minutes). The body is optional; with `runId` and `runAttempt` (both together, as positive
