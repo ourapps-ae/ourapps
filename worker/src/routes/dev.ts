@@ -17,7 +17,7 @@ import { applePlatform, profileType } from "../apple-platform.js";
 import { buildLinkPage } from "./public.js";
 import { requireTarget, TargetDisabledError } from "../targets.js";
 import { appStoreView, releaseAppStore, saveAppStoreDetails, submitAppStore, uploadScreenshots } from "../appstore.js";
-import { applePayView, certificateFile, chooseMerchant, confirmTicked, createCertificate, makeProfiles } from "../applepay.js";
+import { activateCertificate, applePayView, certificateFile, chooseMerchant, confirmTicked, createCertificate, makeProfiles } from "../applepay.js";
 
 type AppInput = Partial<Record<"name" | "tagline" | "description" | "whatsNew" | "size" | "minOs" | "ageNote" | "privacySummary" | "iconUrl" | "repo" | "manifestUrl" | "bundleId", string>> & {
   screenshots?: unknown;
@@ -509,6 +509,11 @@ export async function applePayAction(request: Request, env: Env, deps: Deps, dev
   if (action === "certificate") return json(await createCertificate(request, env, deps, dev, app, await optionalJson<Record<string, unknown>>(request)));
   if (action === "confirm") return json(await confirmTicked(request, env, deps, dev, app));
   return json(await makeProfiles(request, env, deps, dev, app));
+}
+
+// POST /api/dev/apps/:id/applepay/certificates/:certId/activate
+export async function applePayActivate(request: Request, env: Env, deps: Deps, dev: Developer, id: string, certificateId: string): Promise<Response> {
+  return json(await activateCertificate(request, env, deps, dev, await ownedApp(Db.from(env), dev, id), certificateId));
 }
 
 // GET /api/dev/apps/:id/applepay/certificate/:certId - the .cer file for the payment processor.

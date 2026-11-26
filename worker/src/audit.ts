@@ -22,6 +22,7 @@ export type AuditEvent =
   | "app-store-released"
   | "apple-pay-merchant-set"
   | "apple-pay-certificate-created"
+  | "apple-pay-certificate-activated"
   | "apple-pay-ticked"
   | "apple-pay-profiles-made";
 

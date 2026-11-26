@@ -792,6 +792,17 @@ export class Db {
     return row<ApplePayCertificateRow>(await this.d1.prepare("SELECT * FROM apple_pay_certificates WHERE app_id = ? AND certificate_id = ?").bind(appId, certificateId).first(), applePayCertificateConvert);
   }
 
+  // Apple's answer for each of a merchant's certificates; one Apple no longer lists is not in use.
+  async setApplePayActivated(appId: string, merchantId: string, apple: { id: string; activated: boolean | null }[]): Promise<void> {
+    const stored = await this.applePayCertificates(appId, merchantId);
+    if (stored.length === 0) return;
+    await this.d1.batch(stored.map((c) => {
+      const found = apple.find((a) => a.id === c.certificateId);
+      const activated = found ? found.activated : false;
+      return this.d1.prepare("UPDATE apple_pay_certificates SET activated = ? WHERE app_id = ? AND certificate_id = ?").bind(activated === null ? null : activated ? 1 : 0, appId, c.certificateId);
+    }));
+  }
+
   async insertApplePayCertificate(c: ApplePayCertificateRow): Promise<void> {
     await this.d1
       .prepare("INSERT INTO apple_pay_certificates (certificate_id, app_id, merchant_id, name, serial_number, certificate_base64, expiration_date, activated, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")

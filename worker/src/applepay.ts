@@ -257,6 +257,28 @@ export async function createCertificate(request: Request, env: Env, deps: Deps, 
   return applePayView(env, deps, base);
 }
 
+// POST /api/dev/apps/:id/applepay/certificates/:certId/activate - Apple uses this certificate from now on and stops using
+// the merchant identifier's others; the payment processor must hold it first. The stored flags are then read from Apple.
+export async function activateCertificate(request: Request, env: Env, deps: Deps, dev: Developer, base: AppRow, certificateId: string) {
+  const ios = await requireReady(env, base);
+  const db = Db.from(env);
+  const row = await db.applePayApp(base.id);
+  const cert = row?.merchantId && /^[A-Za-z0-9_-]{1,64}$/.test(certificateId) ? await db.applePayCertificate(base.id, certificateId) : null;
+  if (!row?.merchantId || !cert || cert.merchantId !== row.merchantId) throw new HttpError(404, "unknown certificate");
+  if (cert.expirationDate && Date.parse(cert.expirationDate) <= deps.now().getTime()) throw new HttpError(409, "This certificate has expired; make another from a new certificate request.");
+  try {
+    const apple = await client(env, deps, base);
+    await apple.activateCertificate(cert.certificateId, () => requireTarget(env, ios));
+    await db.setApplePayActivated(base.id, row.merchantId, await apple.paymentCertificates(row.merchantId));
+  } catch (err) {
+    return fail(env, deps, row, "certificate", err);
+  }
+  delete row.errors.certificate;
+  await save(env, deps, row);
+  await audit(request, env, deps, dev.id, "apple-pay-certificate-activated", `${base.name}: ${row.merchantIdentifier} ${cert.serialNumber}`);
+  return applePayView(env, deps, base);
+}
+
 // POST /api/dev/apps/:id/applepay/profiles, and after the developer confirms the tick: the profiles made again until
 // each carries the merchant identifier. Builds fetch them from GET /api/build/:app/:platform/signing.
 async function profilesWithMerchant(request: Request, env: Env, deps: Deps, dev: Developer, base: AppRow, row: ApplePayAppRow) {
