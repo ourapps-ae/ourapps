@@ -3,7 +3,7 @@
 // Optional OURAPPS_READ_API_KEY checks that an owner's read-only key cannot save target selection.
 // Without a key only the public part runs. With a manage key it walks every endpoint agents.md
 // lists on a throwaway app, compares answers with the documented shapes, and deletes what it made.
-// It never calls endpoints that change anything at Apple or GitHub; App Store calls stop at "set up TestFlight first".
+// It never calls endpoints that change anything at Apple or GitHub; App Store and Apple Pay calls stop at "set up TestFlight first".
 import { readFileSync } from "node:fs";
 
 const args = process.argv.slice(2);
@@ -293,6 +293,17 @@ async function keyedChecks() {
       const refused = await call(method, P(`/api/dev/apps/:id/appstore/ios${suffix}`), { body, pattern: `/api/dev/apps/:id/appstore/:platform${suffix}` });
       record(refused.status === 409 && /^Set up TestFlight for this platform first/.test(refused.json?.error ?? ""), `${method} /api/dev/apps/:id/appstore/:platform${suffix} before TestFlight is a 409`, `${refused.status} ${refused.json?.error ?? ""}`);
     }
+    // Without TestFlight, Apple Pay stops before Apple too.
+    const pay = await call("GET", P("/api/dev/apps/:id/applepay"), { pattern: "/api/dev/apps/:id/applepay" });
+    expectStatus("GET /api/dev/apps/:id/applepay", pay, 200);
+    expectKeys("Apple Pay shape", pay.json, ["setUp", "needs", "step", "entitlement", "merchant", "certificate", "capability", "profiles"]);
+    record(pay.json?.setUp === false && pay.json?.needs === "testflight" && pay.json?.step === null, "Apple Pay needs TestFlight first", pay.json?.needs);
+    for (const [suffix, body] of [["/merchant", {}], ["/certificate", { csr: "-----BEGIN CERTIFICATE REQUEST-----\nAAAA\n-----END CERTIFICATE REQUEST-----" }], ["/confirm"], ["/profiles"]]) {
+      const refused = await call("POST", P(`/api/dev/apps/:id/applepay${suffix}`), { body, pattern: `/api/dev/apps/:id/applepay${suffix}` });
+      record(refused.status === 409 && /^Set up TestFlight for iPhone and iPad first/.test(refused.json?.error ?? ""), `POST /api/dev/apps/:id/applepay${suffix} before TestFlight is a 409`, `${refused.status} ${refused.json?.error ?? ""}`);
+    }
+    const noCertificate = await call("GET", P("/api/dev/apps/:id/applepay/certificate/unknown"), { pattern: "/api/dev/apps/:id/applepay/certificate/:certId" });
+    expectStatus("GET /api/dev/apps/:id/applepay/certificate/:certId for an unknown certificate is a 404", noCertificate, 404);
     // An empty contact is refused, so the saved one is never touched.
     const contact = await call("PUT", "/api/dev/review-contact", { body: { firstName: "", lastName: "", email: "", phone: "" } });
     expectStatus("PUT /api/dev/review-contact refuses an empty contact", contact, 400);
