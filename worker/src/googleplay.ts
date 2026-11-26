@@ -568,7 +568,8 @@ export async function releaseGooglePlay(request: Request, env: Env, deps: Deps, 
   } catch (err) {
     if (editId) await google.deleteEdit(packageName, editId).catch(() => undefined);
     let message = googlePlayProblem(err, ctx.email ?? undefined, packageName);
-    if (plan.track === "production" && err instanceof GoogleError && err.status < 500) message = `${message} ${PRODUCTION_GATE}`;
+    // Google's refusal of production for an account without production access; permission and package problems say their own cause.
+    if (plan.track === "production" && err instanceof GoogleError && !err.token && (err.status === 400 || (err.status === 403 && /production/i.test(err.detail)))) message = `${message} ${PRODUCTION_GATE}`;
     state.errors.release = message;
     await save(env, deps, state);
     throw new HttpError(err instanceof HttpError ? err.status : 502, message);
