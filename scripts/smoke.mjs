@@ -304,6 +304,38 @@ async function keyedChecks() {
     }
     const noCertificate = await call("GET", P("/api/dev/apps/:id/applepay/certificate/unknown"), { pattern: "/api/dev/apps/:id/applepay/certificate/:certId" });
     expectStatus("GET /api/dev/apps/:id/applepay/certificate/:certId for an unknown certificate is a 404", noCertificate, 404);
+    // Without a package name, Google Play work stops before Google: status only, then the plain refusals.
+    const play = await call("GET", P("/api/dev/apps/:id/googleplay"), { pattern: "/api/dev/apps/:id/googleplay" });
+    expectStatus("GET /api/dev/apps/:id/googleplay", play, 200);
+    expectKeys("Google Play shape", play.json, ["setUp", "needs", "serviceAccount", "packageName", "packageFrom", "step", "links", "app", "content", "listing", "graphics", "release", "releases", "testing", "live"]);
+    record(play.json?.packageName === null && play.json?.app?.done === false && play.json?.live?.production === false, "a new app has no Google Play package name yet", JSON.stringify(play.json?.app));
+    const noPackage = await call("PUT", P("/api/dev/apps/:id/googleplay"), { body: { app: {} }, pattern: "/api/dev/apps/:id/googleplay" });
+    record(noPackage.status === 400 && /^packageName is required/.test(noPackage.json?.error ?? ""), "PUT /api/dev/apps/:id/googleplay without a package name is a 400", `${noPackage.status} ${noPackage.json?.error ?? ""}`);
+    const badSection = await call("PUT", P("/api/dev/apps/:id/googleplay"), { body: { colour: "green" }, pattern: "/api/dev/apps/:id/googleplay" });
+    expectStatus("PUT /api/dev/apps/:id/googleplay refuses an unknown section", badSection, 400);
+    const graphics = await call("POST", P("/api/dev/apps/:id/googleplay/graphics"), { pattern: "/api/dev/apps/:id/googleplay/graphics" });
+    record(graphics.status === 409 && /^Check the app record with Google Play first/.test(graphics.json?.error ?? ""), "POST /api/dev/apps/:id/googleplay/graphics before the app record is a 409", `${graphics.status} ${graphics.json?.error ?? ""}`);
+    const playRelease = await call("POST", P("/api/dev/apps/:id/googleplay/release"), { body: { track: "internal" }, pattern: "/api/dev/apps/:id/googleplay/release" });
+    record(playRelease.status === 409 && /^Finish these steps first: App record, App content, Store listing, Graphics\.$/.test(playRelease.json?.error ?? ""), "POST /api/dev/apps/:id/googleplay/release before the steps is a 409", `${playRelease.status} ${playRelease.json?.error ?? ""}`);
+    expectStatus("POST /api/dev/apps/:id/googleplay/release refuses an unknown track", await call("POST", P("/api/dev/apps/:id/googleplay/release"), { body: { track: "staging" }, pattern: "/api/dev/apps/:id/googleplay/release" }), 400);
+    // With no package name, version codes are reserved without reading Google Play.
+    const codePath = `/api/build/${id}/android/version-code`;
+    const codePattern = "/api/build/:app/android/version-code";
+    const code = await call("POST", codePath, { token: newToken, body: { version: "0.0.1" }, pattern: codePattern });
+    expectStatus("POST /api/build/:app/android/version-code", code, 200);
+    const next = await call("POST", codePath, { token: newToken, pattern: codePattern });
+    record(Number.isSafeInteger(code.json?.versionCode) && code.json.versionCode >= 1 && next.json?.versionCode === code.json.versionCode + 1 && code.headers.get("cache-control") === "no-store", "version codes go up by one and are not cached", `${code.json?.versionCode} then ${next.json?.versionCode}`);
+    expectStatus("version codes refuse the rotated build token", await call("POST", codePath, { token: buildToken, pattern: codePattern }), 401);
+    expectStatus("version codes refuse an unknown field", await call("POST", codePath, { token: newToken, body: { build: 3 }, pattern: codePattern }), 400);
+    try {
+      expectTargets("disable android for version codes", await call("PUT", `/api/dev/apps/${id}/targets/android`, { body: { enabled: false }, pattern: "/api/dev/apps/:id/targets/:target" }), { ...defaultTargets, android: false });
+      const disabled = await call("POST", codePath, { token: newToken, pattern: codePattern });
+      record(disabled.status === 409 && disabled.json?.error === "Target is disabled.", "version codes refuse a disabled android target", `${disabled.status} ${disabled.text.slice(0, 80)}`);
+      const disabledPlay = await call("POST", P("/api/dev/apps/:id/googleplay/graphics"), { pattern: "/api/dev/apps/:id/googleplay/graphics" });
+      record(disabledPlay.status === 409 && disabledPlay.json?.error === "Target is disabled.", "Google Play refuses a disabled android target", `${disabledPlay.status} ${disabledPlay.text.slice(0, 80)}`);
+    } finally {
+      expectTargets("restore android", await call("PUT", `/api/dev/apps/${id}/targets/android`, { body: { enabled: true }, pattern: "/api/dev/apps/:id/targets/:target" }), defaultTargets);
+    }
     // An empty contact is refused, so the saved one is never touched.
     const contact = await call("PUT", "/api/dev/review-contact", { body: { firstName: "", lastName: "", email: "", phone: "" } });
     expectStatus("PUT /api/dev/review-contact refuses an empty contact", contact, 400);
@@ -316,7 +348,7 @@ async function keyedChecks() {
     expectStatus("GET /api/dev/audit", audit, 200);
 
     // Browser-only actions must refuse a key.
-    for (const [method, path, body] of [["POST", "/api/dev/keys", { name: "x" }], ["PUT", "/api/dev/secrets", {}], ["POST", "/api/dev/signing", {}], ["DELETE", "/api/dev/me", {}], ["POST", "/api/dev/keys/revoke-all", undefined]]) {
+    for (const [method, path, body] of [["POST", "/api/dev/keys", { name: "x" }], ["PUT", "/api/dev/secrets", {}], ["POST", "/api/dev/signing", {}], ["POST", "/api/dev/googleplay/check", undefined], ["DELETE", "/api/dev/me", {}], ["POST", "/api/dev/keys/revoke-all", undefined]]) {
       const pattern = path.replace(id, ":id");
       const r = await call(method, path, { body, pattern });
       expectStatus(`${method} ${pattern} refuses an API key`, r, 403);
