@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { Db } from "../src/db.js";
 import type { Env } from "../src/env.js";
-import { GRAPHICS_BYTES, tickGooglePlay } from "../src/googleplay.js";
+import { dlUrl } from "../src/flow.js";
+import { fingerprint } from "../src/google.js";
+import { APKS_PER_RUN, GRAPHICS_BYTES, tickGooglePlay } from "../src/googleplay.js";
 import { handle } from "../src/index.js";
 import { api, BASE, clearDb, GH_TOKEN, jsonRes, signIn, testDeps, testEnv, type TestDeps } from "./helpers.js";
 
@@ -9,7 +11,8 @@ import { api, BASE, clearDb, GH_TOKEN, jsonRes, signIn, testDeps, testEnv, type 
 // https://developers.google.com/identity/protocols/oauth2/service-account (the JWT and its exchange),
 // https://developers.google.com/android-publisher/api-ref/rest/v3 (edits, edits.details, edits.listings, edits.images,
 // edits.bundles, edits.tracks, edits.commit, applications.tracks.releases), https://developers.google.com/android-publisher/upload
-// (resumable uploads) and https://developers.google.com/android-publisher/tracks (track names, staged rollouts).
+// (resumable uploads) and https://developers.google.com/android-publisher/tracks (track names, staged rollouts);
+// generatedapks.list and generatedapks.download with alt=media (the discovery document marks it supportsMediaDownload).
 
 const PACKAGE = "club.pokernight.app";
 const EMAIL = "ourapps@poker-night-club.iam.gserviceaccount.com";
@@ -42,6 +45,12 @@ type Fake = {
   manifest: Record<string, unknown>;
   files: Record<string, Uint8Array>;
   runs: Record<string, Record<string, unknown>>;
+  // Download IDs of the universal APKs Google has generated, per version code; notFound answers 404 for the others.
+  generated: Record<number, string>;
+  notFound: boolean;
+  apkRedirect: string | null;
+  apkChunks: number;
+  apkPulled: number;
 };
 type Seen = { method: string; host: string; path: string; search: string; headers: Headers; body: unknown };
 
@@ -57,6 +66,10 @@ function png(width: number, height: number, colourType = 2, length = 64): Uint8A
 }
 
 const bundleBytes = (code: number) => encoder.encode(`AAB:${code}:${"x".repeat(300)}`);
+const CHUNK = 64 * 1024;
+const apkChunk = (code: number, i: number) => encoder.encode(`APK:${code}:${i}:`.padEnd(CHUNK, "p"));
+const CERT_HASH = "9c8f2e1a7b6d5c4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e";
+const FINGERPRINT = "9C:8F:2E:1A:7B:6D:5C:4E:3F:2A:1B:0C:9D:8E:7F:6A:5B:4C:3D:2E:1F:0A:9B:8C:7D:6E:5F:4A:3B:2C:1D:0E";
 
 async function serviceAccount(): Promise<{ json: string; publicKey: CryptoKey }> {
   const pair = (await crypto.subtle.generateKey({ name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" }, true, ["sign", "verify"])) as CryptoKeyPair;
@@ -102,6 +115,7 @@ function googleFetch(f: Fake) {
       if (run && f.runs[`${run[1]}/${run[2]}`]) return jsonRes(f.runs[`${run[1]}/${run[2]}`]);
       return new Response("not found", { status: 404 });
     }
+    if (url.host === "play-apk.googleusercontent.com") return apkResponse(f, Number(url.searchParams.get("code")));
     if (url.toString() === TOKEN_URL) {
       const form = new URLSearchParams(new TextDecoder().decode(raw!));
       const [h, c, sig] = (form.get("assertion") ?? "").split(".");
@@ -132,6 +146,19 @@ function googleFetch(f: Fake) {
     if (pkg !== PACKAGE || !f.exists) return googleError(404, `Package not found: ${decodeURIComponent(pkg)}.`, "NOT_FOUND");
     if (f.noPermission) return googleError(403, "The caller does not have permission", "PERMISSION_DENIED");
     let x: RegExpExecArray | null;
+    if (m === "GET" && (x = /^\/generatedApks\/(\d+)$/.exec(rest))) {
+      const id = f.generated[Number(x[1])];
+      if (!id && f.notFound) return googleError(404, "Requested entity was not found.", "NOT_FOUND");
+      return jsonRes({ generatedApks: [{ certificateSha256Hash: CERT_HASH, generatedSplitApks: [{ downloadId: `split-${x[1]}`, variantId: 1, moduleName: "base", splitId: "" }], ...(id ? { generatedUniversalApk: { downloadId: id } } : {}) }] });
+    }
+    if (m === "GET" && (x = /^\/generatedApks\/(\d+)\/downloads\/([^/]+):download$/.exec(rest))) {
+      const code = Number(x[1]);
+      if (f.generated[code] !== decodeURIComponent(x[2])) return googleError(404, "Requested entity was not found.", "NOT_FOUND");
+      // Without alt=media Google answers with no body.
+      if (url.searchParams.get("alt") !== "media") return new Response(null, { status: 204 });
+      if (f.apkRedirect) return new Response(null, { status: 302, headers: { Location: f.apkRedirect } });
+      return apkResponse(f, code);
+    }
     if (m === "GET" && (x = /^\/tracks\/([^/]+)\/releases$/.exec(rest))) {
       return jsonRes({ releases: (f.tracks[x[1]] ?? []).map((rel) => ({ releaseName: rel.name, track: x![1], activeArtifacts: rel.versionCodes.map((v) => ({ versionCode: Number(v) })), releaseLifecycleState: f.lifecycle[Number(rel.versionCodes[0])] ?? "RELEASE_LIFECYCLE_STATE_IN_REVIEW" })) });
     }
@@ -195,6 +222,18 @@ function googleFetch(f: Fake) {
   return { fetch: fetchStub, seen };
 }
 
+// The APK in chunks read only as the reader asks, so a test can see that the Worker does not hold it.
+function apkResponse(f: Fake, code: number): Response {
+  f.apkPulled = 0;
+  const body = new ReadableStream<Uint8Array>({
+    pull(c) {
+      if (f.apkPulled < f.apkChunks) c.enqueue(apkChunk(code, f.apkPulled++));
+      else c.close();
+    },
+  }, { highWaterMark: 0 });
+  return new Response(body, { headers: { "Content-Type": "application/vnd.android.package-archive", "Content-Length": String(CHUNK * f.apkChunks) } });
+}
+
 let env: Env;
 let deps: TestDeps;
 let d: TestDeps;
@@ -230,8 +269,10 @@ beforeEach(async () => {
     files: {
       "/icon.png": png(512, 512, 6), "/feature.png": png(1024, 500), "/phone-1.png": png(1080, 1920), "/phone-2.png": png(1080, 1920), "/big.png": png(1024, 1024), "/clear.png": png(1080, 1920, 6),
       "/repos/club/poker-night/releases/assets/9": bundleBytes(42),
+      "/repos/club/poker-night/releases/assets/2": encoder.encode("WORKFLOW-APK"),
     },
     runs: {},
+    generated: {}, notFound: false, apkRedirect: null, apkChunks: 8, apkPulled: 0,
   };
   stub = googleFetch(f);
   d = { ...deps, fetch: stub.fetch };
@@ -464,6 +505,7 @@ describe("Google Play releases", () => {
       "PUT /upload/androidpublisher/v3/edits/*/bundles?uploadType=resumable&upload_id=*",
       "PUT /androidpublisher/v3/edits/*/tracks/qa",
       "POST /androidpublisher/v3/edits/*:commit",
+      "GET /androidpublisher/v3/generatedApks/42",
     ]);
     expect(calls[1].headers.get("X-Upload-Content-Type")).toBe("application/octet-stream");
     expect(calls[1].headers.get("X-Upload-Content-Length")).toBe(String(bundleBytes(42).length));
@@ -546,6 +588,212 @@ describe("Google Play releases", () => {
     // Turning Android off removes the Google Play links with the APK.
     await Db.from(env).setAppTarget(appId, "android", false);
     expect((await page()).release.googlePlay).toEqual({ store: null, testing: null });
+  });
+});
+
+describe("Google Play's signed APK", () => {
+  const page = async () => (await (await handle(api(null, "GET", `/api/public/links/${linkId}`), env, d)).json()) as Record<string, any>;
+  const latest = async () => (await (await handle(api(null, "GET", `/api/public/links/${linkId}/latest`), env, d)).json()) as Record<string, any>;
+  const linkOf = (url: string) => JSON.parse(new TextDecoder().decode(fromB64url(new URL(url).pathname.split("/")[2].split(".")[0]))) as Record<string, unknown>;
+  const download = (url: string) => handle(new Request(url), env, d);
+  const apkBytes = (code: number) => {
+    const out = new Uint8Array(CHUNK * f.apkChunks);
+    for (let i = 0; i < f.apkChunks; i++) out.set(apkChunk(code, i), i * CHUNK);
+    return out;
+  };
+  const workflowApkFetched = () => stub.seen.some((s) => s.path === "/repos/club/poker-night/releases/assets/2");
+  const since = (n: number) => stub.seen.slice(n).map((s) => `${s.method} ${s.host}${s.path.replace(`/androidpublisher/v3/applications/${PACKAGE}`, "")}${s.search}`);
+  const release = async (code: number, version = "1.2.0") => {
+    f.files["/repos/club/poker-night/releases/assets/9"] = bundleBytes(code);
+    f.manifest = { ...structuredClone(MANIFEST), version };
+    expect((await call("POST", `${base()}/release`, { track: "internal" })).status).toBe(200);
+  };
+  const PREPARING = "Google Play is preparing the Android download of this version, which usually takes a few minutes. Try again shortly.";
+
+  it("gives Google Play's APK as the Android download once ourapps has released the app there, streamed, one call to Google each", async () => {
+    await prepare();
+    const before = await page();
+    expect(linkOf(before.release.install.android.apk)).toMatchObject({ kind: "apk", url: MANIFEST.install.android.apk });
+    expect(before.release.androidVersion).toBe("1.2.0");
+    expect((await view()).apk).toBeNull();
+
+    await release(42);
+    expect((await view()).apk).toEqual({ offered: null, waiting: { versionCode: 42, version: "1.2.0", checkedAt: "2026-10-16T10:00:00.000Z", error: null } });
+    const waiting = await page();
+    expect(linkOf(waiting.release.install.android.apk)).toMatchObject({ kind: "playapk", url: "", app: appId, code: 42 });
+    expect(waiting.deliveryRevision).not.toBe(before.deliveryRevision);
+    // Until Google has generated it, the download says so; the workflow's APK, signed with another key, is never given.
+    const early = await download(waiting.release.install.android.apk);
+    expect(early.status).toBe(503);
+    expect(await early.json()).toEqual({ error: PREPARING });
+
+    f.generated[42] = "dl-42";
+    deps.advance(10 * 60_000);
+    await tickGooglePlay(env, d);
+    expect((await view()).apk).toEqual({ offered: { versionCode: 42, version: "1.2.0", certificateSha256: FINGERPRINT, foundAt: "2026-10-16T10:10:00.000Z", error: null }, waiting: null });
+
+    const ready = await page();
+    expect(ready.deliveryRevision).toBe(waiting.deliveryRevision);
+    for (let i = 0; i < 2; i++) {
+      const n = stub.seen.length;
+      const res = await download(ready.release.install.android.apk);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Content-Type")).toBe("application/vnd.android.package-archive");
+      expect(res.headers.get("Content-Disposition")).toBe('attachment; filename="app.apk"');
+      expect(res.headers.get("Cache-Control")).toBe("no-store");
+      // The answer leaves before Google's APK is read; the bytes pass through as the phone reads them.
+      expect(f.apkPulled).toBeLessThan(2);
+      expect(new Uint8Array(await res.arrayBuffer())).toEqual(apkBytes(42));
+      expect(f.apkPulled).toBe(f.apkChunks);
+      expect(since(n)).toEqual(["POST oauth2.googleapis.com/token", `GET ${PLAY}/generatedApks/42/downloads/dl-42:download?alt=media`]);
+      expect(stub.seen.at(-1)!.headers.get("Authorization")).toMatch(/^Bearer ya29\.fake-\d+$/);
+    }
+
+    const update = await latest();
+    expect(update.version).toBe("1.2.0");
+    expect(update.android).toEqual({ apkUrl: expect.stringMatching(/^https:\/\/ourapps\.app\/dl\//), version: "1.2.0" });
+    expect(linkOf(update.android.apkUrl)).toMatchObject({ kind: "playapk", app: appId, code: 42 });
+    expect(update.deliveryRevision).toBe(ready.deliveryRevision);
+    expect(workflowApkFetched()).toBe(false);
+  });
+
+  it("keeps the last Play-signed APK while a newer GitHub release waits for Google Play, then gives the newer one once Google has it", async () => {
+    await prepare();
+    f.generated[42] = "dl-42";
+    await release(42);
+    // Google already had it when the release was sent.
+    expect((await view()).apk.offered).toMatchObject({ versionCode: 42, foundAt: "2026-10-16T10:00:00.000Z" });
+
+    f.manifest = { ...structuredClone(MANIFEST), version: "1.3.0" };
+    const newer = await page();
+    expect(newer.release.version).toBe("1.3.0");
+    expect(newer.release.androidVersion).toBe("1.2.0");
+    expect(linkOf(newer.release.install.android.apk)).toMatchObject({ kind: "playapk", code: 42 });
+    const update = await latest();
+    expect(update).toMatchObject({ version: "1.3.0", android: { version: "1.2.0" } });
+    expect(linkOf(update.android.apkUrl).code).toBe(42);
+
+    await release(43, "1.3.0");
+    expect((await view()).apk).toMatchObject({ offered: { versionCode: 42, version: "1.2.0" }, waiting: { versionCode: 43, version: "1.3.0", error: null } });
+    expect(linkOf((await page()).release.install.android.apk).code).toBe(42);
+    expect((await latest()).android.version).toBe("1.2.0");
+
+    f.generated[43] = "dl-43";
+    deps.advance(10 * 60_000);
+    await tickGooglePlay(env, d);
+    const moved = await page();
+    expect(moved.release.androidVersion).toBe("1.3.0");
+    expect(linkOf(moved.release.install.android.apk).code).toBe(43);
+    expect(moved.deliveryRevision).not.toBe(newer.deliveryRevision);
+    expect((await latest()).android.version).toBe("1.3.0");
+    expect((await view()).apk).toMatchObject({ offered: { versionCode: 43 }, waiting: null });
+    expect(workflowApkFetched()).toBe(false);
+  });
+
+  it("finds the APK on a download when Google has it before the schedule asks, and keeps its ID", async () => {
+    await prepare();
+    f.notFound = true;
+    await release(42);
+    expect((await view()).apk.waiting).toMatchObject({ versionCode: 42, error: null });
+    f.generated[42] = "dl-42";
+    const url = (await page()).release.install.android.apk;
+    const n = stub.seen.length;
+    const res = await download(url);
+    expect(res.status).toBe(200);
+    await res.arrayBuffer();
+    expect(since(n)).toEqual(["POST oauth2.googleapis.com/token", `GET ${PLAY}/generatedApks/42`, `GET ${PLAY}/generatedApks/42/downloads/dl-42:download?alt=media`]);
+    expect((await view()).apk.offered).toMatchObject({ versionCode: 42, certificateSha256: FINGERPRINT });
+  });
+
+  it("answers the cause and never the workflow's APK when the key is removed or Google refuses, and the card shows it", async () => {
+    await prepare();
+    f.generated[42] = "dl-42";
+    await release(42);
+    const url = (await page()).release.install.android.apk;
+
+    expect((await call("PUT", "/api/dev/secrets", { googleServiceAccount: "-" })).status).toBe(200);
+    const noKey = await download(url);
+    expect(noKey.status).toBe(503);
+    const keyMessage = "The Android download comes from Google Play with the developer's Google service account key, which is not saved in ourapps. The developer saves it in Settings, Google Play.";
+    expect(await noKey.json()).toEqual({ error: keyMessage });
+    expect((await view()).apk.offered.error).toBe(keyMessage);
+    expect(linkOf((await page()).release.install.android.apk)).toMatchObject({ kind: "playapk", code: 42 });
+
+    expect((await call("PUT", "/api/dev/secrets", { googleServiceAccount: accountJson })).status).toBe(200);
+    f.noPermission = true;
+    const refused = await download(url);
+    expect(refused.status).toBe(502);
+    const refusal = `Google Play did not give the Android download. ${EMAIL} has no permission for this in Play Console. In Play Console, Users and permissions, give it access to this app with Release apps to testing tracks, Release to production, and Manage store presence.`;
+    expect(await refused.json()).toEqual({ error: refusal });
+    expect((await view()).apk.offered.error).toBe(refusal);
+
+    f.noPermission = false;
+    const ok = await download(url);
+    expect(ok.status).toBe(200);
+    await ok.arrayBuffer();
+    expect((await view()).apk.offered.error).toBeNull();
+    expect(workflowApkFetched()).toBe(false);
+  });
+
+  it("follows Google's download to a Google host without the access token, and to no other host", async () => {
+    await prepare();
+    f.generated[42] = "dl-42";
+    await release(42);
+    const url = (await page()).release.install.android.apk;
+    f.apkRedirect = "https://play-apk.googleusercontent.com/apk?code=42";
+    const res = await download(url);
+    expect(res.status).toBe(200);
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(apkBytes(42));
+    expect(stub.seen.find((s) => s.host === "play-apk.googleusercontent.com")!.headers.get("Authorization")).toBeNull();
+    f.apkRedirect = "https://apk.example.com/apk?code=42";
+    const refused = await download(url);
+    expect(refused.status).toBe(502);
+    expect(((await refused.json()) as { error: string }).error).toBe("Google Play did not give the Android download. Google Play did not accept this: Google redirected the request; no credentials were forwarded.");
+    expect(stub.seen.some((s) => s.host === "apk.example.com")).toBe(false);
+  });
+
+  it("refuses a link to another developer's app or without a version code", async () => {
+    await prepare();
+    f.generated[42] = "dl-42";
+    await release(42);
+    const other = await dlUrl(env, d, { url: "", kind: "playapk", dev: "someone-else", app: appId, code: 42 });
+    expect((await download(other)).status).toBe(404);
+    const unknown = await dlUrl(env, d, { url: "", kind: "playapk", dev: (linkOf((await page()).release.install.android.apk).dev as string), app: appId, code: 41 });
+    expect((await download(unknown)).status).toBe(404);
+    const noCode = await dlUrl(env, d, { url: "", kind: "playapk", dev: "x", app: appId });
+    expect((await download(noCode)).status).toBe(403);
+  });
+
+  it("asks Google for a few versions per scheduled run, least recently checked first, within the calls left", async () => {
+    expect((await call("PUT", `/api/dev/apps/${appId}`, { androidPackage: PACKAGE })).status).toBe(200);
+    for (const code of [11, 12, 13, 14, 15]) await Db.from(env).insertGooglePlayApk(appId, code, `1.0.${code}`, "2026-10-16T09:00:00.000Z");
+    const asked = () => stub.seen.filter((s) => /\/generatedApks\/\d+$/.test(s.path)).map((s) => Number(s.path.split("/").pop()));
+    await tickGooglePlay(env, d);
+    expect(APKS_PER_RUN).toBe(3);
+    expect(asked()).toHaveLength(3);
+    deps.advance(10 * 60_000);
+    await tickGooglePlay(env, d);
+    expect(asked()).toHaveLength(6);
+    expect(new Set(asked()).size).toBe(5);
+    await tickGooglePlay(env, d, 2);
+    expect(asked()).toHaveLength(6);
+    for (const code of [11, 12, 13, 14, 15]) f.generated[code] = `dl-${code}`;
+    for (let i = 0; i < 2; i++) {
+      deps.advance(10 * 60_000);
+      await tickGooglePlay(env, d);
+    }
+    expect(asked()).toHaveLength(11);
+    deps.advance(10 * 60_000);
+    await tickGooglePlay(env, d);
+    expect(asked()).toHaveLength(11);
+    expect((await view()).apk.offered).toMatchObject({ versionCode: 15, version: "1.0.15", certificateSha256: FINGERPRINT });
+  });
+
+  it("shows Google's certificate hash as the fingerprint providers ask for", () => {
+    expect(fingerprint(CERT_HASH)).toBe(FINGERPRINT);
+    expect(fingerprint(FINGERPRINT.toLowerCase())).toBe(FINGERPRINT);
+    expect(fingerprint(btoa(String.fromCharCode(...FINGERPRINT.split(":").map((h) => parseInt(h, 16)))))).toBe(FINGERPRINT);
+    expect(fingerprint("not a hash")).toBe("not a hash");
   });
 });
 
