@@ -53,7 +53,7 @@ describe("one story across the pages", () => {
     for (const file of files) {
       const text = read(file);
       for (const old of ["Built with AI agents, shared with friends", "Private by design", "a private installer", "Builds apps for friends and family", "friends and family", "For your friends", "At eight people", "private app store"]) expect(text, `${file}: ${old}`).not.toContain(old);
-      for (const word of [/recipe/i, /catalogue/i, /\baepm\b/i, /free-tiers/i, /\/components\b/, /\bcomponents?\b/i, /read:org/, /sitemap/i]) expect(text, `${file}: ${word}`).not.toMatch(word);
+      for (const word of [/recipe/i, /catalogue/i, /\baepm\b/i, /\bclod(hub)?\b/i, /free-tiers/i, /\/components\b/, /\bcomponents?\b/i, /read:org/, /sitemap/i]) expect(text, `${file}: ${word}`).not.toMatch(word);
     }
   });
 
