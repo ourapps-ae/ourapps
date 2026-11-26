@@ -14,7 +14,13 @@ export function targetSections(app: Partial<DevApp>): Raw {
       <div data-target-release></div>
       ${target === "ios" ? html`<div id="testflight-card"></div>` : target === "macos" || target === "tvos" ? html`<div id="${target}-testflight-card"></div>` : ""}
       ${target === "ios" || target === "macos" || target === "tvos" ? html`<div id="${target}-appstore-card"></div>` : ""}
+      ${target === "android" ? html`${verificationNote()}<div id="android-googleplay-card"></div>` : ""}
     </fieldset></section>`)}`;
+}
+
+// Android developer verification covers APKs installed outside Google Play as well.
+export function verificationNote(): Raw {
+  return html`<p class="small muted mt-s">Android developer verification: on certified Android phones an app installs without extra steps only when its package name is registered to a verified developer, with the key it is signed with. Google applies this in Brazil, Indonesia, Singapore and Thailand from 30 September 2026 and in every country from January 2027; otherwise people install through Android's advanced flow, with warnings and a one-day wait. Play Console registers the package name when the app is created there. For the APK from ourapps, register the package name and the key the APK is signed with: in Play Console with a Google Play account, otherwise in the Android Developer Console. <a href="https://developer.android.com/developer-verification" target="_blank" rel="noopener">Google's requirements</a>.</p>`;
 }
 
 export function targetEnabled(root: HTMLElement, target: AppTarget): boolean {

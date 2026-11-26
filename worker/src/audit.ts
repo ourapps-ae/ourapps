@@ -24,7 +24,11 @@ export type AuditEvent =
   | "apple-pay-certificate-created"
   | "apple-pay-certificate-activated"
   | "apple-pay-ticked"
-  | "apple-pay-profiles-made";
+  | "apple-pay-profiles-made"
+  | "google-play-checked"
+  | "google-play-details-saved"
+  | "google-play-graphics-uploaded"
+  | "google-play-released";
 
 export async function audit(request: Request | null, env: Env, deps: Deps, developerId: string, event: AuditEvent, detail = ""): Promise<void> {
   const cf = request ? (request as Request & { cf?: { country?: string } }).cf : undefined;

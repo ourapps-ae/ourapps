@@ -101,6 +101,7 @@ Every build publishes a GitHub Release (not a pre-release, not a draft) with the
 | `icon.png`, `screenshot-*.png` | recommended | referenced from my-app.json `icon`, `screenshots` and `screenshotsByPlatform` |
 | `CHANGELOG.md`   | recommended  | Keep a Changelog file; the version's section is the release notes |
 | `<app>.apk`      | Android      | signed APK                                                  |
+| `<app>.aab`      | Google Play  | Android App Bundle signed with the upload key; my-app.json names it as `install.android.bundle` |
 
 Create the release as a draft, upload every asset with `my-app.json` last, then publish it
 (`gh release edit <tag> --draft=false`). A release that goes public first is "latest" while its
@@ -291,6 +292,43 @@ on:
   repository_dispatch:
     types: [my-store-release]
 ```
+
+## Android version codes
+
+Android refuses an update whose `versionCode` is lower than the installed one, and Google Play a
+code it already has, so take it from ourapps rather than from the workflow's run number. Once per build, in the job that builds the
+APK and the bundle:
+
+```
+POST https://ourapps.app/api/build/<STORE_APP_ID>/android/version-code
+Authorization: Bearer $STORE_BUILD_TOKEN
+{ "version": "1.2.0", "runId": "$GITHUB_RUN_ID", "runAttempt": "$GITHUB_RUN_ATTEMPT" }
+```
+
+The no-store answer is `{ "versionCode": 7 }`, a whole number of at most 2100000000 (Google Play's
+largest). It is above every code ourapps gave the app, and above the highest version code in
+Google Play when the developer's Google service account is saved and can read the app (read at most
+every ten minutes). The body is optional; with `runId` and `runAttempt` (both together, as positive
+whole numbers or their decimal strings) ourapps checks the run belongs to the app's repository, and
+a retry of the same attempt gets the same code back; another attempt gets a new one. Build the APK
+and the bundle with that code and the release's `versionName`. A disabled `android` target returns
+409 `{ "error": "Target is disabled." }`; a bad body 400; an invalid token 401.
+
+Google Play takes the Android App Bundle (`.aab`), built from the same source with the same
+`versionCode`, signed with the upload key: the same keystore as the APK when Google Play holds that
+key as the app signing key. Upload it as a release asset and name it in my-app.json:
+
+```json
+"android": {
+  "apk": "https://api.github.com/repos/you/poker-night/releases/assets/21",
+  "bundle": "https://api.github.com/repos/you/poker-night/releases/assets/22",
+  "applicationId": "com.you.pokernight"
+}
+```
+
+`applicationId` is the build's application ID, the package name of the app in Play Console. The
+install page offers only the APK; ourapps sends the bundle to Google Play when the developer
+releases it from the console.
 
 ## Secrets the app repository needs
 

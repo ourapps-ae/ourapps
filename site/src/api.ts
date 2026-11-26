@@ -41,6 +41,7 @@ export interface DevApp extends AppDetails {
   repo: string;
   manifestUrl: string;
   bundleId: string;
+  androidPackage?: string;
   showOnPage: boolean;
   ascAppId?: string | null;
   testflightUrl?: string | null;
@@ -61,6 +62,8 @@ export interface Release {
   apple?: Partial<Record<"ios" | "macos" | "tvos" | "iosOnMac", { version: string; testflightUrl: string } | null>>;
   // The App Store page per Apple platform, once a version is on the store.
   appStore?: Partial<Record<"ios" | "macos" | "tvos", string | null>>;
+  // Google Play's page once the app is live in production, and its testing opt-in page when the developer offers it.
+  googlePlay?: { store: string | null; testing: string | null };
   version: string;
   minPlayers: number;
   maxPlayers: number;
@@ -114,6 +117,10 @@ export interface SecretStatus {
   github: boolean;
   githubSavedAt: string | null;
   signing: SigningStatus | null;
+  googlePlay?: boolean;
+  googlePlaySavedAt?: string | null;
+  // The service account's email, which is invited in Play Console; the key itself is never shown.
+  googleServiceAccount?: string | null;
 }
 
 export interface SigningStatus {
@@ -262,6 +269,52 @@ export interface ApplePayStatus {
     done: boolean;
     error: string | null;
   };
+}
+
+export type GooglePlayStep = "app" | "content" | "listing" | "graphics" | "release";
+export type GooglePlayTrack = "internal" | "alpha" | "beta" | "production";
+export type GooglePlayStage = "sent" | "not-sent" | "in-review" | "approved" | "rejected" | "draft" | "live" | "replaced";
+
+export interface GooglePlayRelease {
+  track: GooglePlayTrack;
+  version: string;
+  versionCode: number;
+  status: "completed" | "inProgress" | "draft";
+  userFraction: number | null;
+  stage: GooglePlayStage;
+  googleState: string | null;
+  message: string | null;
+  committedAt: string;
+  checkedAt: string | null;
+  liveAt: string | null;
+}
+
+export interface GooglePlayStatus {
+  setUp: boolean;
+  needs: "service-account" | null;
+  serviceAccount: string | null;
+  packageName: string | null;
+  packageFrom: "app" | "my-app.json" | null;
+  step: GooglePlayStep | null;
+  links: { console: string; appContent: string; testingRules: string; signing: string; firstRelease: string; verification: string; playPage: string | null; testing: string | null };
+  app: { packageName: string | null; foundAt: string | null; done: boolean; error: string | null };
+  content: { privacyPolicyUrl: string; defaultPolicy: { url: string | null; collects: string[]; storage: "device" | "servers"; contactEmail: string; developerName: string }; policyAddress: string | null; confirmedAt: string | null; done: boolean; error: string | null };
+  listing: { title: string; shortDescription: string; fullDescription: string; contactEmail: string; contactWebsite: string; language: string | null; syncedAt: string | null; done: boolean; error: string | null };
+  graphics: {
+    featureGraphicUrl: string;
+    tabletScreenshots: string[];
+    started: boolean;
+    pending: number;
+    committed: boolean;
+    missing: string[];
+    items: { kind: "icon" | "featureGraphic" | "phone" | "tablet"; url: string; width: number | null; height: number | null; uploaded: boolean; error: string | null }[];
+    done: boolean;
+    error: string | null;
+  };
+  release: { version: string | null; bundle: boolean; ready: boolean; error: string | null };
+  releases: GooglePlayRelease[];
+  testing: { firstClosedAt: string | null; days: number | null; requiredDays: number; readyAt: string | null; testingLink: boolean };
+  live: { production: boolean; url: string | null };
 }
 
 export interface BuildStatus {

@@ -1,6 +1,7 @@
 // Validation for /my-app.json, schema 1. Contract owner: @my:orchestrator.
 import { SCREENSHOT_PLATFORMS, type ScreenshotPlatform } from "./screenshots.js";
 import { desktopPackages, validateAppleTarget, validateDesktop, type AppleTarget, type MacTarget, type WindowsTarget } from "./desktop.js";
+import { isPackageName } from "./googleplay.js";
 
 export const SUPPORTED_SCHEMA = 1;
 
@@ -18,7 +19,8 @@ export interface AppManifest {
   screenshotsByPlatform?: Partial<Record<ScreenshotPlatform, string[]>>;
   install: {
     pwa: string | null;
-    android: { apk: string } | null;
+    // bundle is the Android App Bundle Google Play takes and applicationId its package name; the APK is what the install page offers.
+    android: { apk: string; bundle?: string; applicationId?: string } | null;
     // testflight is the public invitation link, null until Apple approves the first build.
     // devices is display only: which Apple devices the build targets; absent makes no claim.
     ios: { bundleId: string; testflight: string | null; devices?: IosDevice[] } | null;
@@ -91,6 +93,10 @@ export function validateManifest(input: unknown): ManifestResult {
   const android = install.android;
   if (android !== null) {
     if (!isRecord(android) || !isHttpsUrl(android.apk)) errors.push("install.android.apk must be an https URL");
+    else {
+      if (android.bundle !== undefined && android.bundle !== null && !isHttpsUrl(android.bundle)) errors.push("install.android.bundle must be an https URL or null");
+      if (android.applicationId !== undefined && !isPackageName(android.applicationId)) errors.push("install.android.applicationId must be an Android application ID such as com.example.app");
+    }
   }
 
   const ios = install.ios;
@@ -117,9 +123,10 @@ export function validateManifest(input: unknown): ManifestResult {
   // install keeps only the fields above, so nothing else a release carries reaches an install page.
   const manifest = input as unknown as AppManifest;
   const iosIn = ios as Record<string, unknown> | null;
+  const androidIn = android as { apk: string; bundle?: string | null; applicationId?: string } | null;
   manifest.install = {
     pwa: pwa as string | null,
-    android: android === null ? null : { apk: (android as { apk: string }).apk },
+    android: androidIn === null ? null : { apk: androidIn.apk, ...(androidIn.bundle ? { bundle: androidIn.bundle } : {}), ...(androidIn.applicationId ? { applicationId: androidIn.applicationId } : {}) },
     ios: iosIn === null ? null : { bundleId: iosIn.bundleId as string, testflight: (iosIn.testflight as string | null | undefined) ?? null, ...(iosIn.devices ? { devices: iosIn.devices as IosDevice[] } : {}) },
   };
   for (const platform of ["macos", "windows"] as const) {

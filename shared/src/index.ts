@@ -4,3 +4,4 @@ export * from "./terms.js";
 export * from "./screenshots.js";
 export * from "./targets.js";
 export * from "./appstore.js";
+export * from "./googleplay.js";

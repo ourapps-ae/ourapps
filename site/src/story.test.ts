@@ -10,7 +10,7 @@ describe("public copy", () => {
     expect(text).toContain("ourapps delivers apps privately");
     expect(text).toContain("sign-in reads your public profile only");
     expect(text).toContain(`Version ${TERMS_VERSION}`);
-    for (const words of ["For the App Store", "default privacy policy", "Level N Ltd only hosts the text", "For Apple Pay", "never a private key"]) expect(text).toContain(words);
+    for (const words of ["For the App Store", "default privacy policy", "Level N Ltd only hosts the text", "For Apple Pay", "never a private key", "For Google Play", "service account key"]) expect(text).toContain(words);
     for (const word of ["recipe", "component", "catalogue", "organisations you are an active member", "build report", "network address"]) expect(text.toLowerCase(), word).not.toContain(word);
   });
 
@@ -48,6 +48,7 @@ describe("one story across the pages", () => {
     for (const id of ["sign-in", "credentials", "add-app", "release", "share", "testflight", "app-store", "updates", "security"]) expect(ids).toContain(id);
     expect(ids.indexOf("app-store")).toBe(ids.indexOf("testflight") + 1);
     expect(ids.indexOf("apple-pay")).toBe(ids.indexOf("app-store") + 1);
+    expect(ids.indexOf("google-play")).toBe(ids.indexOf("apple-pay") + 1);
   });
 
   it("no page or document tells another story", () => {
