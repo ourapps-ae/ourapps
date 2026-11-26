@@ -70,7 +70,7 @@ describe("Google Play card", () => {
     expect(first).toContain("Until then the Android download on the install page says Google Play is preparing it.");
     const refusal = "Google Play did not give the Android download. Google did not accept the service account.";
     expect(googlePlayCard(status({ apk: { offered: { ...offered, error: refusal }, waiting: null } })).html).toContain(refusal);
-    // Without the key the card still says why the download fails.
+    // Without the key the card says why the download fails.
     const noKey = "The Android download comes from Google Play with the developer's Google service account key, which is not saved in ourapps.";
     expect(googlePlayCard(status({ setUp: false, needs: "service-account", serviceAccount: null, step: null, apk: { offered: { ...offered, error: noKey }, waiting: null } })).html).toContain("which is not saved in ourapps.");
   });
