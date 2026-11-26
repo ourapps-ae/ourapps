@@ -365,7 +365,7 @@ export function renderInstall(root: HTMLElement, data: LinkPage, opts: InstallOp
           </div>
         </section>
       `,
-      { me: opts.me, nav: true, footnote: `${name} is shared privately by ${data.developer.displayName}. Not from the App Store or Google Play.` },
+      { me: opts.me, nav: true, footnote: `${name} is shared privately by ${data.developer.displayName}.${data.release?.googlePlay?.store || Object.values(data.release?.appStore ?? {}).some(Boolean) ? "" : " Not from the App Store or Google Play."}` },
     ),
   );
   finish(root);
@@ -501,7 +501,7 @@ function ctaArea(data: LinkPage, d: Detected, name: string): Raw {
     return html`<span class="pill">Not for ${d.device} yet</span>`;
   }
   if (d.platform === "android") {
-    if (install.android) return html`<a class="btn get" href="${install.android.apk}">Get</a><span class="small muted">direct download</span>`;
+    if (install.android) return html`<a class="btn get" href="${install.android.apk}">Get</a><span class="small muted">direct download${data.release.googlePlay?.store ? " or Google Play" : ""}</span>`;
     if (install.pwa) return html`<a class="btn get" href="${install.pwa}">Open</a><span class="small muted">web app</span>`;
     return html`<span class="pill">Not for Android yet</span>`;
   }
@@ -538,8 +538,9 @@ function installPanel(view: ViewKind | null, data: LinkPage, d: Detected, name: 
   const remote = d.platform === "other" || d.platform === "macos" || d.platform === "windows";
   if (view === "web") return remote ? webOnComputer(install.pwa!, name) : pwaSteps(install.pwa!, d.platform);
   const store = data.release!.appStore?.ios ?? null;
-  if (remote) return remoteCard(view, install, pageUrl, data.release!.testflightVersion ?? null, data.release!.version, store);
-  if (view === "android") return androidSteps(install.android!.apk, name);
+  const play = data.release!.googlePlay ?? { store: null, testing: null };
+  if (remote) return remoteCard(view, install, pageUrl, data.release!.testflightVersion ?? null, data.release!.version, view === "android" ? play.store : store);
+  if (view === "android") return androidSteps(install.android!.apk, name, play.store, play.testing);
   const note = deviceNote(install.ios?.devices, d.device);
   if (install.ios?.testflight) return testflightSteps(name, d.device, install.ios.testflight, note, store);
   if (store) return appStoreSteps(name, d.device, store, note);
@@ -594,7 +595,7 @@ function remoteCard(view: "iphone" | "ipad" | "android", install: Install, pageU
   const device = view === "android" ? "Android phone" : VIEW_LABEL[view];
   const steps =
     view === "android"
-      ? html`<li>Tap <b>Get</b>; the app downloads.</li><li>The first time, allow installs from the browser when Android asks.</li><li>Tap <b>Install</b>.</li>`
+      ? html`<li>Tap <b>Get</b>; the app downloads.</li><li>The first time, allow installs from the browser when Android asks.</li><li>Tap <b>Install</b>.</li>${store ? html`<li>Or tap <b>Get it on Google Play</b> on this page, on the phone.</li>` : ""}`
       : install.ios?.testflight
         ? html`<li>Get Apple's free <b>TestFlight</b> app from the App Store.</li><li>Tap <b>Open the invitation</b> on this page, on the ${device}.</li><li>In TestFlight tap <b>Accept</b>, then <b>Install</b>.${tfVersion && tfVersion !== version ? html` TestFlight has version ${tfVersion}.` : ""}</li>${store ? html`<li>Or tap <b>Get it on the App Store</b> on this page, on the ${device}.</li>` : ""}`
         : store
@@ -634,7 +635,12 @@ function shotsBlock(view: ViewKind | null, sets: ScreenshotSets, name: string, t
 }
 
 
-function androidSteps(apkUrl: string, name: string): Raw {
+// Once the app is live on Google Play, its page is offered beside the APK; Google Play then keeps it up to date.
+export function googlePlayLink(url: string, label = "Get it on Google Play"): Raw {
+  return html`<a class="btn block secondary mt-s" href="${url}">${icon("external")} ${label}</a>`;
+}
+
+function androidSteps(apkUrl: string, name: string, play: string | null = null, testing: string | null = null): Raw {
   return html`
     <div class="install-card">
       <h3>${icon("android", "icon-20")} Install on this Android phone</h3>
@@ -646,6 +652,8 @@ function androidSteps(apkUrl: string, name: string): Raw {
         <li>Tap <b>Install</b>.</li>
         <li>If Play Protect says it has not seen this developer before, tap <b>More details</b>, then <b>Install anyway</b>.</li>
       </ol>
+      ${play ? html`<p class="small muted mt">${name} is also on Google Play, which keeps it up to date.</p>${googlePlayLink(play)}` : ""}
+      ${testing ? html`<p class="small muted mt">${name}'s test version is on Google Play for the people taking part in its test.</p>${googlePlayLink(testing, "Join the test on Google Play")}` : ""}
     </div>
   `;
 }

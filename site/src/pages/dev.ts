@@ -7,6 +7,7 @@ import { signingRequest } from "../signing.js";
 import { buildStatusCard, watchBuildStatus } from "../buildStatus.js";
 import { loadAppStoreCard } from "../appStore.js";
 import { loadApplePayCard } from "../applePay.js";
+import { loadGooglePlayCard } from "../googlePlay.js";
 import { retainedTargetRelease, targetEnabled, targetSections, wireTargets } from "../targets.js";
 import { appIcon, callout, copyRow, copyText, emptyState, errorBox, fmtDate, icon, pill, statePill, toast, wireCopy, wireImages } from "../ui.js";
 import { AGENT_REPO_PROMPT, AGENT_STORE_PROMPT } from "./prompts.js";
@@ -145,7 +146,7 @@ export async function appsPage(root: HTMLElement): Promise<void> {
 /* App form                                                            */
 /* ------------------------------------------------------------------ */
 
-type FieldKey = "name" | "tagline" | "iconUrl" | "description" | "whatsNew" | "privacySummary" | "size" | "minOs" | "ageNote" | "repo" | "bundleId" | "manifestUrl";
+type FieldKey = "name" | "tagline" | "iconUrl" | "description" | "whatsNew" | "privacySummary" | "size" | "minOs" | "ageNote" | "repo" | "bundleId" | "androidPackage" | "manifestUrl";
 interface Field { key: FieldKey; label: string; type: "text" | "url" | "textarea"; hint?: string; placeholder?: string; required?: boolean }
 
 const SECTIONS: { title: string; about: string; fields: Field[] }[] = [
@@ -178,10 +179,11 @@ const SECTIONS: { title: string; about: string; fields: Field[] }[] = [
   },
   {
     title: "Build and publishing",
-    about: "Where the console reads releases from, and the bundle ID TestFlight needs for iPhone apps. The repository must follow the contract; the agent prompt sets it up for you.",
+    about: "Where the console reads releases from, the bundle ID TestFlight needs for iPhone apps, and the Android application ID Google Play knows the app by. The repository must follow the contract; the agent prompt sets it up for you.",
     fields: [
       { key: "repo", label: "GitHub repository", type: "text", required: true, placeholder: "owner/name", hint: "The latest release on this repository must carry an asset named my-app.json." },
       { key: "bundleId", label: "iPhone bundle ID", type: "text", placeholder: "com.yourname.pokernight", hint: "The Apple bundle identifier in your Xcode project. Also the default for Mac and Apple TV setup. ourapps creates the App ID on your Apple account when it does not exist." },
+      { key: "androidPackage", label: "Android application ID", type: "text", placeholder: "com.yourname.pokernight", hint: "The applicationId of the Android build, which is the package name of the app in Play Console. Empty takes install.android.applicationId from my-app.json." },
       { key: "manifestUrl", label: "my-app.json URL", type: "url", hint: "Only when the file is hosted somewhere other than the repository's releases." },
     ],
   },
@@ -323,6 +325,7 @@ export async function appForm(root: HTMLElement, appId: string | null): Promise<
   if (appId) for (const platform of ["macos", "tvos"] as const) void loadPlatformTestflightCard(root, app as DevApp, platform);
   if (appId) for (const platform of ["ios", "macos", "tvos"] as const) void loadAppStoreCard(root, appId, platform);
   if (appId) void loadApplePayCard(root, appId);
+  if (appId) void loadGooglePlayCard(root, appId);
   if (appId) {
     const fresh = sessionStorage.getItem(`buildToken:${appId}`);
     if (fresh) {
@@ -1097,6 +1100,7 @@ const SECRET_GROUPS: Record<string, string[]> = {
   apple: ["appleIssuerId", "appleKeyId", "applePrivateKey"],
   appleTeamId: ["appleTeamId"],
   githubToken: ["githubToken"],
+  googleServiceAccount: ["googleServiceAccount"],
 };
 
 const EVENT_LABELS: Record<string, string> = {
@@ -1118,6 +1122,10 @@ const EVENT_LABELS: Record<string, string> = {
   "app-store-screenshots-uploaded": "App Store screenshots uploaded",
   "app-store-submitted": "Sent to App Review",
   "app-store-released": "Released on the App Store",
+  "google-play-checked": "Google Play service account checked",
+  "google-play-details-saved": "Google Play details saved",
+  "google-play-graphics-uploaded": "Google Play graphics uploaded",
+  "google-play-released": "Sent to Google Play",
 };
 
 // Makes the key and request in this browser, then lets the server get the certificate.
@@ -1201,6 +1209,23 @@ export async function settings(root: HTMLElement, note = "", signingNote?: { res
             <div class="field"><input type="text" name="appleTeamId" value="${me.secrets.appleTeamId}" autocomplete="off" placeholder="ABCDE12345" /></div>
           </div>
         </div>
+        <div class="form-section">
+          <a id="google-play"></a>
+          <div class="about"><h3>Google Play service account</h3><p>Lets ourapps write store listings and send Android releases to Google Play in your developer account. <a href="/dev/guide#google-play-account">How to make one</a>.</p></div>
+          <div>
+            <div class="row wrap mb">${savedMarker(Boolean(me.secrets.googlePlay), me.secrets.googlePlaySavedAt ?? null, "googleServiceAccount")}${me.secrets.googleServiceAccount ? html` <code>${me.secrets.googleServiceAccount}</code> <button type="button" class="btn sm secondary" id="google-check">Check with Google</button>` : ""}</div>
+            <ol class="steps small">
+              <li>In <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud Console</a>, create a project, or choose one.</li>
+              <li>Turn on the <a href="https://console.cloud.google.com/apis/api/androidpublisher.googleapis.com/" target="_blank" rel="noopener">Google Play Android Developer API</a> for that project.</li>
+              <li>In <a href="https://console.cloud.google.com/iam-admin/serviceaccounts" target="_blank" rel="noopener">IAM and admin, Service accounts</a>, create a service account; it needs no Google Cloud roles.</li>
+              <li>Open it, then Keys, Add key, Create new key, JSON. The file downloads once.</li>
+              <li>In <a href="https://play.google.com/console/users-and-permissions" target="_blank" rel="noopener">Play Console, Users and permissions</a>, invite the service account's email with access to your apps: Release apps to testing tracks, Release to production, and Manage store presence.</li>
+              <li>Paste the whole JSON file here and save.</li>
+            </ol>
+            <div class="field"><label>Service account key (JSON)</label><textarea name="googleServiceAccount" autocomplete="off" placeholder="${me.secrets.googlePlay ? "saved; paste a new one to replace" : '{ "type": "service_account", ... }'}"></textarea></div>
+            <div id="google-check-result"></div>
+          </div>
+        </div>
         <div id="secrets-error"></div>
         <div class="form-actions"><button class="btn" type="submit">Save credentials</button></div>
       </form>
@@ -1263,7 +1288,20 @@ export async function settings(root: HTMLElement, note = "", signingNote?: { res
     location.href = "/";
   };
   if (signingNote) root.querySelector("#signing")?.scrollIntoView();
-  else if (["#credentials", "#security", "#signing", "#review-contact"].includes(location.hash)) root.querySelector(location.hash)?.scrollIntoView();
+  else if (["#credentials", "#security", "#signing", "#review-contact", "#google-play"].includes(location.hash)) root.querySelector(location.hash)?.scrollIntoView();
+  const googleCheck = root.querySelector<HTMLButtonElement>("#google-check");
+  if (googleCheck) googleCheck.onclick = async () => {
+    const box = root.querySelector<HTMLElement>("#google-check-result")!;
+    googleCheck.disabled = true;
+    try {
+      const r = await api<{ serviceAccount: string; apps: { name: string; packageName: string; ok: boolean; error: string | null }[] }>("POST", "/api/dev/googleplay/check");
+      box.innerHTML = callout("ok", html`<p>Google accepted ${r.serviceAccount}.</p>${r.apps.length ? html`<ul class="bullets small">${r.apps.map((a) => html`<li><b>${a.name}</b> (${a.packageName}): ${a.ok ? "Google Play has it" : a.error}</li>`)}</ul>` : html`<p class="small">No app has an Android application ID yet, so no app was checked.</p>`}`).html;
+    } catch (err) {
+      box.innerHTML = errorBox(err).html;
+    } finally {
+      googleCheck.disabled = false;
+    }
+  };
   const reviewForm = root.querySelector<HTMLFormElement>("#review-form")!;
   reviewForm.onsubmit = async (e) => {
     e.preventDefault();
@@ -1294,7 +1332,7 @@ export async function settings(root: HTMLElement, note = "", signingNote?: { res
     e.preventDefault();
     const fd = new FormData(secretsForm);
     const body: Record<string, unknown> = {};
-    for (const k of ["appleIssuerId", "appleKeyId", "applePrivateKey", "appleTeamId", "githubToken"]) body[k] = fd.get(k);
+    for (const k of ["appleIssuerId", "appleKeyId", "applePrivateKey", "appleTeamId", "githubToken", "googleServiceAccount"]) body[k] = fd.get(k);
     const changed = Object.values(body).filter((v) => String(v ?? "").trim() !== "").length;
     const appleChanged = ["appleIssuerId", "appleKeyId", "applePrivateKey"].some((k) => String(body[k] ?? "").trim() !== "");
     let saved: { secrets: SecretStatus };
@@ -1397,6 +1435,9 @@ export async function agents(root: HTMLElement): Promise<void> {
             <tr><td><code>GET /api/dev/apps/:id/applepay</code></td><td>where Apple Pay stands and the next step</td></tr>
             <tr><td><code>POST /api/dev/apps/:id/applepay/{merchant,certificate,confirm,profiles}</code></td><td>choose the merchant identifier, make a Payment Processing certificate, confirm the tick on the App ID, make the profiles again</td></tr>
             <tr><td><code>POST /api/dev/apps/:id/applepay/certificate/:certId/activate</code></td><td>make Apple use the next Payment Processing certificate</td></tr>
+            <tr><td><code>GET, PUT /api/dev/apps/:id/googleplay</code></td><td>where Google Play stands and the next step; save a step</td></tr>
+            <tr><td><code>POST /api/dev/apps/:id/googleplay/{graphics,release}</code></td><td>upload the listing's graphics, send the latest bundle to a track</td></tr>
+            <tr><td><code>POST /api/build/:app/android/version-code</code></td><td>the next Android versionCode, with that app's build token</td></tr>
             <tr><td><code>GET /api/build/:app/targets</code></td><td>read <code>{targets:AppTargets}</code> using that app's build token as the bearer credential</td></tr>
           </table>
           <p class="small muted"><code>AppTargets</code> contains six booleans: <code>ios</code>, <code>android</code>, <code>web</code>, <code>macos</code>, <code>windows</code> and <code>tvos</code>.</p>
