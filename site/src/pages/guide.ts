@@ -22,7 +22,7 @@ function sections(origin: string, slug: string): Section[] {
           <li><b>ourapps signs and uploads the Apple builds.</b> iPhone, iPad, Mac and Apple TV builds are signed with a certificate ourapps keeps for you, uploaded to TestFlight and sent to your testers' group (<a href="#testflight">step 6</a>).</li>
           <li><b>You add the app and create a share link</b> in this console and send it (<a href="#add-app">step 3</a>, <a href="#share">step 5</a>). The person opens it and installs the version for their device.</li>
           <li><b>Updates reach every device</b> through the same link (<a href="#updates">step 8</a>).</li>
-          <li><b>When an app is ready for everyone</b>, ourapps takes a TestFlight build of it to Apple's App Review, and the install page offers it on the App Store too (<a href="#app-store">step 7</a>).</li>
+          <li><b>When an app is ready for everyone</b>, ourapps takes a TestFlight build of it to Apple's App Review, and the install page offers it on the App Store too (<a href="#app-store">step 7</a>). An Android app goes to Google Play the same way (<a href="#google-play">Google Play</a>).</li>
         </ol>
         <div class="grid-2">
           <div class="card flat"><h3>${icon("android", "icon-20")} Android</h3><p>The page offers a direct download of your signed APK and walks the person through the one-time "allow from this source" prompt. Nothing else is needed.</p></div>
@@ -60,6 +60,7 @@ function sections(origin: string, slug: string): Section[] {
         <ol class="steps">
           <li><b>Wait for Apple's beta review</b> of the first build of each new iPhone version. The app's TestFlight card says what it is waiting for.</li>
           <li><b>For the App Store</b>: answer the app's privacy questions in App Store Connect, decide the listing, the text and when a version is released, and ask Apple for unlisted distribution when you want it. <a href="/dev/guide#app-store">How</a>.</li>
+          <li><b>For Google Play</b>: make the service account key, create the app and upload its first bundle in Play Console, answer App content there, choose the track of each release, and run the closed test a new personal account needs before production. <a href="/dev/guide#google-play">How</a>.</li>
           <li><b>For Apple Pay in a shop app</b>: get the certificate request from your payment processor and give the certificate back, tick the merchant identifier on the App ID in the Apple Developer site, declare it in the app, and renew the certificate before it expires. <a href="/dev/guide#apple-pay">How</a>.</li>
           <li><b>Send the share link</b> to the person. The agent can create it and give you the URL and QR code; the message to the person is yours.</li>
           <li><b>Before the signing certificate's yearly expiry</b> (the date is under <a href="/dev/settings#signing">Settings</a>), press <b>Replace certificate</b> there. ourapps makes the profiles of enabled TestFlight targets again with it.</li>
@@ -98,6 +99,7 @@ function sections(origin: string, slug: string): Section[] {
         { id: "apple-setup", title: "iPhone signing" },
         { id: "cloudflare", title: "Cloudflare (web apps)" },
         { id: "android-setup", title: "Android signing" },
+        { id: "google-play-account", title: "Google Play service account" },
       ],
       body: html`
         <p>Two credentials live in <a href="/dev/settings#credentials">Settings</a>, encrypted per account. Android-only apps need just the first.</p>
@@ -155,6 +157,17 @@ function sections(origin: string, slug: string): Section[] {
         <pre><code>keytool -genkeypair -v -keystore release.keystore -alias app -keyalg RSA -keysize 2048 -validity 10000
 base64 -i release.keystore | pbcopy   # paste as the secret ANDROID_KEYSTORE_BASE64</code></pre>
         <p>Keep the keystore and passwords; an APK signed with a different key cannot update an installed app. Google's developer verification rules for installs on certified Android phones, and its free limited distribution accounts for sharing with up to 20 devices, are at <a href="https://developer.android.com/developer-verification" target="_blank" rel="noopener">developer.android.com/developer-verification</a>.</p>
+
+        <h3 id="google-play-account">Google Play service account (Google Play)</h3>
+        <p>ourapps works in your Google Play developer account with a service account key you make once. It needs a Google Play developer account (a one-time 25 US dollars).</p>
+        <ol class="steps">
+          <li>In <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud Console</a>, create a project, or choose one.</li>
+          <li>Turn on the <a href="https://console.cloud.google.com/apis/api/androidpublisher.googleapis.com/" target="_blank" rel="noopener">Google Play Android Developer API</a> for that project: <b>Enable</b>.</li>
+          <li>In <a href="https://console.cloud.google.com/iam-admin/serviceaccounts" target="_blank" rel="noopener">IAM and admin, Service accounts</a>, <b>Create service account</b>, name it <b>ourapps</b>; it needs no Google Cloud roles.</li>
+          <li>Open it, then <b>Keys</b>, <b>Add key</b>, <b>Create new key</b>, <b>JSON</b>. The file downloads once; keep it somewhere safe.</li>
+          <li>In <a href="https://play.google.com/console/users-and-permissions" target="_blank" rel="noopener">Play Console, Users and permissions</a>, <b>Invite new users</b> with the service account's email (it ends in <code>.iam.gserviceaccount.com</code>), and give it access to your apps with <b>Release apps to testing tracks</b>, <b>Release to production</b> and <b>Manage store presence</b>.</li>
+          <li>Paste the whole JSON file under <a href="/dev/settings#google-play">Settings</a> and save, then press <b>Check with Google</b>. ourapps keeps the key encrypted like your other credentials and shows only the service account's email.</li>
+        </ol>
       `,
     },
     {
@@ -198,6 +211,7 @@ base64 -i release.keystore | pbcopy   # paste as the secret ANDROID_KEYSTORE_BAS
         <ol class="steps">
           <li>Builds the signed APK and, for iPhone apps, an <code>.ipa</code> signed for the App Store, which it uploads to TestFlight through ourapps.</li>
           <li>Creates a GitHub Release as a draft, uploads <code>icon.png</code>, screenshots, the <code>.apk</code> and <code>my-app.json</code> last, then publishes it. A release that goes public before its files are in makes install pages fail until <code>my-app.json</code> arrives.</li>
+          <li>Asks ourapps for the Android <code>versionCode</code> (<code>POST /api/build/&lt;app&gt;/android/version-code</code> with the build token), which goes up with every build and stays above Google Play's, and builds the Android App Bundle (<code>.aab</code>) beside the APK for Google Play.</li>
           <li>Writes every URL inside my-app.json as a release-asset API URL (<code>https://api.github.com/repos/owner/name/releases/assets/123</code>). Private repositories work this way and nothing is guessable; the console turns them into short-lived links for the phone.</li>
           <li>For iPhone apps: fetches the certificate, its key and the App Store profile from the console with the build token, uploads the build through ourapps, and also runs on the <code>my-store-release</code> event ourapps sends for the first build, when you ask for a build on the app's TestFlight card, and two weeks before a TestFlight build expires. The <a href="/contract.md">contract</a> spells out every step.</li>
         </ol>
@@ -215,11 +229,15 @@ base64 -i release.keystore | pbcopy   # paste as the secret ANDROID_KEYSTORE_BAS
   "screenshots": ["https://api.github.com/repos/you/poker-night/releases/assets/645774610"],
   "install": {
     "pwa": null,
-    "android": { "apk": "https://api.github.com/repos/you/poker-night/releases/assets/645774607" },
+    "android": {
+      "apk": "https://api.github.com/repos/you/poker-night/releases/assets/645774607",
+      "bundle": "https://api.github.com/repos/you/poker-night/releases/assets/645774608",
+      "applicationId": "com.you.pokernight"
+    },
     "ios": { "bundleId": "com.you.pokernight", "testflight": "https://testflight.apple.com/join/AbCd1234" }
   }
 }</code></pre>
-        <p>Use <code>null</code> for platforms you do not ship. <code>minPlayers</code> and <code>maxPlayers</code> are 1 for anything that is not a game.</p>
+        <p>Use <code>null</code> for platforms you do not ship. <code>android.bundle</code> and <code>android.applicationId</code> are for Google Play and optional. <code>minPlayers</code> and <code>maxPlayers</code> are 1 for anything that is not a game.</p>
         <h3 id="release-notes">Release notes your people will read</h3>
         <p>The install page shows a <b>Revision history</b>: one entry per release, with the version, the date, the commit it was built from, and notes. Automated bodies such as "Automated build 53 of version 0.7.2" are what people see when nobody writes anything, so write the notes. The mechanism:</p>
         <ol class="steps">
@@ -373,6 +391,31 @@ startButton.onclick = async () => {
       `,
     },
     {
+      id: "google-play",
+      title: "Google Play for Android apps (ourapps does most of it)",
+      body: html`
+        <p>An Android app can go to Google Play too, with your own Google Play developer account and its service account key in Settings (<a href="#google-play-account">how</a>). ourapps writes the store listing and graphics, sends the latest release's Android App Bundle to the track you choose and follows Google's review; once the app is live in production, the install page shows <b>Get it on Google Play</b> beside the APK. The app is free.</p>
+        <p>The <b>Google Play</b> card in the app's Android section has these steps. Done steps say what Google has; the current step asks for what it needs.</p>
+        <ol class="steps">
+          <li><b>App record.</b> Google has no API to create an app. In <a href="https://play.google.com/console" target="_blank" rel="noopener">Play Console</a>, <b>Create app</b> with the package name the card shows: the Android build's application ID, from my-app.json (<code>install.android.applicationId</code>) or the app's settings here. Upload the first bundle by hand: Test and release, Testing, Internal testing, Create new release, add the <code>.aab</code> from the latest GitHub release, save and roll it out. Until Play has one bundle, Google answers that the package is not found. Then press <b>Check with Google</b>.</li>
+          <li><b>App content</b>, by hand in Play Console (Monitor and improve, Policy and programs, App content): the privacy policy, ads, app access, target audience, the content rating questionnaire and data safety. Google takes the privacy policy address only there, so the card shows the address to paste: your own, or the default policy ourapps writes from the same answers as for the App Store. Then press <b>I have completed App content</b>.</li>
+          <li><b>Store listing</b>: the app's name (30 characters), short description (80) and full description (4,000), starting from the app's details here, with the contact email and website. ourapps writes them in Play's default language.</li>
+          <li><b>Graphics</b>: the icon (512 x 512 PNG) from the app's icon, a feature graphic (1024 x 500, JPEG or PNG without transparency; Google requires one, so give its address on the card), 2 to 8 phone screenshots from the Android screenshot list (each side between 320 and 3,840 pixels, the long side at most 2.3 times the short side), and tablet screenshots when the app runs on tablets. ourapps checks each, replaces the listing's earlier images and commits them together. Large images go a few at a time; the card carries on by itself, and so does ourapps every ten minutes.</li>
+          <li><b>Release</b>: the track (Internal testing, Closed testing, Open testing or Production), a staged rollout percentage if wanted, and release notes (500 characters; empty takes the version's release notes). ourapps sends the bundle my-app.json names as <code>install.android.bundle</code> from the GitHub release to Google as it arrives, puts it on the track and sends it to Google's review. It goes live when Google approves it.</li>
+        </ol>
+        <p>After a release, ourapps asks Google every ten minutes where it stands: in review, approved, not approved, or live. When managed publishing is on for the app in Play Console, an approved release waits for you to publish it there; when Google holds changes after a refusal, you send them for review in Play Console, Publishing overview.</p>
+        <h3>Before production</h3>
+        <p>A personal developer account created after 13 November 2023 must run a closed test with at least 12 testers opted in for 14 days in a row, then apply for production access on the Dashboard in Play Console (<a href="https://support.google.com/googleplay/android-developer/answer/14151465" target="_blank" rel="noopener">Google's rules</a>). Until Google grants it, Google refuses production releases and the card shows Google's answer; Open testing opens with it. The card counts the days from ourapps' first Closed testing release. Testers join a closed or open test at <code>https://play.google.com/apps/testing/</code> followed by the package name, which the card can offer on the install page while a test is live.</p>
+        <h3>Signing</h3>
+        <p>Google Play signs what it delivers with its own app signing key, and the key your workflow signs with becomes the upload key. A phone that has the APK from ourapps cannot take Google Play's version as an update, because the signatures differ, unless Google Play signs with the same key. Use one key for both: at the first release, when Play Console asks how the app is signed, give Google a copy of the keystore the workflow signs the APK with, following <a href="https://support.google.com/googleplay/android-developer/answer/9842756" target="_blank" rel="noopener">Google's instructions for Play App Signing</a>. Once the app is on an open track, Google keeps that key.</p>
+        <h3>Google Pay</h3>
+        <p>For an app that takes payments, Google approves Google Pay in the <a href="https://pay.google.com/business/console" target="_blank" rel="noopener">Google Pay and Wallet Console</a>, which lists only apps in Google Play under the Google account signed in to it. Use the same Google account for both, or invite the Play Console's owner or admin account under Users in the Google Pay and Wallet Console and sign in with it. A release on any track, Internal testing included, puts the app on that list; approval comes before the app goes public (<a href="https://developers.google.com/pay/api/android/guides/test-and-deploy/request-prod-access" target="_blank" rel="noopener">Google's steps</a>). Google Pay in production checks the app's release signature, so the APK from ourapps takes Google Pay only when it is signed with the same key as the Google Play copy: when you gave Google Play your own key as the app signing key.</p>
+        <h3>Android developer verification</h3>
+        <p>On certified Android phones an app installs without extra steps only when its package name is registered to a verified developer, with the key it is signed with. Google applies this in Brazil, Indonesia, Singapore and Thailand from 30 September 2026 and in every country from January 2027; otherwise people install through Android's advanced flow, with warnings and a one-day wait. Play Console registers the package name when the app is created there, with the identity you verified for Google Play. For the APK from ourapps, register the package name and the key the APK is signed with: in Play Console with a Google Play account, otherwise in the Android Developer Console, which asks for your identity (a personal or organisation account; an organisation needs a D-U-N-S number and a website) and the public certificate of the signing key. <a href="https://developer.android.com/developer-verification" target="_blank" rel="noopener">Google's requirements</a>.</p>
+        ${callout("info", html`<p>The service account needs <b>Release apps to testing tracks</b>, <b>Release to production</b> and <b>Manage store presence</b> for the app in Play Console. The card says so in plain words when Google refuses it, and when the Google Play Android Developer API is not turned on.</p>`)}
+      `,
+    },
+    {
       id: "updates",
       title: "8. Updates and auto-update (agent does the work)",
       sub: [{ id: "auto-update", title: "Auto-update" }],
@@ -489,6 +532,7 @@ suspend fun checkForUpdate(context: Context) {
         <table class="table">
           <tr><th>What</th><th>How it is stored</th><th>When it is decrypted</th></tr>
           <tr><td>App Store Connect key (issuer id, key id, .p8), Apple team id</td><td>AES-256-GCM, one ciphertext per field, under a key derived for your account alone (HKDF from the master secret), with your account id and the field name bound in as authenticated data so a ciphertext cannot be moved between accounts or fields</td><td>Only inside one request or scheduled check: setting up signing or TestFlight, a workflow's upload, and the ten-minute check that looks after TestFlight builds</td></tr>
+          <tr><td>Google Play service account key</td><td>Same scheme</td><td>Only when writing the Google Play listing, graphics and releases, reading Play's highest version code, and the ten-minute check that follows releases</td></tr>
           <tr><td>GitHub token</td><td>Same scheme</td><td>Only when reading a release or workflow status, or asking the repository for a fresh build</td></tr>
           <tr><td>Apple Distribution and Mac Installer Distribution private keys</td><td>Same scheme; the app signing key is made in your browser and the installer key during Mac setup on the server</td><td>Only when an app's release workflow presents that app's build token; the installer key is returned only for Mac builds</td></tr>
           <tr><td>API keys, build tokens, sign-in sessions</td><td>Keyed hashes (HMAC-SHA256 with a pepper derived from the master secret); the key itself is shown to you once and never stored</td><td>Never; a presented key is hashed and compared</td></tr>
@@ -552,6 +596,8 @@ suspend fun checkForUpdate(context: Context) {
           <tr><td>The App Store card says the App Store Connect key does not allow this</td><td>The key needs the App Manager or Admin role. Make one in App Store Connect, Users and Access, Integrations, and save it in Settings.</td></tr>
           <tr><td>The Apple Pay card says the App Store Connect key does not allow this</td><td>Merchant identifiers and Payment Processing certificates need a key with the Admin role. Make one in App Store Connect, Users and Access, Integrations, and save it in Settings.</td></tr>
           <tr><td>The Apple Pay card says a profile does not carry the merchant identifier</td><td>The merchant identifier is not ticked on the App ID. Open the App ID from the card, tick it beside Apple Pay Payment Processing, save, then press Make the profiles again.</td></tr>
+          <tr><td>The Google Play card says Google Play has no app with the package name</td><td>The app is not in Play Console under that package name, its first bundle has not been uploaded there by hand, or the service account is not invited with access to it. The card lists all three.</td></tr>
+          <tr><td>The Google Play card says the Google Play Android Developer API is not turned on</td><td>Turn it on in the service account's Google Cloud project (APIs and services, Library), wait a few minutes, then check again.</td></tr>
           <tr><td>The App Store card says a screenshot size is missing</td><td>Add a screenshot of one of the sizes it names to the app's screenshot list for that device, without transparency, then press Check and upload again.</td></tr>
           <tr><td>Nothing happens when tapping Open the invitation on iPhone</td><td>The page is inside another app's browser (Gmail, Instagram). Open in Safari. WhatsApp and Messages are fine.</td></tr>
           <tr><td>Android says "App not installed"</td><td>An older build signed with a different key is installed. Uninstall it first, or keep the signing key stable.</td></tr>
@@ -565,6 +611,7 @@ suspend fun checkForUpdate(context: Context) {
       body: html`
         <ul class="bullets">
           <li><b>Apple Developer Program:</b> 99 US dollars a year. <b>TestFlight:</b> up to 10,000 people per app through the public link; each build lasts 90 days and ourapps asks for a fresh one before then; Apple reviews the first build of each version. <b>App Store:</b> free apps, in every country and region; Apple's App Review checks every version.</li>
+          <li><b>Google Play:</b> a developer account costs 25 US dollars once; free apps; Google reviews releases, and a new personal account needs a 14-day closed test with 12 testers before production.</li>
           <li><b>Android and web:</b> no device limit and no account. Google's developer verification rules for installs on certified Android phones, and its free limited distribution accounts for sharing with up to 20 devices, are at <a href="https://developer.android.com/developer-verification" target="_blank" rel="noopener">developer.android.com/developer-verification</a>.</li>
           <li><b>Share links:</b> unlimited, and they only expire when you set a date.</li>
           <li><b>GitHub:</b> free. Releases are free storage; private repositories get 2,000 Actions minutes a month, and macOS minutes count ten times. A lean iOS job takes 8 to 15 minutes, so budget roughly 15 iPhone builds a month on the free tier, or run iOS builds on your own Mac.</li>
