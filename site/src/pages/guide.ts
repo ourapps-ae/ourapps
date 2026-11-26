@@ -60,6 +60,7 @@ function sections(origin: string, slug: string): Section[] {
         <ol class="steps">
           <li><b>Wait for Apple's beta review</b> of the first build of each new iPhone version. The app's TestFlight card says what it is waiting for.</li>
           <li><b>For the App Store</b>: answer the app's privacy questions in App Store Connect, decide the listing, the text and when a version is released, and ask Apple for unlisted distribution when you want it. <a href="/dev/guide#app-store">How</a>.</li>
+          <li><b>For Apple Pay in a shop app</b>: get the certificate request from your payment processor and give the certificate back, tick the merchant identifier on the App ID in the Apple Developer site, declare it in the app, and renew the certificate before it expires. <a href="/dev/guide#apple-pay">How</a>.</li>
           <li><b>Send the share link</b> to the person. The agent can create it and give you the URL and QR code; the message to the person is yours.</li>
           <li><b>Before the signing certificate's yearly expiry</b> (the date is under <a href="/dev/settings#signing">Settings</a>), press <b>Replace certificate</b> there. ourapps makes the profiles of enabled TestFlight targets again with it.</li>
           <li><b>Approve the release notes</b> for each version in <code>CHANGELOG.md</code>. An agent drafts them from the commits; they are shown to your people as the revision history, so the final words are yours. <a href="/dev/guide#release-notes">How</a>.</li>
@@ -348,6 +349,30 @@ startButton.onclick = async () => {
       `,
     },
     {
+      id: "apple-pay",
+      title: "Apple Pay in a shop app (ourapps does most of it)",
+      body: html`
+        <p>A shop app on iPhone and iPad, or on Mac, can take Apple Pay through your payment processor (Stripe, or any processor that gives you a certificate request). It all happens in your own Apple team, with your App Store Connect key. Set up iPhone and iPad TestFlight first: Apple Pay goes into the App Store profile TestFlight makes. Apple TV has no Apple Pay.</p>
+        <p>The <b>Apple Pay</b> card on the app's page, after the App Store cards, has these steps. Done steps say what Apple has; the current step asks for what it needs.</p>
+        <ol class="steps">
+          <li><b>Merchant identifier.</b> Apple Pay knows the shop by it, one per app. ourapps makes <code>merchant.</code> followed by the app's bundle identifier, for example <code>merchant.com.yourname.pokernight</code>, named after the app, or uses one your team has. It then turns Apple Pay on for the app's App ID and makes the App Store profiles again, because Apple invalidates them when the App ID changes.</li>
+          <li><b>Payment Processing certificate.</b> Your payment processor gives you a certificate request and keeps its private key; ourapps never holds it. In Stripe: <a href="https://dashboard.stripe.com/settings/ios_certificates" target="_blank" rel="noopener">Dashboard, Settings, iOS certificates</a>, <b>Add new application</b>, then download the request. Paste it or choose the file on the card; ourapps makes the certificate with Apple and offers it as a <code>.cer</code> file, which you give back to the processor in the same place. Each request makes one certificate.</li>
+          <li><b>Apple Pay on the App ID.</b> Apple's API turns Apple Pay on but cannot tick the merchant identifier on the App ID, so that one tick is yours. The card links the App ID's page in the Apple Developer site (Certificates, Identifiers and Profiles): beside <b>Apple Pay Payment Processing</b> click <b>Edit</b>, tick the merchant identifier, click <b>Continue</b>, then <b>Save</b> and <b>Confirm</b>. Then press <b>I have ticked it</b> on the card.</li>
+          <li><b>App Store profiles.</b> ourapps makes the App Store profiles of iPhone and iPad, and of Mac when it is set up, again, reads each one back and shows whether it carries the merchant identifier. Builds fetch the profiles from ourapps, so the next build of the app carries Apple Pay.</li>
+        </ol>
+        <h3>In the app</h3>
+        <p>The app declares the same entitlement, <code>com.apple.developer.in-app-payments</code>, with the merchant identifier, in its entitlements file (in Xcode: Signing and Capabilities, + Capability, Apple Pay, then tick the merchant identifier):</p>
+        <pre><code>&lt;key&gt;com.apple.developer.in-app-payments&lt;/key&gt;
+&lt;array&gt;
+  &lt;string&gt;merchant.com.yourname.pokernight&lt;/string&gt;
+&lt;/array&gt;</code></pre>
+        <p>The app also gives Apple Pay the merchant identifier when it asks for a payment.</p>
+        <h3>Renewing the certificate</h3>
+        <p>Apple's Payment Processing certificates last 25 months. The card shows the expiry and says to renew a month before it: get another certificate request from your payment processor, make the certificate on the card and give it back to the processor. Apple uses one certificate of a merchant identifier at a time, so the second is listed as not in use; once the processor has it, revoke the one in use on the merchant identifier's page in the Apple Developer site, and Apple uses the other.</p>
+        ${callout("info", html`<p>Apple lets only the Account Holder and Admins make merchant identifiers and Payment Processing certificates, so your App Store Connect key needs the <b>Admin</b> role. The card says so in plain words when Apple refuses it.</p>`)}
+      `,
+    },
+    {
       id: "updates",
       title: "8. Updates and auto-update (agent does the work)",
       sub: [{ id: "auto-update", title: "Auto-update" }],
@@ -482,7 +507,7 @@ suspend fun checkForUpdate(context: Context) {
           <li><b>Your agents, with an API key.</b> Each key has a scope (read only, or manage), an expiry you choose, and can be revoked alone or all at once. A key can never create or revoke keys, change credentials, delete your account or sign out sessions; those need you in a browser. Keys are per developer: no key can see another developer's apps or links.</li>
           <li><b>Your app's repository, with a build token.</b> Per app, used to fetch the signing certificate, its key and the App Store profile, and to upload builds to TestFlight through ourapps. Whoever holds it can sign builds as you and send them to your TestFlight, so keep it in repository secrets only; rotate it on the app's page.</li>
           <li><b>Nobody else.</b> There is no shared admin interface; every row is tied to one developer and every query is filtered by it.</li>
-          <li>Every security event (sign-in, sign-out, credential saves and removals, iPhone signing setup, key creation and revocation, build token rotation, app deletion, terms acceptance, App Store details, submissions and releases) is recorded with the country of the request and shown to you under Settings, Security.</li>
+          <li>Every security event (sign-in, sign-out, credential saves and removals, iPhone signing setup, key creation and revocation, build token rotation, app deletion, terms acceptance, App Store details, submissions and releases, Apple Pay changes) is recorded with the country of the request and shown to you under Settings, Security.</li>
         </ul>
 
         <h3 id="security-people">Your people</h3>
@@ -525,6 +550,8 @@ suspend fun checkForUpdate(context: Context) {
           <tr><td>Install page says the app has no published build yet, for a minute after a release</td><td>The release went public before <code>my-app.json</code> was uploaded. Create releases as drafts and publish them after every file is in.</td></tr>
           <tr><td>The TestFlight invitation says "This beta isn't accepting any new testers right now"</td><td>No build has passed Apple's beta review yet, or the public link is off. The app's TestFlight card says which, and what it waits for. Until it opens, the install page tells people on iPhone and iPad that the app is coming soon.</td></tr>
           <tr><td>The App Store card says the App Store Connect key does not allow this</td><td>The key needs the App Manager or Admin role. Make one in App Store Connect, Users and Access, Integrations, and save it in Settings.</td></tr>
+          <tr><td>The Apple Pay card says the App Store Connect key does not allow this</td><td>Merchant identifiers and Payment Processing certificates need a key with the Admin role. Make one in App Store Connect, Users and Access, Integrations, and save it in Settings.</td></tr>
+          <tr><td>The Apple Pay card says a profile does not carry the merchant identifier</td><td>The merchant identifier is not ticked on the App ID. Open the App ID from the card, tick it beside Apple Pay Payment Processing, save, then press Make the profiles again.</td></tr>
           <tr><td>The App Store card says a screenshot size is missing</td><td>Add a screenshot of one of the sizes it names to the app's screenshot list for that device, without transparency, then press Check and upload again.</td></tr>
           <tr><td>Nothing happens when tapping Open the invitation on iPhone</td><td>The page is inside another app's browser (Gmail, Instagram). Open in Safari. WhatsApp and Messages are fine.</td></tr>
           <tr><td>Android says "App not installed"</td><td>An older build signed with a different key is installed. Uninstall it first, or keep the signing key stable.</td></tr>

@@ -47,6 +47,7 @@ describe("one story across the pages", () => {
     expect(ids.slice(0, 2)).toEqual(["overview", "tldr"]);
     for (const id of ["sign-in", "credentials", "add-app", "release", "share", "testflight", "app-store", "updates", "security"]) expect(ids).toContain(id);
     expect(ids.indexOf("app-store")).toBe(ids.indexOf("testflight") + 1);
+    expect(ids.indexOf("apple-pay")).toBe(ids.indexOf("app-store") + 1);
   });
 
   it("no page or document tells another story", () => {
