@@ -199,7 +199,7 @@ async function runGraphics(env: Env, deps: Deps, app: AppRow, packageName: strin
     const message = googlePlayProblem(err, ctx.email ?? undefined, packageName);
     state.errors.graphics = message;
     // An edit Google no longer has cannot take more images; the next request starts a new one.
-    if (state.graphics && err instanceof GoogleError && err.status === 404) Object.assign(state.graphics, { editId: null, editExpiresAt: null });
+    if (state.graphics && err instanceof GoogleError && (err.status === 404 || (err.status < 500 && /\bedit\b/i.test(err.detail)))) Object.assign(state.graphics, { editId: null, editExpiresAt: null });
     await save(env, deps, state);
     throw new HttpError(err instanceof HttpError ? err.status : 502, message);
   }
@@ -456,11 +456,16 @@ export async function saveGooglePlay(request: Request, env: Env, deps: Deps, dev
       state.listingSyncedAt = null;
       const google = client(env, deps, ctx!);
       const edit = await google.insertEdit(pkg);
-      const details = await google.details(pkg, edit.id);
-      const language = details.defaultLanguage || "en-US";
-      await google.updateListing(pkg, edit.id, language, { title: listing.title, shortDescription: listing.shortDescription, fullDescription: listing.fullDescription });
-      await google.patchDetails(pkg, edit.id, { contactEmail: listing.contactEmail, ...(listing.contactWebsite ? { contactWebsite: listing.contactWebsite } : {}) });
-      await google.commitEdit(pkg, edit.id, false);
+      let language: string;
+      try {
+        language = (await google.details(pkg, edit.id)).defaultLanguage || "en-US";
+        await google.updateListing(pkg, edit.id, language, { title: listing.title, shortDescription: listing.shortDescription, fullDescription: listing.fullDescription });
+        await google.patchDetails(pkg, edit.id, { contactEmail: listing.contactEmail, ...(listing.contactWebsite ? { contactWebsite: listing.contactWebsite } : {}) });
+        await google.commitEdit(pkg, edit.id, false);
+      } catch (err) {
+        await google.deleteEdit(pkg, edit.id).catch(() => undefined);
+        throw err;
+      }
       state.listing.language = language;
       state.listingSyncedAt = now;
       delete state.errors.listing;
