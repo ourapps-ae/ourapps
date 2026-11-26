@@ -307,7 +307,7 @@ async function keyedChecks() {
     // Without a package name, Google Play work stops before Google: status only, then the plain refusals.
     const play = await call("GET", P("/api/dev/apps/:id/googleplay"), { pattern: "/api/dev/apps/:id/googleplay" });
     expectStatus("GET /api/dev/apps/:id/googleplay", play, 200);
-    expectKeys("Google Play shape", play.json, ["setUp", "needs", "serviceAccount", "packageName", "packageFrom", "step", "links", "app", "content", "listing", "graphics", "release", "releases", "testing", "live"]);
+    expectKeys("Google Play shape", play.json, ["setUp", "needs", "serviceAccount", "packageName", "packageFrom", "step", "links", "app", "content", "listing", "graphics", "release", "releases", "testing", "live", "apk"]);
     record(play.json?.packageName === null && play.json?.app?.done === false && play.json?.live?.production === false, "a new app has no Google Play package name yet", JSON.stringify(play.json?.app));
     const noPackage = await call("PUT", P("/api/dev/apps/:id/googleplay"), { body: { app: {} }, pattern: "/api/dev/apps/:id/googleplay" });
     record(noPackage.status === 400 && /^packageName is required/.test(noPackage.json?.error ?? ""), "PUT /api/dev/apps/:id/googleplay without a package name is a 400", `${noPackage.status} ${noPackage.json?.error ?? ""}`);
