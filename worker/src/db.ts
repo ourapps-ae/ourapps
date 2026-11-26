@@ -1,5 +1,5 @@
 // Typed D1 access. Rows are snake_case in SQL and camelCase in code.
-import { APP_TARGET_KEYS, isAppTarget, type AgeRatingAnswers, type AppTarget, type AppTargets, type ScreenshotGroup, type ScreenshotPlatform } from "@my/store-shared";
+import { APP_TARGET_KEYS, MAX_VERSION_CODE, isAppTarget, type AgeRatingAnswers, type AppTarget, type AppTargets, type GooglePlayTrack, type PlayImageKind, type ScreenshotGroup, type ScreenshotPlatform } from "@my/store-shared";
 import type { Env } from "./env.js";
 import type { ApplePlatform } from "./apple-platform.js";
 import { BuildNumberError, numericBuildNumber } from "./build-number.js";
@@ -29,8 +29,10 @@ export interface DeveloperSecrets {
   // PKCS #8 PEM of ourapps' Apple Distribution certificate for this developer.
   signingKey?: string;
   installerSigningKey?: string;
+  // The Google Cloud service account key Google Play takes, as JSON with client_email and private_key.
+  googleServiceAccount?: string;
   // When each field was last saved, keyed by field name.
-  savedAt?: Partial<Record<"appleIssuerId" | "appleKeyId" | "applePrivateKey" | "appleTeamId" | "githubToken" | "signingKey" | "installerSigningKey", string>>;
+  savedAt?: Partial<Record<"appleIssuerId" | "appleKeyId" | "applePrivateKey" | "appleTeamId" | "githubToken" | "signingKey" | "installerSigningKey" | "googleServiceAccount", string>>;
 }
 
 export interface BuildRunMetadata {
@@ -81,6 +83,8 @@ export interface AppRow {
   repo: string;
   manifestUrl: string;
   bundleId: string;
+  // The Android application ID, the package name of the app in Play Console.
+  androidPackage: string;
   showOnPage: boolean;
   // TestFlight: the App Store Connect app, its external group and public link, and the App Store profile.
   ascAppId?: string | null;
@@ -302,6 +306,77 @@ export interface ApplePayCertificateRow {
   createdAt: string;
 }
 
+export interface GooglePlayListing {
+  title: string;
+  shortDescription: string;
+  fullDescription: string;
+  contactEmail: string;
+  contactWebsite: string;
+  featureGraphicUrl: string;
+  tabletScreenshots: string[];
+}
+
+export interface GooglePlayGraphic {
+  kind: PlayImageKind;
+  url: string;
+  width?: number;
+  height?: number;
+  done: boolean;
+  error?: string;
+}
+
+// The graphics written into one open edit, committed together once every image is in.
+export interface GooglePlayGraphics {
+  source: string;
+  items: GooglePlayGraphic[];
+  editId: string | null;
+  editExpiresAt: number | null;
+  // Image types whose earlier images were deleted in this edit.
+  cleared: string[];
+  committed: boolean;
+  // What Google Play needs that the images do not give; while any is missing nothing is committed.
+  missing: string[];
+}
+
+export interface GooglePlayAppRow {
+  appId: string;
+  foundPackage: string | null;
+  foundAt: string | null;
+  contentConfirmedAt: string | null;
+  // The listing as saved, with the default language Google Play holds once it has been written there.
+  listing: (GooglePlayListing & { language?: string }) | null;
+  listingSyncedAt: string | null;
+  // The developer's own policy address, empty for the default policy ourapps serves, null until answered.
+  policyUrl: string | null;
+  graphics: GooglePlayGraphics | null;
+  testingLink: boolean;
+  firstClosedAt: string | null;
+  errors: Partial<Record<string, string>>;
+  updatedAt: string;
+}
+
+// A release ourapps committed: sent (Google has it), not-sent (held until sent for review in Play Console), in-review,
+// approved (waiting to be published in Play Console), rejected, draft, live (published on its track), replaced.
+export type GooglePlayStage = "sent" | "not-sent" | "in-review" | "approved" | "rejected" | "draft" | "live" | "replaced";
+
+export interface GooglePlayReleaseRow {
+  id: number;
+  appId: string;
+  track: GooglePlayTrack;
+  version: string;
+  versionCode: number;
+  bundleUrl: string;
+  status: "completed" | "inProgress" | "draft";
+  userFraction: number | null;
+  stage: GooglePlayStage;
+  googleState: string | null;
+  message: string | null;
+  committedAt: string;
+  checkedAt: string | null;
+  liveAt: string | null;
+  updatedAt: string;
+}
+
 type Raw = Record<string, unknown>;
 
 function camel(key: string): string {
@@ -339,6 +414,11 @@ const applePayAppConvert = (r: Raw): Raw => {
 };
 
 const applePayCertificateConvert = (r: Raw): Raw => ({ ...r, activated: r.activated === null || r.activated === undefined ? null : r.activated === 1 });
+
+const googlePlayAppConvert = (r: Raw): Raw => {
+  const { listingJson, graphicsJson, errorsJson, ...rest } = r;
+  return { ...rest, testingLink: r.testingLink === 1, listing: listingJson ? JSON.parse(listingJson as string) : null, graphics: graphicsJson ? JSON.parse(graphicsJson as string) : null, errors: JSON.parse(errorsJson as string) };
+};
 
 export class Db {
   constructor(private d1: D1Database) {}
@@ -453,12 +533,12 @@ export class Db {
   async insertApp(app: AppRow): Promise<void> {
     await this.d1
       .prepare(
-        `INSERT INTO apps (id, developer_id, name, tagline, description, whats_new, size, min_os, age_note, privacy_summary, icon_url, screenshots, screenshots_by_platform, repo, manifest_url, bundle_id, show_on_page, build_token_hash, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO apps (id, developer_id, name, tagline, description, whats_new, size, min_os, age_note, privacy_summary, icon_url, screenshots, screenshots_by_platform, repo, manifest_url, bundle_id, android_package, show_on_page, build_token_hash, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         app.id, app.developerId, app.name, app.tagline, app.description, app.whatsNew, app.size, app.minOs, app.ageNote, app.privacySummary,
-        app.iconUrl, JSON.stringify(app.screenshots), JSON.stringify(app.screenshotsByPlatform), app.repo, app.manifestUrl, app.bundleId, app.showOnPage ? 1 : 0, app.buildTokenHash, app.createdAt, app.updatedAt,
+        app.iconUrl, JSON.stringify(app.screenshots), JSON.stringify(app.screenshotsByPlatform), app.repo, app.manifestUrl, app.bundleId, app.androidPackage ?? "", app.showOnPage ? 1 : 0, app.buildTokenHash, app.createdAt, app.updatedAt,
       )
       .run();
   }
@@ -466,12 +546,12 @@ export class Db {
   async updateApp(app: AppRow): Promise<void> {
     await this.d1
       .prepare(
-        `UPDATE apps SET name = ?, tagline = ?, description = ?, whats_new = ?, size = ?, min_os = ?, age_note = ?, privacy_summary = ?, icon_url = ?, screenshots = ?, screenshots_by_platform = ?, repo = ?, manifest_url = ?, bundle_id = ?, show_on_page = ?, build_token_hash = ?, updated_at = ?
+        `UPDATE apps SET name = ?, tagline = ?, description = ?, whats_new = ?, size = ?, min_os = ?, age_note = ?, privacy_summary = ?, icon_url = ?, screenshots = ?, screenshots_by_platform = ?, repo = ?, manifest_url = ?, bundle_id = ?, android_package = ?, show_on_page = ?, build_token_hash = ?, updated_at = ?
          WHERE id = ?`,
       )
       .bind(
         app.name, app.tagline, app.description, app.whatsNew, app.size, app.minOs, app.ageNote, app.privacySummary, app.iconUrl, JSON.stringify(app.screenshots), JSON.stringify(app.screenshotsByPlatform),
-        app.repo, app.manifestUrl, app.bundleId, app.showOnPage ? 1 : 0, app.buildTokenHash, app.updatedAt, app.id,
+        app.repo, app.manifestUrl, app.bundleId, app.androidPackage ?? "", app.showOnPage ? 1 : 0, app.buildTokenHash, app.updatedAt, app.id,
       )
       .run();
   }
@@ -808,6 +888,107 @@ export class Db {
       .prepare("INSERT INTO apple_pay_certificates (certificate_id, app_id, merchant_id, name, serial_number, certificate_base64, expiration_date, activated, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
       .bind(c.certificateId, c.appId, c.merchantId, c.name, c.serialNumber, c.certificateBase64, c.expirationDate, c.activated === null ? null : c.activated ? 1 : 0, c.createdAt)
       .run();
+  }
+
+  // Google Play
+
+  async googlePlayApp(appId: string): Promise<GooglePlayAppRow | null> {
+    return row<GooglePlayAppRow>(await this.d1.prepare("SELECT * FROM google_play_apps WHERE app_id = ?").bind(appId).first(), googlePlayAppConvert);
+  }
+
+  async putGooglePlayApp(a: GooglePlayAppRow): Promise<void> {
+    await this.d1
+      .prepare(
+        `INSERT INTO google_play_apps (app_id, found_package, found_at, content_confirmed_at, listing_json, listing_synced_at, policy_url, graphics_json, testing_link, first_closed_at, errors_json, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(app_id) DO UPDATE SET found_package = excluded.found_package, found_at = excluded.found_at, content_confirmed_at = excluded.content_confirmed_at, listing_json = excluded.listing_json,
+         listing_synced_at = excluded.listing_synced_at, policy_url = excluded.policy_url, graphics_json = excluded.graphics_json, testing_link = excluded.testing_link, first_closed_at = excluded.first_closed_at,
+         errors_json = excluded.errors_json, updated_at = excluded.updated_at`,
+      )
+      .bind(a.appId, a.foundPackage, a.foundAt, a.contentConfirmedAt, a.listing ? JSON.stringify(a.listing) : null, a.listingSyncedAt, a.policyUrl, a.graphics ? JSON.stringify(a.graphics) : null, a.testingLink ? 1 : 0, a.firstClosedAt, JSON.stringify(a.errors), a.updatedAt)
+      .run();
+  }
+
+  // Apps whose graphics are in an open edit that is not committed yet, least recently changed first.
+  async googlePlayGraphicsWork(limit = 3): Promise<GooglePlayAppRow[]> {
+    const res = await this.d1.prepare("SELECT * FROM google_play_apps WHERE graphics_json IS NOT NULL AND json_extract(graphics_json, '$.committed') = 0 AND json_array_length(graphics_json, '$.missing') = 0 ORDER BY updated_at LIMIT ?").bind(limit).all<Raw>();
+    return res.results.map((r) => row<GooglePlayAppRow>(r, googlePlayAppConvert)!);
+  }
+
+  async insertGooglePlayRelease(r: Omit<GooglePlayReleaseRow, "id">): Promise<number> {
+    const res = await this.d1
+      .prepare("INSERT INTO google_play_releases (app_id, track, version, version_code, bundle_url, status, user_fraction, stage, google_state, message, committed_at, checked_at, live_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(r.appId, r.track, r.version, r.versionCode, r.bundleUrl, r.status, r.userFraction, r.stage, r.googleState, r.message, r.committedAt, r.checkedAt, r.liveAt, r.updatedAt)
+      .run();
+    return Number(res.meta.last_row_id);
+  }
+
+  async updateGooglePlayRelease(r: GooglePlayReleaseRow): Promise<void> {
+    await this.d1
+      .prepare("UPDATE google_play_releases SET stage = ?, google_state = ?, message = ?, checked_at = ?, live_at = ?, updated_at = ? WHERE id = ?")
+      .bind(r.stage, r.googleState, r.message, r.checkedAt, r.liveAt, r.updatedAt, r.id)
+      .run();
+  }
+
+  async googlePlayReleases(appId: string, limit = 6): Promise<GooglePlayReleaseRow[]> {
+    const res = await this.d1.prepare("SELECT * FROM google_play_releases WHERE app_id = ? ORDER BY id DESC LIMIT ?").bind(appId, limit).all<Raw>();
+    return res.results.map((r) => row<GooglePlayReleaseRow>(r)!);
+  }
+
+  // Releases Google has not finished with, least recently checked first.
+  async followedGooglePlayReleases(limit = 6): Promise<GooglePlayReleaseRow[]> {
+    const res = await this.d1.prepare("SELECT * FROM google_play_releases WHERE stage IN ('sent', 'not-sent', 'in-review', 'approved', 'draft') ORDER BY checked_at LIMIT ?").bind(limit).all<Raw>();
+    return res.results.map((r) => row<GooglePlayReleaseRow>(r)!);
+  }
+
+  // Whether a release is live in production, and on an open or closed test the developer chose to offer.
+  async googlePlayLive(appId: string): Promise<{ production: boolean; testing: boolean }> {
+    const r = await this.d1
+      .prepare(`SELECT MAX(CASE WHEN r.track = 'production' AND r.live_at IS NOT NULL THEN 1 ELSE 0 END) AS production,
+         MAX(CASE WHEN r.track IN ('alpha', 'beta') AND r.stage = 'live' AND g.testing_link = 1 THEN 1 ELSE 0 END) AS testing
+         FROM google_play_releases r LEFT JOIN google_play_apps g ON g.app_id = r.app_id WHERE r.app_id = ?`)
+      .bind(appId)
+      .first<{ production: number | null; testing: number | null }>();
+    return { production: r?.production === 1, testing: r?.testing === 1 };
+  }
+
+  // Android version codes
+
+  async versionCodeState(appId: string): Promise<{ counter: number; playMaximum: number | null; playCheckedAt: string | null }> {
+    const r = await this.d1.prepare("SELECT counter, play_maximum, play_checked_at FROM android_version_codes WHERE app_id = ?").bind(appId).first<{ counter: number; play_maximum: number | null; play_checked_at: string | null }>();
+    return { counter: r?.counter ?? 0, playMaximum: r?.play_maximum ?? null, playCheckedAt: r?.play_checked_at ?? null };
+  }
+
+  async setPlayMaximum(appId: string, maximum: number, at: string): Promise<void> {
+    await this.d1
+      .prepare("INSERT INTO android_version_codes (app_id, counter, play_maximum, play_checked_at) VALUES (?, 0, ?, ?) ON CONFLICT(app_id) DO UPDATE SET play_maximum = excluded.play_maximum, play_checked_at = excluded.play_checked_at")
+      .bind(appId, maximum, at)
+      .run();
+  }
+
+  // One statement, so concurrent reservations each get their own code: one above the last given and above floor.
+  async reserveVersionCode(appId: string, floor: number): Promise<number | null> {
+    if (floor >= MAX_VERSION_CODE) return null;
+    const reserved = await this.d1
+      .prepare("INSERT INTO android_version_codes (app_id, counter) VALUES (?, ?) ON CONFLICT(app_id) DO UPDATE SET counter = MAX(android_version_codes.counter + 1, excluded.counter) WHERE android_version_codes.counter < ? RETURNING counter")
+      .bind(appId, floor + 1, MAX_VERSION_CODE)
+      .first<{ counter: number }>();
+    return reserved && Number.isSafeInteger(reserved.counter) ? reserved.counter : null;
+  }
+
+  async versionCodeRun(appId: string, repo: string, run: BuildRunMetadata): Promise<number | null> {
+    const r = await this.d1.prepare("SELECT version_code FROM android_version_code_runs WHERE app_id = ? AND github_repo = ? AND run_id = ? AND run_attempt = ?").bind(appId, repo.toLowerCase(), run.runId, run.runAttempt).first<{ version_code: number }>();
+    return r?.version_code ?? null;
+  }
+
+  // The first code saved for a run attempt wins; a concurrent retry of the same attempt reads it back.
+  async associateVersionCodeRun(appId: string, run: VerifiedBuildRun, versionCode: number, version: string | null, at: string): Promise<number> {
+    await this.d1
+      .prepare("INSERT INTO android_version_code_runs (app_id, github_repo, run_id, run_attempt, version_code, version, run_created_at, run_started_at, reserved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING")
+      .bind(appId, run.repo.toLowerCase(), run.runId, run.runAttempt, versionCode, version, run.createdAt, run.startedAt, at)
+      .run();
+    const saved = await this.versionCodeRun(appId, run.repo, run);
+    if (saved === null) throw new Error("Version code run association was not saved.");
+    return saved;
   }
 
   // Signing certificate

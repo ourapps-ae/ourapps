@@ -256,22 +256,23 @@ function parseAppInfo(input: unknown, current: AppStoreAppRow, dev: Developer): 
   const thirdPartyContent = input.thirdPartyContent ?? current.info?.thirdPartyContent ?? false;
   if (typeof thirdPartyContent !== "boolean") throw new HttpError(400, "thirdPartyContent must be true or false");
   const privacyPolicyUrl = httpsUrlOrEmpty(input.privacyPolicyUrl ?? current.info?.privacyPolicyUrl ?? "");
-  let policy: DefaultPolicy | null = null;
-  if (!privacyPolicyUrl) {
-    const p = input.defaultPolicy ?? current.policy;
-    if (!isObj(p)) throw new HttpError(400, "give privacyPolicyUrl, or defaultPolicy for the policy ourapps writes");
-    const collects = p.collects;
-    if (!Array.isArray(collects) || collects.length === 0 || collects.some((c) => typeof c !== "string" || !(c in POLICY_COLLECTS)) || new Set(collects).size !== collects.length) {
-      throw new HttpError(400, `defaultPolicy.collects must list one or more of ${Object.keys(POLICY_COLLECTS).join(", ")}`);
-    }
-    if (collects.includes("nothing") && collects.length > 1) throw new HttpError(400, "defaultPolicy.collects cannot be nothing and something else");
-    const storage = p.storage ?? "device";
-    if (typeof storage !== "string" || !(storage in POLICY_STORAGE)) throw new HttpError(400, `defaultPolicy.storage must be ${Object.keys(POLICY_STORAGE).join(" or ")}`);
-    const contactEmail = field(p, "contactEmail", 120);
-    if (!EMAIL.test(contactEmail)) throw new HttpError(400, "defaultPolicy.contactEmail must be an email address");
-    policy = { collects: collects as string[], storage: storage as DefaultPolicy["storage"], contactEmail, developerName: field(p, "developerName", 80, dev.displayName) };
-  }
+  const policy = privacyPolicyUrl ? null : parseDefaultPolicy(input.defaultPolicy ?? current.policy, dev);
   return { listing, info: { category, ageRating: ageRatingAnswers(answers as Partial<AgeRatingAnswers>), thirdPartyContent, privacyPolicyUrl }, policy };
+}
+
+// The answers the default privacy policy is written from; Google Play's App content step takes the same ones.
+export function parseDefaultPolicy(p: unknown, dev: Developer): DefaultPolicy {
+  if (!isObj(p)) throw new HttpError(400, "give privacyPolicyUrl, or defaultPolicy for the policy ourapps writes");
+  const collects = p.collects;
+  if (!Array.isArray(collects) || collects.length === 0 || collects.some((c) => typeof c !== "string" || !(c in POLICY_COLLECTS)) || new Set(collects).size !== collects.length) {
+    throw new HttpError(400, `defaultPolicy.collects must list one or more of ${Object.keys(POLICY_COLLECTS).join(", ")}`);
+  }
+  if (collects.includes("nothing") && collects.length > 1) throw new HttpError(400, "defaultPolicy.collects cannot be nothing and something else");
+  const storage = p.storage ?? "device";
+  if (typeof storage !== "string" || !(storage in POLICY_STORAGE)) throw new HttpError(400, `defaultPolicy.storage must be ${Object.keys(POLICY_STORAGE).join(" or ")}`);
+  const contactEmail = field(p, "contactEmail", 120);
+  if (!EMAIL.test(contactEmail)) throw new HttpError(400, "defaultPolicy.contactEmail must be an email address");
+  return { collects: collects as string[], storage: storage as DefaultPolicy["storage"], contactEmail, developerName: field(p, "developerName", 80, dev.displayName) };
 }
 
 function parseVersion(input: unknown, draft: AppStoreDraft): Omit<AppStoreDraft, "review" | "buildNumber"> {
@@ -351,6 +352,8 @@ export async function saveAppStoreDetails(request: Request, env: Env, deps: Deps
   try {
     if (appInfo) {
       step = "app-info";
+      // Google Play's App content may still name the default policy; it stays served while it does.
+      if (!appInfo.policy && (await Db.from(env).googlePlayApp(app.id))?.policyUrl === "") appInfo.policy = info.policy;
       Object.assign(info, appInfo, { infoSyncedTo: null });
       if (appInfo.policy) info.policyId ??= randomId(12);
       await writeAppInfo(await client(), env, app, info);

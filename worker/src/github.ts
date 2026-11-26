@@ -235,7 +235,9 @@ export function parseBuildRunMetadata(body: unknown): BuildRunMetadata | undefin
   return { runId: positiveId(value.runId), runAttempt: positiveId(value.runAttempt) };
 }
 
-export async function verifyBuildRun(env: Env, deps: Deps, app: AppRow, token: string, metadata: BuildRunMetadata): Promise<VerifiedBuildRun> {
+// Confirms the run attempt belongs to the app's repository. Mac and Apple TV runs must also be the apple-testflight.yml
+// workflow with the platform's title; Android version-code runs may come from any workflow of the repository.
+export async function verifyBuildRun(env: Env, deps: Deps, app: AppRow, token: string, metadata: BuildRunMetadata, apple = true): Promise<VerifiedBuildRun> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const get = async <T>(path: string): Promise<T> => {
@@ -253,11 +255,13 @@ export async function verifyBuildRun(env: Env, deps: Deps, app: AppRow, token: s
     const run = await get<Run & { repository?: { full_name?: string } }>(`runs/${metadata.runId}/attempts/${metadata.runAttempt}`);
     if (String(run.id) !== metadata.runId || run.repository?.full_name?.toLowerCase() !== app.repo.toLowerCase()) throw new HttpError(400, "The supplied run does not belong to this app repository.");
     if (String(run.run_attempt) !== metadata.runAttempt) throw new HttpError(409, "The supplied runAttempt does not match GitHub's run-attempt identity.");
-    if (titlePlatform(run) !== app.platform) throw new HttpError(400, "The GitHub run title does not identify the requested Apple platform.");
-    if (!Number.isSafeInteger(run.workflow_id) || run.workflow_id <= 0) throw new HttpError(502, "GitHub did not provide a valid workflow identity for the run.");
-    const workflow = await get<Workflow>(`workflows/${run.workflow_id}`);
-    if (workflow.id !== run.workflow_id || workflow.path !== ".github/workflows/apple-testflight.yml") throw new HttpError(400, "The supplied run must use .github/workflows/apple-testflight.yml in this app repository.");
-    if (!Number.isFinite(Date.parse(run.created_at)) || !run.run_started_at || !Number.isFinite(Date.parse(run.run_started_at))) throw new HttpError(502, "GitHub did not provide valid run-attempt timestamps; no build number was allocated.");
+    if (apple) {
+      if (titlePlatform(run) !== app.platform) throw new HttpError(400, "The GitHub run title does not identify the requested Apple platform.");
+      if (!Number.isSafeInteger(run.workflow_id) || run.workflow_id <= 0) throw new HttpError(502, "GitHub did not provide a valid workflow identity for the run.");
+      const workflow = await get<Workflow>(`workflows/${run.workflow_id}`);
+      if (workflow.id !== run.workflow_id || workflow.path !== ".github/workflows/apple-testflight.yml") throw new HttpError(400, "The supplied run must use .github/workflows/apple-testflight.yml in this app repository.");
+    }
+    if (!Number.isFinite(Date.parse(run.created_at)) || !run.run_started_at || !Number.isFinite(Date.parse(run.run_started_at))) throw new HttpError(502, `GitHub did not provide valid run-attempt timestamps; no ${apple ? "build number" : "version code"} was allocated.`);
     return { ...metadata, repo: app.repo.toLowerCase(), createdAt: new Date(run.created_at).toISOString(), startedAt: new Date(run.run_started_at).toISOString() };
   };
   try {
@@ -266,7 +270,7 @@ export async function verifyBuildRun(env: Env, deps: Deps, app: AppRow, token: s
     })]);
   } catch (error) {
     if (error instanceof HttpError) throw error;
-    throw new HttpError(502, "GitHub run verification could not be completed; no build number was allocated.");
+    throw new HttpError(502, `GitHub run verification could not be completed; no ${apple ? "build number" : "version code"} was allocated.`);
   } finally { if (timer !== undefined) clearTimeout(timer); }
 }
 

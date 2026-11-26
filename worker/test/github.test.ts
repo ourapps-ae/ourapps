@@ -13,7 +13,7 @@ async function seedStatusApp() {
   const db = Db.from(testEnv());
   const now = "2026-10-16T10:00:00Z";
   await db.insertDeveloper({ id: app.developerId, githubId: 1, githubLogin: "owner", slug: "owner", displayName: "Owner", createdAt: now, termsAcceptedVersion: null, termsAcceptedAt: null });
-  await db.insertApp({ ...app, name: "Example", tagline: "", description: "", whatsNew: "", size: "", minOs: "", ageNote: "", privacySummary: "", iconUrl: "", screenshots: [], screenshotsByPlatform: {}, manifestUrl: "", bundleId: "", showOnPage: true, buildTokenHash: "fixture", createdAt: now, updatedAt: now });
+  await db.insertApp({ ...app, name: "Example", tagline: "", description: "", whatsNew: "", size: "", minOs: "", ageNote: "", privacySummary: "", iconUrl: "", screenshots: [], screenshotsByPlatform: {}, manifestUrl: "", bundleId: "", androidPackage: "", showOnPage: true, buildTokenHash: "fixture", createdAt: now, updatedAt: now });
 }
 function routes(runs = [run()], workflows = [release]) {
   return {

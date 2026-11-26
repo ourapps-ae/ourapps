@@ -1,5 +1,5 @@
 // Developer dashboard routes: a browser session or an API key; requireSession marks the browser-only ones.
-import { SCREENSHOT_PLATFORMS, TERMS_VERSION, defaultAppTargets, isAppTarget, type ScreenshotPlatform } from "@my/store-shared";
+import { SCREENSHOT_PLATFORMS, TERMS_VERSION, defaultAppTargets, isAppTarget, isPackageName, type ScreenshotPlatform } from "@my/store-shared";
 import { audit } from "../audit.js";
 import { RESERVED_SLUGS, apiKeyHash, clearSessionCookie, masterKeys, newApiKey, normaliseSlug, requireSession, type AuthedDeveloper } from "../auth.js";
 import { randomId, tokenHash, validateAppleKey, validateSigningKey } from "../crypto.js";
@@ -19,7 +19,7 @@ import { requireTarget, TargetDisabledError } from "../targets.js";
 import { appStoreView, releaseAppStore, saveAppStoreDetails, submitAppStore, uploadScreenshots } from "../appstore.js";
 import { activateCertificate, applePayView, certificateFile, chooseMerchant, confirmTicked, createCertificate, makeProfiles } from "../applepay.js";
 
-type AppInput = Partial<Record<"name" | "tagline" | "description" | "whatsNew" | "size" | "minOs" | "ageNote" | "privacySummary" | "iconUrl" | "repo" | "manifestUrl" | "bundleId", string>> & {
+type AppInput = Partial<Record<"name" | "tagline" | "description" | "whatsNew" | "size" | "minOs" | "ageNote" | "privacySummary" | "iconUrl" | "repo" | "manifestUrl" | "bundleId" | "androidPackage", string>> & {
   screenshots?: unknown;
   screenshotsByPlatform?: unknown;
   showOnPage?: unknown;
@@ -66,6 +66,10 @@ function applyInput(app: AppRow, body: AppInput): void {
   if (body.bundleId !== undefined) {
     app.bundleId = text(body.bundleId, 155);
     if (app.bundleId !== "" && !/^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/.test(app.bundleId)) throw new HttpError(400, "bundleId must look like com.yourname.app");
+  }
+  if (body.androidPackage !== undefined) {
+    app.androidPackage = text(body.androidPackage, 150);
+    if (app.androidPackage !== "" && !isPackageName(app.androidPackage)) throw new HttpError(400, "androidPackage must be an Android application ID such as com.yourname.pokernight");
   }
   if (body.showOnPage !== undefined) app.showOnPage = body.showOnPage === true;
   if (body.screenshots !== undefined) {
@@ -286,6 +290,7 @@ export async function createApp(request: Request, env: Env, deps: Deps, dev: Dev
     repo: "",
     manifestUrl: "",
     bundleId: "",
+    androidPackage: "",
     showOnPage: false,
     buildTokenHash: await buildTokenHash(env, buildToken),
     createdAt: now,
