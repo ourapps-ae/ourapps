@@ -368,7 +368,7 @@ startButton.onclick = async () => {
 &lt;/array&gt;</code></pre>
         <p>The app also gives Apple Pay the merchant identifier when it asks for a payment.</p>
         <h3>Renewing the certificate</h3>
-        <p>Apple's Payment Processing certificates last 25 months. The card shows the expiry and says to renew a month before it: get another certificate request from your payment processor, make the certificate on the card and give it back to the processor. Apple uses one certificate of a merchant identifier at a time, so the second is listed as not in use; once the processor has it, revoke the one in use on the merchant identifier's page in the Apple Developer site, and Apple uses the other.</p>
+        <p>Apple's Payment Processing certificates last 25 months. The card shows the expiry and says to renew a month before it: get another certificate request from your payment processor, make the certificate on the card and give it back to the processor. Apple uses one certificate of a merchant identifier at a time, so the second is listed as not in use. Once the processor has it, press <b>Activate</b> beside it: Apple then encrypts payments for it and stops using the other, so the processor must hold it before you press.</p>
         ${callout("info", html`<p>Apple lets only the Account Holder and Admins make merchant identifiers and Payment Processing certificates, so your App Store Connect key needs the <b>Admin</b> role. The card says so in plain words when Apple refuses it.</p>`)}
       `,
     },
