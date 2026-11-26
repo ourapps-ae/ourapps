@@ -205,11 +205,19 @@ export class GooglePlayClient {
 
   // Sends the bundle's bytes to the session as they arrive; Google answers once it has read the bundle.
   async sendBundle(session: string, body: ReadableStream<Uint8Array>, size: number): Promise<Bundle> {
+    await this.bearer();
     const fixed = new FixedLengthStream(size);
-    const piping = body.pipeTo(fixed.writable);
-    const bundle = await this.call<Bundle>("PUT", session, { body: fixed.readable, headers: { "Content-Type": "application/octet-stream" } });
-    await piping;
-    return bundle;
+    const stop = new AbortController();
+    const piping = body.pipeTo(fixed.writable, { signal: stop.signal });
+    piping.catch(() => undefined);
+    try {
+      const bundle = await this.call<Bundle>("PUT", session, { body: fixed.readable, headers: { "Content-Type": "application/octet-stream" } });
+      await piping;
+      return bundle;
+    } catch (err) {
+      stop.abort();
+      throw err;
+    }
   }
 
   async updateTrack(packageName: string, editId: string, track: string, release: PlayRelease): Promise<void> {

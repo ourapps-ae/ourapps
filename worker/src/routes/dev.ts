@@ -18,6 +18,8 @@ import { buildLinkPage } from "./public.js";
 import { requireTarget, TargetDisabledError } from "../targets.js";
 import { appStoreView, releaseAppStore, saveAppStoreDetails, submitAppStore, uploadScreenshots } from "../appstore.js";
 import { activateCertificate, applePayView, certificateFile, chooseMerchant, confirmTicked, createCertificate, makeProfiles } from "../applepay.js";
+import { parseServiceAccount, serviceAccountEmail, storedServiceAccount } from "../google.js";
+import { checkGooglePlay, googlePlayView, releaseGooglePlay, saveGooglePlay, uploadGraphics } from "../googleplay.js";
 
 type AppInput = Partial<Record<"name" | "tagline" | "description" | "whatsNew" | "size" | "minOs" | "ageNote" | "privacySummary" | "iconUrl" | "repo" | "manifestUrl" | "bundleId" | "androidPackage", string>> & {
   screenshots?: unknown;
@@ -113,15 +115,18 @@ function secretStatus(s: DeveloperSecrets, signing: SigningCertificateRow | null
     github: Boolean(s.githubToken),
     githubSavedAt: s.githubToken ? at.githubToken ?? null : null,
     signing: signingStatus(s, signing),
+    googlePlay: Boolean(s.googleServiceAccount),
+    googlePlaySavedAt: s.googleServiceAccount ? at.googleServiceAccount ?? null : null,
+    googleServiceAccount: serviceAccountEmail(s.googleServiceAccount),
   };
 }
 
 // GET /api/dev/me
 export async function me(env: Env, dev: AuthedDeveloper): Promise<Response> {
   const { authVia, scope, keyId: _k, ...developer } = dev;
-  // The summary only marks fields as present; the team ID is shown, so it alone is decrypted.
-  const [summary, team, signing] = await Promise.all([secretsSummary(env, dev.id), loadSecrets(env, dev.id, ["appleTeamId"]), Db.from(env).signingCertificate(dev.id)]);
-  return json({ developer, authVia, scope, termsVersion: TERMS_VERSION, secrets: secretStatus({ ...summary, appleTeamId: team.appleTeamId }, signing), reviewContact: reviewContact(dev) });
+  // The summary only marks fields as present; the team ID and the service account's email are shown, so they alone are decrypted.
+  const [summary, shown, signing] = await Promise.all([secretsSummary(env, dev.id), loadSecrets(env, dev.id, ["appleTeamId", "googleServiceAccount"]), Db.from(env).signingCertificate(dev.id)]);
+  return json({ developer, authVia, scope, termsVersion: TERMS_VERSION, secrets: secretStatus({ ...summary, appleTeamId: shown.appleTeamId, googleServiceAccount: shown.googleServiceAccount }, signing), reviewContact: reviewContact(dev) });
 }
 
 // POST /api/dev/terms - dashboard only; records acceptance of the current terms.
@@ -192,6 +197,11 @@ export async function updateSecrets(request: Request, env: Env, deps: Deps, dev:
   }
   if (saved.includes("githubToken") && !/^(github_pat_|ghp_|gho_)[A-Za-z0-9_]{20,}$/.test(next.githubToken!)) {
     throw new HttpError(400, "that does not look like a GitHub token (expected github_pat_... or ghp_...)");
+  }
+  if (saved.includes("googleServiceAccount")) {
+    const account = await parseServiceAccount(next.googleServiceAccount!);
+    if (typeof account === "string") throw new HttpError(400, account);
+    next.googleServiceAccount = storedServiceAccount(account);
   }
   await saveSecrets(env, dev.id, next, deps.now());
   if (saved.length > 0) await audit(request, env, deps, dev.id, "credentials-saved", saved.join(", "));
@@ -524,6 +534,29 @@ export async function applePayActivate(request: Request, env: Env, deps: Deps, d
 // GET /api/dev/apps/:id/applepay/certificate/:certId - the .cer file for the payment processor.
 export async function applePayCertificate(env: Env, dev: Developer, id: string, certificateId: string): Promise<Response> {
   return certificateFile(env, await ownedApp(Db.from(env), dev, id), certificateId);
+}
+
+// GET /api/dev/apps/:id/googleplay - where Google Play stands for the app and the next step.
+export async function googlePlayStatus(env: Env, deps: Deps, dev: Developer, id: string): Promise<Response> {
+  return json(await googlePlayView(env, deps, dev, await ownedApp(Db.from(env), dev, id), true));
+}
+
+// PUT /api/dev/apps/:id/googleplay - saves the sections sent; the app record is checked and the listing written at Google.
+export async function saveGooglePlayDetails(request: Request, env: Env, deps: Deps, dev: Developer, id: string): Promise<Response> {
+  const app = await ownedApp(Db.from(env), dev, id);
+  return json(await saveGooglePlay(request, env, deps, dev, app, await readJson<unknown>(request)));
+}
+
+// POST /api/dev/apps/:id/googleplay/{graphics,release}
+export async function googlePlayAction(request: Request, env: Env, deps: Deps, dev: Developer, id: string, action: string): Promise<Response> {
+  const app = await ownedApp(Db.from(env), dev, id);
+  if (action === "graphics") return json(await uploadGraphics(request, env, deps, dev, app, await optionalJson<{ restart?: unknown }>(request)));
+  return json(await releaseGooglePlay(request, env, deps, dev, app, await readJson<unknown>(request)));
+}
+
+// POST /api/dev/googleplay/check - dashboard only; proves the saved service account with Google.
+export async function googlePlayCheck(request: Request, env: Env, deps: Deps, dev: AuthedDeveloper): Promise<Response> {
+  return json(await checkGooglePlay(request, env, deps, dev));
 }
 
 // PUT /api/dev/review-contact - who Apple's TestFlight beta review contacts.

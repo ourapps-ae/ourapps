@@ -13,6 +13,7 @@ import { appleClient } from "../flow.js";
 import { sanitiseUploadFile } from "../upload-diagnostic.js";
 import { uploadInteger, validateExistingUploadOperations } from "../upload-operations.js";
 import { requireTarget } from "../targets.js";
+import { reserveVersionCode } from "../googleplay.js";
 
 export async function buildTargets(request: Request, env: Env, appId: string): Promise<Response> {
   const db = Db.from(env);
@@ -20,6 +21,20 @@ export async function buildTargets(request: Request, env: Env, appId: string): P
   if (!app) throw new HttpError(404, "unknown app");
   await requireBuildToken(request, env, app, false);
   return json({ targets: await db.appTargets(app.id) });
+}
+
+// POST /api/build/:app/android/version-code - the next Android versionCode, for the app's release workflow.
+export async function buildAndroidVersionCode(request: Request, env: Env, deps: Deps, appId: string): Promise<Response> {
+  const app = await Db.from(env).appById(appId);
+  if (!app) throw new HttpError(404, "unknown app");
+  await requireBuildToken(request, env, app);
+  const raw = await request.text();
+  let body: unknown;
+  if (raw.trim()) {
+    try { body = JSON.parse(raw); }
+    catch { throw new HttpError(400, "The body must be JSON."); }
+  }
+  return json(await reserveVersionCode(env, deps, app, body));
 }
 
 // Verifies the per-app token; a token stored as a plain hash is rewritten as a keyed hash.

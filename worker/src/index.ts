@@ -3,9 +3,10 @@ import { currentDeveloper, finishLogin, logout, logoutEverywhere, oauthConfigure
 import { defaultDeps, type Deps, type Env } from "./env.js";
 import { randomId } from "./crypto.js";
 import { HttpError, json } from "./http.js";
-import { buildTargets, buildSigning, buildTestflight, buildUploadFileOperations, buildUploadFileStatus, buildDistributionStatus } from "./routes/build.js";
+import { buildAndroidVersionCode, buildTargets, buildSigning, buildTestflight, buildUploadFileOperations, buildUploadFileStatus, buildDistributionStatus } from "./routes/build.js";
 import { tickTestflight } from "./testflight.js";
 import { privacyPage, tickAppStore } from "./appstore.js";
+import { tickGooglePlay } from "./googleplay.js";
 import * as dev from "./routes/dev.js";
 import { devPage, linkLatest, linkPage, linkQr, serveArtefact } from "./routes/public.js";
 import { serveWebApp, webAppLinkId } from "./webapp.js";
@@ -89,6 +90,7 @@ async function route(request: Request, env: Env, deps: Deps): Promise<Response> 
   }
 
   if (p[0] === "build" && p.length === 3 && p[2] === "targets" && m === "GET") return buildTargets(request, env, p[1]);
+  if (p[0] === "build" && p.length === 4 && p[2] === "android" && p[3] === "version-code" && m === "POST") return buildAndroidVersionCode(request, env, deps, p[1]);
   if (p[0] === "build" && p.length === 5 && p[3] === "testflight" && p[4] === "distribution" && m === "GET") return buildDistributionStatus(request, env, deps, p[1], p[2]);
   if (p[0] === "build" && p.length === 3 && p[2] === "signing" && (m === "GET" || m === "HEAD")) return buildSigning(request, env, p[1]);
   if (p[0] === "build" && p.length === 4 && p[3] === "signing" && (m === "GET" || m === "HEAD")) return buildSigning(request, env, p[1], p[2]);
@@ -107,6 +109,7 @@ async function route(request: Request, env: Env, deps: Deps): Promise<Response> 
     if (p[1] === "secrets" && m === "PUT") return dev.updateSecrets(request, env, deps, me);
     if (p[1] === "signing" && p.length === 2 && m === "POST") return dev.setUpSigning(request, env, deps, me);
     if (p[1] === "review-contact" && p.length === 2 && m === "PUT") return dev.updateReviewContact(request, env, me);
+    if (p[1] === "googleplay" && p.length === 3 && p[2] === "check" && m === "POST") return dev.googlePlayCheck(request, env, deps, me);
     if (p[1] === "apps") {
       if (p.length === 2 && m === "GET") return dev.listApps(env, deps, me);
       if (p.length === 2 && m === "POST") return dev.createApp(request, env, deps, me);
@@ -131,6 +134,9 @@ async function route(request: Request, env: Env, deps: Deps): Promise<Response> 
       if (p.length === 5 && p[3] === "applepay" && ["merchant", "certificate", "confirm", "profiles"].includes(p[4]) && m === "POST") return dev.applePayAction(request, env, deps, me, p[2], p[4]);
       if (p.length === 6 && p[3] === "applepay" && p[4] === "certificate" && m === "GET") return dev.applePayCertificate(env, me, p[2], p[5]);
       if (p.length === 7 && p[3] === "applepay" && p[4] === "certificate" && p[6] === "activate" && m === "POST") return dev.applePayActivate(request, env, deps, me, p[2], p[5]);
+      if (p.length === 4 && p[3] === "googleplay" && m === "GET") return dev.googlePlayStatus(env, deps, me, p[2]);
+      if (p.length === 4 && p[3] === "googleplay" && m === "PUT") return dev.saveGooglePlayDetails(request, env, deps, me, p[2]);
+      if (p.length === 5 && p[3] === "googleplay" && (p[4] === "graphics" || p[4] === "release") && m === "POST") return dev.googlePlayAction(request, env, deps, me, p[2], p[4]);
     }
     if (p[1] === "links" && p.length === 4 && p[3] === "revoke" && m === "POST") return dev.revokeLink(env, deps, me, p[2], false);
     if (p[1] === "links" && p.length === 3 && m === "DELETE") return dev.revokeLink(env, deps, me, p[2], true);
@@ -146,8 +152,8 @@ async function route(request: Request, env: Env, deps: Deps): Promise<Response> 
   throw new HttpError(404, "not found");
 }
 
-// Every ten minutes: TestFlight builds into the testers' group and fresh builds before expiry, then App Store work with
-// the outbound calls left of the free plan's 50.
+// Every ten minutes: TestFlight builds into the testers' group and fresh builds before expiry, then App Store and Google
+// Play work with the outbound calls left of the free plan's 50.
 export async function scheduled(env: Env, deps: Deps): Promise<void> {
   let used = 0;
   const counted: Deps = { ...deps, fetch: (input, init) => { used++; return deps.fetch(input, init); } };
@@ -156,7 +162,13 @@ export async function scheduled(env: Env, deps: Deps): Promise<void> {
   } catch (err) {
     console.error(`testflight schedule: ${err instanceof Error ? err.message : String(err)}`);
   }
-  await tickAppStore(env, deps, 45 - used);
+  // Following Google Play releases needs a few calls, so the App Store leaves them.
+  await tickAppStore(env, counted, 39 - used);
+  try {
+    await tickGooglePlay(env, deps, 45 - used);
+  } catch (err) {
+    console.error(`google play schedule: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 export default {

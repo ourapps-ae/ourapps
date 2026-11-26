@@ -73,7 +73,7 @@ export async function clearDb(env: Env): Promise<void> {
   const kv = await env.WEBAPP_FILES.list();
   await Promise.all(kv.keys.map((k) => env.WEBAPP_FILES.delete(k.name)));
 
-  for (const table of ["audit_log", "api_keys", "apple_pay_certificates", "apple_pay_apps", "app_store_versions", "app_store_apps", "build_run_reservations", "build_number_reservations", "testflight_builds", "app_testflight_platforms", "installer_certificates", "links", "apps", "sessions", "signing_certificates", "developer_secrets", "developers"]) {
+  for (const table of ["audit_log", "api_keys", "apple_pay_certificates", "apple_pay_apps", "google_play_releases", "google_play_apps", "android_version_code_runs", "android_version_codes", "app_store_versions", "app_store_apps", "build_run_reservations", "build_number_reservations", "testflight_builds", "app_testflight_platforms", "installer_certificates", "links", "apps", "sessions", "signing_certificates", "developer_secrets", "developers"]) {
     await env.DB.prepare(`DELETE FROM ${table}`).run();
   }
 }

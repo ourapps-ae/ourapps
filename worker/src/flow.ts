@@ -17,6 +17,8 @@ export function projectDelivery(source: AppManifest, readiness: AppleReadiness, 
     if (!targets[target]) manifest.install[target] = null;
   }
   if (!targets.web) manifest.install.pwa = null;
+  // The bundle is Google Play's copy; install pages offer the APK and never name the repository's assets.
+  if (manifest.install.android) manifest.install.android = { apk: manifest.install.android.apk };
   if (!manifest.install.ios) apple.ios = apple.iosOnMac = null;
   if (!manifest.install.macos?.testflight) apple.macos = null;
   if (!manifest.install.tvos) apple.tvos = null;
@@ -32,9 +34,17 @@ export function projectAppStore(manifest: AppManifest | null, links: AppStoreLin
   return { ios: manifest?.install.ios ? links.ios : null, macos: manifest?.install.macos ? links.macos : null, tvos: manifest?.install.tvos ? links.tvos : null };
 }
 
-export async function deliveryRevision(manifest: AppManifest | null, apple: AppleReadiness, appStore?: AppStoreLinks): Promise<string> {
+// Google Play's store page once production is live, and its testing opt-in page when the developer offers it.
+export type GooglePlayLinks = { store: string | null; testing: string | null };
+
+export function projectGooglePlay(manifest: AppManifest | null, links: GooglePlayLinks): GooglePlayLinks {
+  return manifest?.install.android ? links : { store: null, testing: null };
+}
+
+export async function deliveryRevision(manifest: AppManifest | null, apple: AppleReadiness, appStore?: AppStoreLinks, googlePlay?: GooglePlayLinks): Promise<string> {
   const store = appStore && Object.values(appStore).some(Boolean) ? { appStore } : {};
-  return sha256Hex(JSON.stringify({ version: manifest?.version ?? null, install: manifest?.install ?? null, apple, ...store }));
+  const play = googlePlay && (googlePlay.store || googlePlay.testing) ? { googlePlay } : {};
+  return sha256Hex(JSON.stringify({ version: manifest?.version ?? null, install: manifest?.install ?? null, apple, ...store, ...play }));
 }
 
 export async function dlUrl(env: Env, deps: Deps, link: Omit<LinkPayload, "exp">): Promise<string> {

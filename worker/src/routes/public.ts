@@ -4,8 +4,9 @@ import { renderSVG } from "uqr";
 import { Db, type AppRow, type Developer, type LinkRow } from "../db.js";
 import { downloadDisposition } from "../download-filename.js";
 import type { Deps, Env } from "../env.js";
-import { appleClient, deliveryRevision, dlUrl, projectAppStore, projectDelivery, signManifestLinks } from "../flow.js";
+import { appleClient, deliveryRevision, dlUrl, projectAppStore, projectDelivery, projectGooglePlay, signManifestLinks } from "../flow.js";
 import { appStoreLinks } from "../appstore.js";
+import { googlePlayLinks } from "../googleplay.js";
 import { loadHistory } from "../history.js";
 import { HttpError, json } from "../http.js";
 import { verifyLink } from "../links.js";
@@ -133,8 +134,9 @@ export async function buildLinkPage(env: Env, deps: Deps, app: AppRow, dev: Deve
     else if (fromRelease.length > 0) screenshots[p] = await signAll(fromRelease);
   }
   const appStore = projectAppStore(revisionManifest, storeLinks);
+  const googlePlay = projectGooglePlay(revisionManifest, await googlePlayLinks(env, app));
   return {
-    deliveryRevision: await deliveryRevision(revisionManifest, apple, appStore),
+    deliveryRevision: await deliveryRevision(revisionManifest, apple, appStore, googlePlay),
     linkId,
     developer: { id: dev.id, slug: dev.slug, displayName: dev.displayName },
     app: { ...appDetails(app), iconUrl: await sign(app.iconUrl) },
@@ -147,6 +149,7 @@ export async function buildLinkPage(env: Env, deps: Deps, app: AppRow, dev: Deve
           install: manifest.install,
           apple,
           appStore,
+          googlePlay,
           fallbackName: manifest.name,
           fallbackIcon: manifest.icon,
           fallbackDescription: manifest.description,
@@ -196,11 +199,12 @@ export async function linkLatest(env: Env, deps: Deps, linkId: string): Promise<
   const projected = projectDelivery(manifest, apple, await Db.from(env).appTargets(app.id));
   apple = projected.apple;
   const appStore = projectAppStore(projected.manifest, await appStoreLinks(env, app.id));
+  const googlePlay = projectGooglePlay(projected.manifest, await googlePlayLinks(env, app));
   manifest = await signManifestLinks(env, deps, dev.id, projected.manifest);
   if (isBundleUrl(manifest.install.pwa, release)) manifest.install.pwa = webAppUrl(env, linkId);
   const ios = manifest.install.ios ? apple.ios : null;
   return json({
-    deliveryRevision: await deliveryRevision(projected.manifest, apple, appStore),
+    deliveryRevision: await deliveryRevision(projected.manifest, apple, appStore, googlePlay),
     name: app.name || manifest.name,
     version: manifest.version,
     // TestFlight installs and updates iPhone apps; an app can open this link.
@@ -210,6 +214,8 @@ export async function linkLatest(env: Env, deps: Deps, linkId: string): Promise<
     apple,
     // The App Store page per Apple platform, once a version is on the store.
     appStore,
+    // Google Play's page once the app is live in production, and the testing opt-in page when the developer offers it.
+    googlePlay,
     android: manifest.install.android ? { apkUrl: manifest.install.android.apk } : null,
     macos: manifest.install.macos?.packages.length ? { version: manifest.version, packages: manifest.install.macos.packages } : null,
     windows: manifest.install.windows?.packages.length ? { version: manifest.version, packages: manifest.install.windows.packages } : null,

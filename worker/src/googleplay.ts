@@ -70,6 +70,8 @@ export function googlePlayProblem(err: unknown, email = "the service account", p
     if (err.status === 404 && /package not found/i.test(err.detail)) {
       return `Google Play has no app ${packageName} that ${email} can see. Create the app in Play Console with this package name, upload its first bundle there by hand, and invite ${email} in Users and permissions with access to the app.`;
     }
+    if (err.reason === "CHANGES_ALREADY_IN_REVIEW" || /changes in review/i.test(err.detail)) return "Google is reviewing earlier changes to this app. Try again once that review has finished; the Releases list on this card says when.";
+    if (/only releases with status draft/i.test(err.detail)) return "Google Play takes only draft releases until the app has been rolled out once by hand: roll out the first release in Play Console (Internal testing is enough), then release again here.";
     if (err.status === 403) return `${email} has no permission for this in Play Console. In Play Console, Users and permissions, give it access to this app with Release apps to testing tracks, Release to production, and Manage store presence.`;
     return `Google Play did not accept this: ${err.detail}`;
   }
@@ -189,84 +191,87 @@ export async function uploadGraphics(request: Request, env: Env, deps: Deps, dev
 async function runGraphics(env: Env, deps: Deps, app: AppRow, packageName: string, state: GooglePlayAppRow, ctx: Context, limits: { calls: number; bytes: number; restart?: boolean }): Promise<void> {
   let used = 0;
   const counted: Deps = { ...deps, fetch: (input, init) => { used++; return deps.fetch(input, init); } };
-  const left = () => limits.calls - used;
   try {
-    const google = client(env, counted, ctx);
-    const wanted = graphicSources(app, ctx.manifest, state.listing!);
-    const source = JSON.stringify(wanted);
-    let g: GooglePlayGraphics | null = state.graphics;
-    if (limits.restart || !g || g.source !== source) {
-      g = { source, items: wanted.map((w) => ({ ...w, done: false })), editId: null, editExpiresAt: null, cleared: [], committed: false, missing: [] };
-    }
-    state.graphics = g;
-    if (g.committed) return;
-    const language = state.listing!.language ?? "en-US";
-    // Images uploaded into an edit that expired are gone with it.
-    if (!g.editId || (g.editExpiresAt !== null && g.editExpiresAt < deps.now().getTime() + 5 * 60_000)) {
-      const edit = await google.insertEdit(packageName);
-      Object.assign(g, { editId: edit.id, editExpiresAt: edit.expiresAt, cleared: [] });
-      for (const item of g.items) if (item.done && !item.error) item.done = false;
-    }
-    const editId = g.editId!;
-    // The listing's earlier images of every kind ourapps manages are replaced.
-    for (const type of Object.values(PLAY_IMAGE_TYPES)) {
-      if (g.cleared.includes(type)) continue;
-      if (left() < 3) return;
-      await google.deleteAllImages(packageName, editId, language, type);
-      g.cleared.push(type);
-    }
-    let bytesUsed = 0;
-    for (const item of g.items) {
-      if (item.done) continue;
-      if (left() < 3 || bytesUsed >= limits.bytes) return;
-      const count = g.items.filter((i) => i.kind === item.kind && i.done && !i.error).length;
-      if (item.kind !== "icon" && item.kind !== "featureGraphic" && count >= SCREENSHOT_COUNT.max) {
-        Object.assign(item, { done: true, error: `is more than the ${SCREENSHOT_COUNT.max} ${PLAY_IMAGE_LABELS[item.kind].toLowerCase()}s Google Play takes` });
-        continue;
-      }
-      const res = await fetchUpstream(env, counted, item.url, ctx.secrets.githubToken);
-      if (!res.ok) {
-        await res.body?.cancel();
-        Object.assign(item, { done: true, error: `could not be downloaded (status ${res.status})` });
-        continue;
-      }
-      const declared = Number(res.headers.get("Content-Length") ?? "");
-      if (bytesUsed > 0 && declared > 0 && bytesUsed + declared > limits.bytes) {
-        await res.body?.cancel();
-        return;
-      }
-      const bytes = new Uint8Array(await res.arrayBuffer());
-      bytesUsed += bytes.length;
-      const image = imageInfo(bytes);
-      if (!image) {
-        Object.assign(item, { done: true, error: "is not a PNG or JPEG image, which is what Google Play takes" });
-        continue;
-      }
-      Object.assign(item, { width: image.width, height: image.height });
-      const problem = playImageProblem(item.kind, { ...image, bytes: bytes.length });
-      if (problem) {
-        Object.assign(item, { done: true, error: problem });
-        continue;
-      }
-      await google.uploadImage(packageName, editId, language, PLAY_IMAGE_TYPES[item.kind], bytes, image.type === "png" ? "image/png" : "image/jpeg");
-      item.done = true;
-    }
-    g.missing = missingGraphics(g.items);
-    if (g.missing.length || left() < 1) return;
-    await google.commitEdit(packageName, editId, false);
-    Object.assign(g, { committed: true, editId: null, editExpiresAt: null });
+    await placeGraphics(env, counted, app, packageName, state, ctx, { ...limits, left: () => limits.calls - used });
     delete state.errors.graphics;
   } catch (err) {
     if (err instanceof TargetDisabledError || (err instanceof HttpError && err.status === 409)) throw err;
     const message = googlePlayProblem(err, ctx.email ?? undefined, packageName);
     state.errors.graphics = message;
     // An edit Google no longer has cannot take more images; the next request starts a new one.
-    if (state.graphics && err instanceof GoogleError && (err.status === 404 || /edit/i.test(err.detail))) Object.assign(state.graphics, { editId: null, editExpiresAt: null });
+    if (state.graphics && err instanceof GoogleError && err.status === 404) Object.assign(state.graphics, { editId: null, editExpiresAt: null });
     await save(env, deps, state);
     throw new HttpError(err instanceof HttpError ? err.status : 502, message);
-  } finally {
-    if (!state.errors.graphics || state.graphics?.committed) await save(env, deps, state);
   }
+  await save(env, deps, state);
+}
+
+async function placeGraphics(env: Env, deps: Deps, app: AppRow, packageName: string, state: GooglePlayAppRow, ctx: Context, limits: { bytes: number; restart?: boolean; left: () => number }): Promise<void> {
+  const google = client(env, deps, ctx);
+  const wanted = graphicSources(app, ctx.manifest, state.listing!);
+  const source = JSON.stringify(wanted);
+  let g: GooglePlayGraphics | null = state.graphics;
+  if (limits.restart || !g || g.source !== source) {
+    g = { source, items: wanted.map((w) => ({ ...w, done: false })), editId: null, editExpiresAt: null, cleared: [], committed: false, missing: [] };
+  }
+  state.graphics = g;
+  if (g.committed) return;
+  const language = state.listing!.language ?? "en-US";
+  // Images uploaded into an edit that expired are gone with it, so they go again into a new one.
+  if (!g.editId || (g.editExpiresAt !== null && g.editExpiresAt < deps.now().getTime() + 5 * 60_000)) {
+    if (limits.left() < 3) return;
+    const edit = await google.insertEdit(packageName);
+    Object.assign(g, { editId: edit.id, editExpiresAt: edit.expiresAt, cleared: [] });
+    for (const item of g.items) if (item.done && !item.error) item.done = false;
+  }
+  const editId = g.editId!;
+  // The listing's earlier images of each kind ourapps uploads are replaced; kinds it does not upload are left alone.
+  for (const type of [...new Set(g.items.map((i) => PLAY_IMAGE_TYPES[i.kind]))]) {
+    if (g.cleared.includes(type)) continue;
+    if (limits.left() < 3) return;
+    await google.deleteAllImages(packageName, editId, language, type);
+    g.cleared.push(type);
+  }
+  let bytesUsed = 0;
+  for (const item of g.items) {
+    if (item.done) continue;
+    if (limits.left() < 3 || bytesUsed >= limits.bytes) return;
+    const count = g.items.filter((i) => i.kind === item.kind && i.done && !i.error).length;
+    if ((item.kind === "phone" || item.kind === "tablet") && count >= SCREENSHOT_COUNT.max) {
+      Object.assign(item, { done: true, error: `is more than the ${SCREENSHOT_COUNT.max} ${PLAY_IMAGE_LABELS[item.kind].toLowerCase()}s Google Play takes` });
+      continue;
+    }
+    const res = await fetchUpstream(env, deps, item.url, ctx.secrets.githubToken);
+    if (!res.ok) {
+      await res.body?.cancel();
+      Object.assign(item, { done: true, error: `could not be downloaded (status ${res.status})` });
+      continue;
+    }
+    const declared = Number(res.headers.get("Content-Length") ?? "");
+    if (bytesUsed > 0 && declared > 0 && bytesUsed + declared > limits.bytes) {
+      await res.body?.cancel();
+      return;
+    }
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    bytesUsed += bytes.length;
+    const image = imageInfo(bytes);
+    if (!image) {
+      Object.assign(item, { done: true, error: "is not a PNG or JPEG image, which is what Google Play takes" });
+      continue;
+    }
+    Object.assign(item, { width: image.width, height: image.height });
+    const problem = playImageProblem(item.kind, { ...image, bytes: bytes.length });
+    if (problem) {
+      Object.assign(item, { done: true, error: problem });
+      continue;
+    }
+    await google.uploadImage(packageName, editId, language, PLAY_IMAGE_TYPES[item.kind], bytes, image.type === "png" ? "image/png" : "image/jpeg");
+    item.done = true;
+  }
+  g.missing = missingGraphics(g.items);
+  if (g.missing.length || limits.left() < 1) return;
+  await google.commitEdit(packageName, editId, false);
+  Object.assign(g, { committed: true, editId: null, editExpiresAt: null });
 }
 
 // The view
@@ -436,6 +441,11 @@ export async function saveGooglePlay(request: Request, env: Env, deps: Deps, dev
       const edit = await google.insertEdit(pkg);
       await google.deleteEdit(pkg, edit.id).catch(() => undefined);
       Object.assign(state, { foundPackage: pkg, foundAt: now });
+      if (app.androidPackage !== pkg) {
+        app.androidPackage = pkg;
+        app.updatedAt = now;
+        await Db.from(env).updateApp(app);
+      }
       delete state.errors.app;
     }
     if (listing) {
