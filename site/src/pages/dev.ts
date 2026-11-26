@@ -1396,7 +1396,7 @@ export async function agents(root: HTMLElement): Promise<void> {
             <tr><td><code>POST /api/dev/apps/:id/appstore/:platform/{screenshots,submit,release}</code></td><td>upload screenshots, submit for review, release an approved version</td></tr>
             <tr><td><code>GET /api/dev/apps/:id/applepay</code></td><td>where Apple Pay stands and the next step</td></tr>
             <tr><td><code>POST /api/dev/apps/:id/applepay/{merchant,certificate,confirm,profiles}</code></td><td>choose the merchant identifier, make a Payment Processing certificate, confirm the tick on the App ID, make the profiles again</td></tr>
-            <tr><td><code>POST /api/dev/apps/:id/applepay/certificates/:certId/activate</code></td><td>make Apple use the next Payment Processing certificate</td></tr>
+            <tr><td><code>POST /api/dev/apps/:id/applepay/certificate/:certId/activate</code></td><td>make Apple use the next Payment Processing certificate</td></tr>
             <tr><td><code>GET /api/build/:app/targets</code></td><td>read <code>{targets:AppTargets}</code> using that app's build token as the bearer credential</td></tr>
           </table>
           <p class="small muted"><code>AppTargets</code> contains six booleans: <code>ios</code>, <code>android</code>, <code>web</code>, <code>macos</code>, <code>windows</code> and <code>tvos</code>.</p>

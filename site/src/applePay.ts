@@ -227,7 +227,7 @@ export async function loadApplePayCard(root: HTMLElement, appId: string): Promis
     }
     const retry = box.querySelector<HTMLButtonElement>("[data-ap-retry]");
     if (retry) retry.onclick = () => void act(retry, "Turning it on...", () => api<ApplePayStatus>("POST", `${path}/merchant`, { identifier: s.merchant.identifier }), "Apple Pay is on for the App ID");
-    box.querySelectorAll<HTMLButtonElement>("[data-ap-activate]").forEach((b) => (b.onclick = () => void act(b, "Activating...", () => api<ApplePayStatus>("POST", `${path}/certificates/${encodeURIComponent(b.dataset.apActivate!)}/activate`), "Apple uses this certificate")));
+    box.querySelectorAll<HTMLButtonElement>("[data-ap-activate]").forEach((b) => (b.onclick = () => void act(b, "Activating...", () => api<ApplePayStatus>("POST", `${path}/certificate/${encodeURIComponent(b.dataset.apActivate!)}/activate`), "Apple uses this certificate")));
     const confirm = box.querySelector<HTMLButtonElement>("[data-ap-confirm]");
     if (confirm) confirm.onclick = () => void act(confirm, "Making the profiles...", () => api<ApplePayStatus>("POST", `${path}/confirm`), "Profiles made again");
     const profiles = box.querySelector<HTMLButtonElement>("[data-ap-profiles]");

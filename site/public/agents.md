@@ -127,7 +127,7 @@ GET  /api/dev/apps/:id/applepay  -> ApplePay
 POST /api/dev/apps/:id/applepay/merchant  body: optional { "identifier": "merchant.com.yourname.pokernight", "name": "Poker Night" } -> ApplePay  (uses the team's merchant identifier or creates it, turns Apple Pay on for the App ID and makes the App Store profiles again)
 POST /api/dev/apps/:id/applepay/certificate  body: { "csr": "-----BEGIN CERTIFICATE REQUEST-----..." } -> ApplePay  (a Payment Processing certificate from the payment processor's request)
 GET  /api/dev/apps/:id/applepay/certificate/:certId -> the certificate as a .cer file (application/pkix-cert) for the payment processor
-POST /api/dev/apps/:id/applepay/certificates/:certId/activate -> ApplePay  (Apple uses this certificate and stops using the merchant identifier's others; the payment processor must hold its .cer first)
+POST /api/dev/apps/:id/applepay/certificate/:certId/activate -> ApplePay  (Apple uses this certificate and stops using the merchant identifier's others; the payment processor must hold its .cer first)
 POST /api/dev/apps/:id/applepay/confirm  -> ApplePay  (the developer has ticked the merchant identifier on the App ID; makes the profiles again and reads them back)
 POST /api/dev/apps/:id/applepay/profiles -> ApplePay  (makes the profiles again until each carries the merchant identifier)
 ```

@@ -257,7 +257,7 @@ export async function createCertificate(request: Request, env: Env, deps: Deps, 
   return applePayView(env, deps, base);
 }
 
-// POST /api/dev/apps/:id/applepay/certificates/:certId/activate - Apple uses this certificate from now on and stops using
+// POST /api/dev/apps/:id/applepay/certificate/:certId/activate - Apple uses this certificate from now on and stops using
 // the merchant identifier's others; the payment processor must hold it first. The stored flags are then read from Apple.
 export async function activateCertificate(request: Request, env: Env, deps: Deps, dev: Developer, base: AppRow, certificateId: string) {
   const ios = await requireReady(env, base);

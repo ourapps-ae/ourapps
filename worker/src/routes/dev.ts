@@ -511,7 +511,7 @@ export async function applePayAction(request: Request, env: Env, deps: Deps, dev
   return json(await makeProfiles(request, env, deps, dev, app));
 }
 
-// POST /api/dev/apps/:id/applepay/certificates/:certId/activate
+// POST /api/dev/apps/:id/applepay/certificate/:certId/activate
 export async function applePayActivate(request: Request, env: Env, deps: Deps, dev: Developer, id: string, certificateId: string): Promise<Response> {
   return json(await activateCertificate(request, env, deps, dev, await ownedApp(Db.from(env), dev, id), certificateId));
 }
