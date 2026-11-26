@@ -11,10 +11,13 @@ async function hmacKey(secret: string): Promise<CryptoKey> {
 
 export interface LinkPayload {
   url: string;
-  kind: "apk" | "icon" | "dmg" | "exe";
-  // Developer whose GitHub token may be used to fetch the url.
+  kind: "apk" | "icon" | "dmg" | "exe" | "playapk";
+  // Developer whose GitHub token may be used to fetch the url, or whose Google service account gives Google Play's APK.
   dev: string;
   exp: number;
+  // For playapk: the app and the version code of Google Play's signed APK; url is empty.
+  app?: string;
+  code?: number;
 }
 
 export async function signLink(secret: string, payload: LinkPayload): Promise<string> {
@@ -42,7 +45,8 @@ export async function verifyLink(secret: string, token: string, now: Date): Prom
     return null;
   }
   if (typeof payload.url !== "string" || typeof payload.exp !== "number" || typeof payload.dev !== "string") return null;
-  if (!["apk", "icon", "dmg", "exe"].includes(payload.kind)) return null;
+  if (!["apk", "icon", "dmg", "exe", "playapk"].includes(payload.kind)) return null;
+  if (payload.kind === "playapk" && (typeof payload.app !== "string" || !Number.isSafeInteger(payload.code))) return null;
   if (payload.exp * 1000 < now.getTime()) return null;
   return payload;
 }

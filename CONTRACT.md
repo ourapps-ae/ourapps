@@ -327,8 +327,13 @@ key as the app signing key. Upload it as a release asset and name it in my-app.j
 ```
 
 `applicationId` is the build's application ID, the package name of the app in Play Console. The
-install page offers only the APK; ourapps sends the bundle to Google Play when the developer
-releases it from the console.
+install page never offers the bundle; ourapps sends it to Google Play when the developer releases it
+from the console. Once ourapps has released the app to Google Play, the Android download (the
+install page and `android.apkUrl` in `/latest`) is Google Play's own signed universal APK of the
+newest version Google has generated it for, not the `apk` asset, so the downloaded copy and the
+Google Play copy carry one signature whichever key Google Play holds. A newer release that is not
+on Google Play keeps the earlier Play-signed APK; `android.version` in `/latest` is the version the
+download installs.
 
 ## Secrets the app repository needs
 
@@ -444,8 +449,9 @@ redirect there, so home screen icons made from them open the app.
 
 TestFlight updates iPhone apps itself. Android apps do not update by themselves; an app can poll
 `GET https://ourapps.app/api/public/links/<linkId>/latest` (any active share link; a dedicated
-"In-app updates" link is the convention), compare `version` with its own, and open
-`android.apkUrl` (or, on iPhone, compare with `testflightVersion`, the version TestFlight has, and open `testflightUrl`). The links inside expire after one hour. Bump
+"In-app updates" link is the convention), compare `android.version`, the version the download
+installs (Google Play's APK can be older than `version`), with its own, and open `android.apkUrl`
+(or, on iPhone, compare with `testflightVersion`, the version TestFlight has, and open `testflightUrl`). The links inside expire after one hour. Bump
 `versionCode` / `CFBundleVersion` on every release and keep the Android signing key stable.
 
 ## Limits to design around

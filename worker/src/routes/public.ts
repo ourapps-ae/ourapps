@@ -6,7 +6,7 @@ import { downloadDisposition } from "../download-filename.js";
 import type { Deps, Env } from "../env.js";
 import { appleClient, deliveryRevision, dlUrl, projectAppStore, projectDelivery, projectGooglePlay, signManifestLinks } from "../flow.js";
 import { appStoreLinks } from "../appstore.js";
-import { googlePlayLinks } from "../googleplay.js";
+import { googlePlayLinks, playApk, serveGooglePlayApk } from "../googleplay.js";
 import { loadHistory } from "../history.js";
 import { HttpError, json } from "../http.js";
 import { verifyLink } from "../links.js";
@@ -108,12 +108,13 @@ export async function buildLinkPage(env: Env, deps: Deps, app: AppRow, dev: Deve
   }
   const targets = await Db.from(env).appTargets(app.id);
   const storeLinks = await appStoreLinks(env, app.id);
+  const play = await playApk(env, app.id);
   if (source) {
     const projected = projectDelivery(source, apple, targets);
     apple = projected.apple;
     revisionManifest = projected.manifest;
     try {
-      manifest = await signManifestLinks(env, deps, dev.id, projected.manifest);
+      manifest = await signManifestLinks(env, deps, dev.id, projected.manifest, play);
       if (isBundleUrl(manifest.install.pwa, release)) manifest.install.pwa = linkId ? webAppUrl(env, linkId) : null;
       if (manifest.install.ios && app.ascAppId) manifest.install.ios.testflight = apple.ios?.testflightUrl ?? null;
       manifest.icon = await sign(manifest.icon);
@@ -136,7 +137,7 @@ export async function buildLinkPage(env: Env, deps: Deps, app: AppRow, dev: Deve
   const appStore = projectAppStore(revisionManifest, storeLinks);
   const googlePlay = projectGooglePlay(revisionManifest, await googlePlayLinks(env, app));
   return {
-    deliveryRevision: await deliveryRevision(revisionManifest, apple, appStore, googlePlay),
+    deliveryRevision: await deliveryRevision(revisionManifest, apple, appStore, googlePlay, play),
     linkId,
     developer: { id: dev.id, slug: dev.slug, displayName: dev.displayName },
     app: { ...appDetails(app), iconUrl: await sign(app.iconUrl) },
@@ -155,6 +156,8 @@ export async function buildLinkPage(env: Env, deps: Deps, app: AppRow, dev: Deve
           fallbackDescription: manifest.description,
           fallbackScreenshots: manifest.screenshots ?? [],
           testflightVersion: manifest.install.ios?.testflight ? await testflightVersion(env, app) : null,
+          // The version the Android download installs: Google Play's APK can be older than the release.
+          androidVersion: manifest.install.android ? (play?.version ?? manifest.version) : null,
         }
       : null,
     releaseError: manifestError,
@@ -200,11 +203,12 @@ export async function linkLatest(env: Env, deps: Deps, linkId: string): Promise<
   apple = projected.apple;
   const appStore = projectAppStore(projected.manifest, await appStoreLinks(env, app.id));
   const googlePlay = projectGooglePlay(projected.manifest, await googlePlayLinks(env, app));
-  manifest = await signManifestLinks(env, deps, dev.id, projected.manifest);
+  const play = await playApk(env, app.id);
+  manifest = await signManifestLinks(env, deps, dev.id, projected.manifest, play);
   if (isBundleUrl(manifest.install.pwa, release)) manifest.install.pwa = webAppUrl(env, linkId);
   const ios = manifest.install.ios ? apple.ios : null;
   return json({
-    deliveryRevision: await deliveryRevision(projected.manifest, apple, appStore, googlePlay),
+    deliveryRevision: await deliveryRevision(projected.manifest, apple, appStore, googlePlay, play),
     name: app.name || manifest.name,
     version: manifest.version,
     // TestFlight installs and updates iPhone apps; an app can open this link.
@@ -216,7 +220,9 @@ export async function linkLatest(env: Env, deps: Deps, linkId: string): Promise<
     appStore,
     // Google Play's page once the app is live in production, and the testing opt-in page when the developer offers it.
     googlePlay,
-    android: manifest.install.android ? { apkUrl: manifest.install.android.apk } : null,
+    // The Android download and the version it installs: once the app is on Google Play, Google Play's signed APK of the
+    // newest version Google has prepared, which can be older than version.
+    android: manifest.install.android ? { apkUrl: manifest.install.android.apk, version: play?.version ?? manifest.version } : null,
     macos: manifest.install.macos?.packages.length ? { version: manifest.version, packages: manifest.install.macos.packages } : null,
     windows: manifest.install.windows?.packages.length ? { version: manifest.version, packages: manifest.install.windows.packages } : null,
     pwa: manifest.install.pwa,
@@ -236,6 +242,7 @@ export async function serveArtefact(env: Env, deps: Deps, token: string): Promis
   if (!env.LINK_SECRET) throw new HttpError(503, "LINK_SECRET is not configured");
   const link = await verifyLink(env.LINK_SECRET, token, deps.now());
   if (!link) throw new HttpError(403, "this link has expired; open the install page again");
+  if (link.kind === "playapk") return serveGooglePlayApk(env, deps, link.dev, link.app!, link.code!);
   const secrets = await loadSecrets(env, link.dev, ["githubToken"]);
   const upstream = await fetchUpstream(env, deps, link.url, secrets.githubToken);
   if (!upstream.ok) throw new HttpError(502, `upstream returned ${upstream.status}`);

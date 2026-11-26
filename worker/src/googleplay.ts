@@ -9,10 +9,11 @@ import { parseDefaultPolicy } from "./appstore.js";
 import { audit } from "./audit.js";
 import { requireSession, type AuthedDeveloper } from "./auth.js";
 import { randomId } from "./crypto.js";
-import { Db, type AppRow, type AppStoreAppRow, type Developer, type DeveloperSecrets, type GooglePlayAppRow, type GooglePlayGraphic, type GooglePlayGraphics, type GooglePlayListing, type GooglePlayReleaseRow, type GooglePlayStage } from "./db.js";
+import { Db, type AppRow, type AppStoreAppRow, type Developer, type DeveloperSecrets, type GooglePlayApkRow, type GooglePlayAppRow, type GooglePlayGraphic, type GooglePlayGraphics, type GooglePlayListing, type GooglePlayReleaseRow, type GooglePlayStage } from "./db.js";
 import type { Deps, Env } from "./env.js";
+import type { PlayApk } from "./flow.js";
 import { parseBuildRunMetadata, verifyBuildRun } from "./github.js";
-import { GoogleError, GooglePlayClient, googleClient, serviceAccountEmail } from "./google.js";
+import { fingerprint, GoogleError, GooglePlayClient, googleClient, serviceAccountEmail } from "./google.js";
 import { loadHistory } from "./history.js";
 import { HttpError, httpsUrlOrEmpty } from "./http.js";
 import { imageInfo } from "./image.js";
@@ -26,6 +27,8 @@ export const GRAPHICS_BYTES = 2_000_000;
 // How long Play's highest version code is trusted before a reservation reads it again.
 export const PLAY_MAXIMUM_TTL_MS = 10 * 60_000;
 export const TESTING_DAYS = 14;
+// Versions whose generated APK one scheduled run asks Google for.
+export const APKS_PER_RUN = 3;
 
 export const playUrl = (packageName: string) => `https://play.google.com/store/apps/details?id=${encodeURIComponent(packageName)}`;
 export const testingUrl = (packageName: string) => `https://play.google.com/apps/testing/${encodeURIComponent(packageName)}`;
@@ -316,6 +319,7 @@ export async function googlePlayView(env: Env, deps: Deps, dev: Developer, app: 
   const done = stepsDone(state, packageName, policyServed);
   const listing = state.listing ?? defaultListing(app, dev);
   const live = await db.googlePlayLive(app.id);
+  const apks = await db.googlePlayApks(app.id);
   const firstClosed = state.firstClosedAt ? Date.parse(state.firstClosedAt) : null;
   const days = firstClosed === null ? null : Math.max(0, Math.floor((now.getTime() - firstClosed) / 86_400_000));
   return {
@@ -349,6 +353,13 @@ export async function googlePlayView(env: Env, deps: Deps, dev: Developer, app: 
     releases: releases.map(releaseView),
     testing: { firstClosedAt: state.firstClosedAt, days, requiredDays: TESTING_DAYS, readyAt: firstClosed === null ? null : new Date(firstClosed + TESTING_DAYS * 86_400_000).toISOString(), testingLink: state.testingLink },
     live: { production: live.production, url: live.production && packageName ? playUrl(packageName) : null },
+    // The install page's Android download: Google Play's signed APK of the offered version, while a newer one waits for Google.
+    apk: apks.newest
+      ? {
+          offered: apks.offered ? { versionCode: apks.offered.versionCode, version: apks.offered.version, certificateSha256: apks.offered.certificateSha256, foundAt: apks.offered.foundAt, error: apks.offered.error } : null,
+          waiting: apks.newest.downloadId ? null : { versionCode: apks.newest.versionCode, version: apks.newest.version, checkedAt: apks.newest.checkedAt, error: apks.newest.error },
+        }
+      : null,
   };
 }
 
@@ -580,6 +591,13 @@ export async function releaseGooglePlay(request: Request, env: Env, deps: Deps, 
     appId: app.id, track: plan.track, version: manifest.version, versionCode, bundleUrl, status: plan.userFraction ? "inProgress" : "completed", userFraction: plan.userFraction,
     stage: sentForReview ? "sent" : "not-sent", googleState: null, message: sentForReview ? null : STAGE_MESSAGES["not-sent"]!, committedAt: now, checkedAt: null, liveAt: null, updatedAt: now,
   });
+  await db.insertGooglePlayApk(app.id, versionCode, manifest.version, now);
+  const apk = (await db.googlePlayApk(app.id, versionCode))!;
+  if (!apk.downloadId) {
+    // Google usually takes a few minutes to generate the APK; the ten-minute schedule asks again.
+    await findApk(google, packageName, apk, deps.now()).catch(() => undefined);
+    await db.updateGooglePlayApk(apk);
+  }
   if (plan.track === "alpha" && !state.firstClosedAt) state.firstClosedAt = now;
   delete state.errors.release;
   await save(env, deps, state);
@@ -605,20 +623,86 @@ async function followRelease(google: GooglePlayClient, packageName: string, r: G
   r.message = STAGE_MESSAGES[r.stage] ?? null;
 }
 
+// Asks Google for the universal APK of a released version code and keeps its download ID once Google has generated it.
+// Google answers "not found" for a version code it has not finished with, as for one it never had.
+async function findApk(google: GooglePlayClient, packageName: string, a: GooglePlayApkRow, now: Date): Promise<void> {
+  a.checkedAt = now.toISOString();
+  let apk;
+  try {
+    apk = await google.universalApk(packageName, a.versionCode);
+  } catch (err) {
+    if (err instanceof GoogleError && err.status === 404 && !/package not found/i.test(err.detail)) apk = null;
+    else throw err;
+  }
+  if (apk) Object.assign(a, { downloadId: apk.downloadId, certificateSha256: apk.certificateSha256 ? fingerprint(apk.certificateSha256) : null, foundAt: a.checkedAt, error: null });
+  else a.error = null;
+}
+
+const APK_PREPARING = "Google Play is preparing the Android download of this version, which usually takes a few minutes. Try again shortly.";
+const APK_NO_KEY = "The Android download comes from Google Play with the developer's Google service account key, which is not saved in ourapps. The developer saves it in Settings, Google Play.";
+
+// GET /dl/<token> for Google Play's signed APK of a version code: the developer's access token, then one call to Google
+// whose bytes go through as they arrive. When Google refuses, the answer says why; the workflow's APK, signed with
+// another key, is never given in its place.
+export async function serveGooglePlayApk(env: Env, deps: Deps, developerId: string, appId: string, versionCode: number): Promise<Response> {
+  const db = Db.from(env);
+  const app = await db.appById(appId);
+  const a = app && app.developerId === developerId && app.androidPackage ? await db.googlePlayApk(appId, versionCode) : null;
+  if (!app || !a) throw new HttpError(404, "this download is no longer offered; open the install page again");
+  const google = googleClient(env, deps, (await loadSecrets(env, developerId, ["googleServiceAccount"])).googleServiceAccount);
+  const before = JSON.stringify(a);
+  let res: Response;
+  try {
+    if (!google) throw new HttpError(503, APK_NO_KEY);
+    if (!a.downloadId) await findApk(google, app.androidPackage, a, deps.now());
+    if (!a.downloadId) throw new HttpError(503, APK_PREPARING);
+    res = await google.downloadApk(app.androidPackage, versionCode, a.downloadId);
+    a.error = null;
+  } catch (err) {
+    if (!(err instanceof HttpError && err.message === APK_PREPARING)) {
+      a.error = err instanceof HttpError ? err.message : `Google Play did not give the Android download. ${googlePlayProblem(err, google?.email, app.androidPackage)}`;
+      a.checkedAt = deps.now().toISOString();
+    }
+    await db.updateGooglePlayApk(a);
+    throw err instanceof HttpError ? err : new HttpError(502, a.error!);
+  }
+  if (JSON.stringify(a) !== before) await db.updateGooglePlayApk(a);
+  const length = Number(res.headers.get("Content-Length") ?? "");
+  let body = res.body;
+  if (body && Number.isSafeInteger(length) && length > 0) {
+    const fixed = new FixedLengthStream(length);
+    body.pipeTo(fixed.writable).catch(() => undefined);
+    body = fixed.readable;
+  }
+  return new Response(body, { status: 200, headers: { "Content-Type": "application/vnd.android.package-archive", "Content-Disposition": 'attachment; filename="app.apk"', "Cache-Control": "no-store" } });
+}
+
+// The Android download once ourapps has released the app to Google Play: Google Play's signed APK of the newest version
+// Google has generated it for, else of the newest released, which Google is preparing. Null before the first release.
+export async function playApk(env: Env, appId: string): Promise<PlayApk | null> {
+  const { offered, newest } = await Db.from(env).googlePlayApks(appId);
+  const a = offered ?? newest;
+  return a ? { appId, versionCode: a.versionCode, version: a.version } : null;
+}
+
 // Run on the ten-minute schedule after the App Store, with the outbound calls the run has left: a few releases read
-// from Google, least recently checked first, then one app's unfinished graphics.
+// from Google, least recently checked first, then a few versions whose APK Google has not generated yet, then one app's
+// unfinished graphics.
 export async function tickGooglePlay(env: Env, deps: Deps, calls = 45): Promise<void> {
   let used = 0;
   const counted: Deps = { ...deps, fetch: (input, init) => { used++; return deps.fetch(input, init); } };
   const db = Db.from(env);
   const clients = new Map<string, GooglePlayClient | null>();
+  const clientFor = async (developerId: string) => {
+    if (!clients.has(developerId)) clients.set(developerId, googleClient(env, counted, (await loadSecrets(env, developerId, ["googleServiceAccount"])).googleServiceAccount));
+    return clients.get(developerId)!;
+  };
   for (const r of await db.followedGooglePlayReleases(4)) {
     if (calls - used < 3) return;
     try {
       const app = await db.appById(r.appId);
       if (!app?.androidPackage) continue;
-      if (!clients.has(app.developerId)) clients.set(app.developerId, googleClient(env, counted, (await loadSecrets(env, app.developerId, ["googleServiceAccount"])).googleServiceAccount));
-      const google = clients.get(app.developerId);
+      const google = await clientFor(app.developerId);
       if (!google) continue;
       await followRelease(google, app.androidPackage, r, deps.now());
     } catch (err) {
@@ -627,6 +711,20 @@ export async function tickGooglePlay(env: Env, deps: Deps, calls = 45): Promise<
       console.error(`google play ${r.appId}: ${err instanceof Error ? err.message : String(err)}`);
     }
     await db.updateGooglePlayRelease(r);
+  }
+  for (const a of await db.googlePlayApksToFind(APKS_PER_RUN)) {
+    if (calls - used < 3) return;
+    try {
+      const app = await db.appById(a.appId);
+      const google = app?.androidPackage ? await clientFor(app.developerId) : null;
+      if (!app?.androidPackage) a.checkedAt = deps.now().toISOString();
+      else if (!google) Object.assign(a, { checkedAt: deps.now().toISOString(), error: APK_NO_KEY });
+      else await findApk(google, app.androidPackage, a, deps.now());
+    } catch (err) {
+      a.error = `Google Play did not give the Android download. ${googlePlayProblem(err)}`;
+      console.error(`google play apk ${a.appId} ${a.versionCode}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    await db.updateGooglePlayApk(a);
   }
   const left = calls - used;
   if (left < 12) return;

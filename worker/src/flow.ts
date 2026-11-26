@@ -41,10 +41,14 @@ export function projectGooglePlay(manifest: AppManifest | null, links: GooglePla
   return manifest?.install.android ? links : { store: null, testing: null };
 }
 
-export async function deliveryRevision(manifest: AppManifest | null, apple: AppleReadiness, appStore?: AppStoreLinks, googlePlay?: GooglePlayLinks): Promise<string> {
+// Google Play's signed APK of a version code, which the Android download gives once ourapps has released the app there.
+export type PlayApk = { appId: string; versionCode: number; version: string };
+
+export async function deliveryRevision(manifest: AppManifest | null, apple: AppleReadiness, appStore?: AppStoreLinks, googlePlay?: GooglePlayLinks, playApk?: PlayApk | null): Promise<string> {
   const store = appStore && Object.values(appStore).some(Boolean) ? { appStore } : {};
   const play = googlePlay && (googlePlay.store || googlePlay.testing) ? { googlePlay } : {};
-  return sha256Hex(JSON.stringify({ version: manifest?.version ?? null, install: manifest?.install ?? null, apple, ...store, ...play }));
+  const apk = manifest?.install.android && playApk ? { playApk: playApk.versionCode } : {};
+  return sha256Hex(JSON.stringify({ version: manifest?.version ?? null, install: manifest?.install ?? null, apple, ...store, ...play, ...apk }));
 }
 
 export async function dlUrl(env: Env, deps: Deps, link: Omit<LinkPayload, "exp">): Promise<string> {
@@ -53,10 +57,12 @@ export async function dlUrl(env: Env, deps: Deps, link: Omit<LinkPayload, "exp">
   return `${env.PUBLIC_ORIGIN}/dl/${token}`;
 }
 
-// Downloadable packages use signed worker links.
-export async function signManifestLinks(env: Env, deps: Deps, developerId: string, manifest: AppManifest): Promise<AppManifest> {
+// Downloadable packages use signed worker links; the Android download is Google Play's APK when there is one.
+export async function signManifestLinks(env: Env, deps: Deps, developerId: string, manifest: AppManifest, playApk: PlayApk | null = null): Promise<AppManifest> {
   const out: AppManifest = structuredClone(manifest);
-  if (out.install.android) out.install.android.apk = await dlUrl(env, deps, { url: manifest.install.android!.apk, kind: "apk", dev: developerId });
+  if (out.install.android) {
+    out.install.android.apk = await dlUrl(env, deps, playApk ? { url: "", kind: "playapk", dev: developerId, app: playApk.appId, code: playApk.versionCode } : { url: manifest.install.android!.apk, kind: "apk", dev: developerId });
+  }
   for (const platform of ["macos", "windows"] as const) {
     const target = out.install[platform];
     if (!target) continue;

@@ -74,6 +74,8 @@ export interface Release {
   fallbackScreenshots: string[];
   // The version TestFlight installs, when it differs from the release; null when TestFlight is not open.
   testflightVersion?: string | null;
+  // The version the Android download installs: Google Play's signed APK can be older than the release. Null without Android.
+  androidVersion?: string | null;
 }
 
 export interface HistoryEntry {
@@ -315,6 +317,12 @@ export interface GooglePlayStatus {
   releases: GooglePlayRelease[];
   testing: { firstClosedAt: string | null; days: number | null; requiredDays: number; readyAt: string | null; testingLink: boolean };
   live: { production: boolean; url: string | null };
+  // The install page's Android download once ourapps has released the app to Google Play: Google Play's signed APK of the
+  // offered version, and a newer released version Google has not generated the APK of yet.
+  apk: {
+    offered: { versionCode: number; version: string; certificateSha256: string | null; foundAt: string | null; error: string | null } | null;
+    waiting: { versionCode: number; version: string; checkedAt: string | null; error: string | null } | null;
+  } | null;
 }
 
 export interface BuildStatus {
