@@ -6,6 +6,7 @@ import { qrSvg, shareOrCopy } from "../qr.js";
 import { signingRequest } from "../signing.js";
 import { buildStatusCard, watchBuildStatus } from "../buildStatus.js";
 import { loadAppStoreCard } from "../appStore.js";
+import { loadApplePayCard } from "../applePay.js";
 import { retainedTargetRelease, targetEnabled, targetSections, wireTargets } from "../targets.js";
 import { appIcon, callout, copyRow, copyText, emptyState, errorBox, fmtDate, icon, pill, statePill, toast, wireCopy, wireImages } from "../ui.js";
 import { AGENT_REPO_PROMPT, AGENT_STORE_PROMPT } from "./prompts.js";
@@ -227,7 +228,7 @@ export async function appForm(root: HTMLElement, appId: string | null): Promise<
     me,
     isNew ? "New app" : app.name ?? "App",
     html`
-      ${!isNew ? html`<div id="release-card">${releaseCardSkeleton()}</div>${targetSections(app)}` : ""}
+      ${!isNew ? html`<div id="release-card">${releaseCardSkeleton()}</div>${targetSections(app)}<div id="applepay-card"></div>` : ""}
       <form id="app-form" class="card mt">
         ${SECTIONS.map((s) => html`<div class="form-section"><div class="about"><h3>${s.title}</h3><p>${s.about}</p></div><div>${s.fields.map(field)}</div></div>`)}
         <div class="form-section">
@@ -321,6 +322,7 @@ export async function appForm(root: HTMLElement, appId: string | null): Promise<
   }
   if (appId) for (const platform of ["macos", "tvos"] as const) void loadPlatformTestflightCard(root, app as DevApp, platform);
   if (appId) for (const platform of ["ios", "macos", "tvos"] as const) void loadAppStoreCard(root, appId, platform);
+  if (appId) void loadApplePayCard(root, appId);
   if (appId) {
     const fresh = sessionStorage.getItem(`buildToken:${appId}`);
     if (fresh) {
