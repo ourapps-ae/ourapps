@@ -1,12 +1,11 @@
 // The Apple Pay card on an app's page: the merchant identifier, the payment processor's certificate, Apple Pay on the
 // App ID and the App Store profiles that carry it, as a step list like the App Store card.
-import { api, type ApplePayStatus, type ApplePayStep } from "./api.js";
+import { api, type ApplePayCertificate, type ApplePayStatus, type ApplePayStep } from "./api.js";
 import { html, type Raw } from "./html.js";
 import { targetEnabled } from "./targets.js";
 import { callout, errorBox, fmtDate, icon, pill, toast, wireCopy } from "./ui.js";
 
 const STRIPE_CERTIFICATES = "https://dashboard.stripe.com/settings/ios_certificates";
-const IDENTIFIERS = "https://developer.apple.com/account/resources/identifiers/list";
 const STEP_ORDER: ApplePayStep[] = ["merchant", "certificate", "capability", "profiles"];
 
 const stepError = (error: string | null) => (error ? callout("bad", html`<p>${error}</p>`) : "");
@@ -27,6 +26,9 @@ function merchantForm(s: ApplePayStatus): Raw {
     </form>`;
 }
 
+const expired = (c: ApplePayCertificate) => Boolean(c.expirationDate && Date.parse(c.expirationDate) <= Date.now());
+const activatable = (c: ApplePayCertificate) => c.activated === false && !expired(c);
+
 function certificateList(s: ApplePayStatus): Raw {
   const c = s.certificate;
   if (c.items.length === 0) return html``;
@@ -34,11 +36,11 @@ function certificateList(s: ApplePayStatus): Raw {
     <table class="table small mt-s">${c.items.map((item) => html`<tr>
       <td>Serial ${item.serialNumber}</td>
       <td>${item.expirationDate ? `expires ${fmtDate(item.expirationDate)}` : ""}</td>
-      <td>${item.expirationDate && Date.parse(item.expirationDate) <= Date.now() ? pill("expired", "bad") : item.activated === false ? pill("not in use") : item.id === c.activeId ? pill("in use", "ok") : ""}</td>
-      <td><a class="btn sm secondary" href="${item.download}" download>${icon("arrow")} Download .cer</a></td>
+      <td>${expired(item) ? pill("expired", "bad") : item.activated === false ? pill("not in use") : item.id === c.activeId ? pill("in use", "ok") : ""}</td>
+      <td><a class="btn sm secondary" href="${item.download}" download>${icon("arrow")} Download .cer</a>${activatable(item) ? html` <button class="btn sm" type="button" data-ap-activate="${item.id}">Activate</button>` : ""}</td>
     </tr>`)}</table>
     <p class="small">Give the .cer file back to your payment processor, in the same place the certificate request came from.</p>
-    ${c.items.some((item) => item.activated === false) ? callout("info", html`<p>Apple uses one Payment Processing certificate of a merchant identifier at a time. Once your payment processor has the one not in use, revoke the one in use on the merchant identifier's page in the <a href="${IDENTIFIERS}" target="_blank" rel="noopener">Apple Developer site</a> (Certificates, Identifiers and Profiles, Identifiers, Merchant IDs); Apple then uses the other.</p>`) : ""}`;
+    ${c.items.some(activatable) ? callout("info", html`<p>Apple uses one Payment Processing certificate of a merchant identifier at a time. Once Apple activates the one not in use, payments are encrypted for it and your payment processor uses it, so the processor must already hold its .cer file. Give it to the processor first, then press Activate; Apple stops using the other.</p>`) : ""}`;
 }
 
 function certificateStep(s: ApplePayStatus): Raw {
@@ -100,7 +102,7 @@ const STEP_INFO: Record<ApplePayStep, { title: string; about: string; done: (s: 
     about: "Apple encrypts each payment with it; your payment processor holds its private key.",
     done: (s) => {
       const active = s.certificate.items.find((c) => c.id === s.certificate.activeId);
-      return active ? `Serial ${active.serialNumber}${active.expirationDate ? `, expires ${fmtDate(active.expirationDate)}` : ""}.${s.certificate.renewBy ? ` Renew by ${fmtDate(s.certificate.renewBy)}: get another certificate request from your payment processor and make the certificate here.` : ""}` : "Made.";
+      return active ? `Serial ${active.serialNumber}${active.expirationDate ? `, expires ${fmtDate(active.expirationDate)}` : ""}.${s.certificate.renewBy ? ` Renew by ${fmtDate(s.certificate.renewBy)}: get another certificate request from your payment processor, make the certificate here, give it to the processor, then activate it here.` : ""}` : "Made.";
     },
   },
   capability: { title: "Apple Pay on the App ID", about: "Apple Pay turned on for the app's App ID, with the merchant identifier ticked on Apple's site.", done: (s) => html`Apple Pay is on for ${appIdLinks(s)}, with the merchant identifier ticked (you confirmed it ${fmtDate(s.capability.tickedAt)}).` },
@@ -141,7 +143,7 @@ export function applePayCard(s: ApplePayStatus, open: ApplePayStep | null = null
   const head = html`<div class="row wrap"><div class="grow card-title"><h2>Apple Pay</h2><p class="small faint">Lets a shop app take Apple Pay on iPhone, iPad and Mac, through your payment processor, in your own Apple team.</p></div>${status}</div>`;
   if (!s.setUp) return html`<div class="card mt">${head}<p class="small">Set up iPhone and iPad TestFlight first: Apple Pay goes into the App Store profile TestFlight makes.</p></div>`;
   const renew = s.certificate.renewBy && Date.now() > Date.parse(s.certificate.renewBy)
-    ? callout("warn", html`<p>The Payment Processing certificate in use expires ${fmtDate(s.certificate.items.find((c) => c.id === s.certificate.activeId)?.expirationDate)}. Get another certificate request from your payment processor, make the certificate here and give it back to the processor.</p><button class="link-btn" type="button" data-ap-open="certificate">Make the certificate</button>`)
+    ? callout("warn", html`<p>The Payment Processing certificate in use expires ${fmtDate(s.certificate.items.find((c) => c.id === s.certificate.activeId)?.expirationDate)}. Get another certificate request from your payment processor, make the certificate here, give it to the processor, then activate it here.</p><button class="link-btn" type="button" data-ap-open="certificate">Make the certificate</button>`)
     : "";
   return html`<div class="card mt">${head}${renew}${stepList(s, open)}${entitlementNote(s)}<div data-ap-result></div></div>`;
 }
@@ -225,6 +227,7 @@ export async function loadApplePayCard(root: HTMLElement, appId: string): Promis
     }
     const retry = box.querySelector<HTMLButtonElement>("[data-ap-retry]");
     if (retry) retry.onclick = () => void act(retry, "Turning it on...", () => api<ApplePayStatus>("POST", `${path}/merchant`, { identifier: s.merchant.identifier }), "Apple Pay is on for the App ID");
+    box.querySelectorAll<HTMLButtonElement>("[data-ap-activate]").forEach((b) => (b.onclick = () => void act(b, "Activating...", () => api<ApplePayStatus>("POST", `${path}/certificates/${encodeURIComponent(b.dataset.apActivate!)}/activate`), "Apple uses this certificate")));
     const confirm = box.querySelector<HTMLButtonElement>("[data-ap-confirm]");
     if (confirm) confirm.onclick = () => void act(confirm, "Making the profiles...", () => api<ApplePayStatus>("POST", `${path}/confirm`), "Profiles made again");
     const profiles = box.querySelector<HTMLButtonElement>("[data-ap-profiles]");

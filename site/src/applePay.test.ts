@@ -50,10 +50,20 @@ describe("Apple Pay card", () => {
     expect(card).toContain("never holds it");
   });
 
+  it("offers Activate on the next certificate, once the processor holds it", () => {
+    const next = { ...certificate, id: "C2", serialNumber: "7A1C", activated: false };
+    const old = { ...certificate, id: "C0", serialNumber: "7A10", activated: false, expirationDate: "2026-01-01T00:00:00Z" };
+    const card = applePayCard(chosen({ step: "certificate", certificate: { items: [next, certificate, old], activeId: "C1", renewBy: certificate.renewBy, done: true, error: null } }), "certificate").html;
+    expect(card.match(/data-ap-activate="([\w-]+)"/g)).toEqual(['data-ap-activate="C2"']);
+    expect(card).toContain("so the processor must already hold its .cer file. Give it to the processor first, then press Activate");
+    expect(card).not.toContain("revoke");
+    expect(applePayCard(chosen({ step: "certificate", certificate: { items: [certificate], activeId: "C1", renewBy: certificate.renewBy, done: true, error: null } })).html).not.toContain("data-ap-activate");
+  });
+
   it("says when to renew, and loudly once the date has passed", () => {
     const done = { items: [certificate], activeId: "C1", renewBy: certificate.renewBy, done: true, error: null };
     const card = applePayCard(chosen({ step: "capability", certificate: done })).html;
-    expect(card).toMatch(/Serial 7A1B, expires .+\. Renew by .+: get another certificate request from your payment processor/);
+    expect(card).toMatch(/Serial 7A1B, expires .+\. Renew by .+: get another certificate request from your payment processor, make the certificate here, give it to the processor, then activate it here\./);
     expect(card).not.toContain("callout warn");
     const late = applePayCard(chosen({ step: "capability", certificate: { ...done, renewBy: "2026-01-01T00:00:00Z" } })).html;
     expect(late).toContain("The Payment Processing certificate in use expires");
