@@ -88,6 +88,23 @@ describe("validateManifest", () => {
     if (result.ok) expect(result.manifest.install).toEqual({ pwa: null, android: { apk: "https://x/a.apk" }, ios: { bundleId: "a.b", testflight: null, devices: ["iphone"] } });
   });
 
+  it("accepts an optional Android App Bundle address and rejects one that is not https", () => {
+    const android = (bundle: unknown) => withPatch({ install: { pwa: null, android: { apk: "https://x/a.apk", bundle }, ios: null } });
+    const result = validateManifest(android("https://api.github.com/repos/club/poker-night/releases/assets/8"));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.manifest.install.android).toEqual({ apk: "https://x/a.apk", bundle: "https://api.github.com/repos/club/poker-night/releases/assets/8" });
+    const none = validateManifest(android(null));
+    if (none.ok) expect(none.manifest.install.android).toEqual({ apk: "https://x/a.apk" });
+    const bad = validateManifest(android("http://x/a.aab"));
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.errors).toContain("install.android.bundle must be an https URL or null");
+    const named = validateManifest(withPatch({ install: { pwa: null, android: { apk: "https://x/a.apk", applicationId: "club.pokernight.app" }, ios: null } }));
+    if (named.ok) expect(named.manifest.install.android).toEqual({ apk: "https://x/a.apk", applicationId: "club.pokernight.app" });
+    const unnamed = validateManifest(withPatch({ install: { pwa: null, android: { apk: "https://x/a.apk", applicationId: "poker night" }, ios: null } }));
+    if (!unnamed.ok) expect(unnamed.errors).toContain("install.android.applicationId must be an Android application ID such as com.example.app");
+    expect(unnamed.ok).toBe(false);
+  });
+
   it("accepts optional screenshots and rejects bad ones", () => {
     expect(validateManifest(withPatch({ screenshots: ["https://example.com/1.png"] })).ok).toBe(true);
     expect(validateManifest(withPatch({ screenshots: [] })).ok).toBe(true);
