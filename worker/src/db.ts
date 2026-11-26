@@ -377,6 +377,19 @@ export interface GooglePlayReleaseRow {
   updatedAt: string;
 }
 
+// Google Play's signed universal APK of a version code ourapps released; downloadId is null until Google has generated it.
+export interface GooglePlayApkRow {
+  appId: string;
+  versionCode: number;
+  version: string;
+  downloadId: string | null;
+  certificateSha256: string | null;
+  error: string | null;
+  foundAt: string | null;
+  checkedAt: string | null;
+  createdAt: string;
+}
+
 type Raw = Record<string, unknown>;
 
 function camel(key: string): string {
@@ -949,6 +962,36 @@ export class Db {
       .bind(appId)
       .first<{ production: number | null; testing: number | null }>();
     return { production: r?.production === 1, testing: r?.testing === 1 };
+  }
+
+  async insertGooglePlayApk(appId: string, versionCode: number, version: string, at: string): Promise<void> {
+    await this.d1.prepare("INSERT INTO google_play_apks (app_id, version_code, version, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING").bind(appId, versionCode, version, at).run();
+  }
+
+  async updateGooglePlayApk(a: GooglePlayApkRow): Promise<void> {
+    await this.d1
+      .prepare("UPDATE google_play_apks SET download_id = ?, certificate_sha256 = ?, error = ?, found_at = ?, checked_at = ? WHERE app_id = ? AND version_code = ?")
+      .bind(a.downloadId, a.certificateSha256, a.error, a.foundAt, a.checkedAt, a.appId, a.versionCode)
+      .run();
+  }
+
+  async googlePlayApk(appId: string, versionCode: number): Promise<GooglePlayApkRow | null> {
+    return row<GooglePlayApkRow>(await this.d1.prepare("SELECT * FROM google_play_apks WHERE app_id = ? AND version_code = ?").bind(appId, versionCode).first());
+  }
+
+  // The newest version Google has generated the APK of, and the newest version ourapps released.
+  async googlePlayApks(appId: string): Promise<{ offered: GooglePlayApkRow | null; newest: GooglePlayApkRow | null }> {
+    const [offered, newest] = await this.d1.batch<Raw>([
+      this.d1.prepare("SELECT * FROM google_play_apks WHERE app_id = ? AND download_id IS NOT NULL ORDER BY version_code DESC LIMIT 1").bind(appId),
+      this.d1.prepare("SELECT * FROM google_play_apks WHERE app_id = ? ORDER BY version_code DESC LIMIT 1").bind(appId),
+    ]);
+    return { offered: row<GooglePlayApkRow>(offered.results[0] ?? null), newest: row<GooglePlayApkRow>(newest.results[0] ?? null) };
+  }
+
+  // Versions whose APK Google has not generated yet, least recently checked first.
+  async googlePlayApksToFind(limit: number): Promise<GooglePlayApkRow[]> {
+    const res = await this.d1.prepare("SELECT * FROM google_play_apks WHERE download_id IS NULL ORDER BY checked_at LIMIT ?").bind(limit).all<Raw>();
+    return res.results.map((r) => row<GooglePlayApkRow>(r)!);
   }
 
   // Android version codes

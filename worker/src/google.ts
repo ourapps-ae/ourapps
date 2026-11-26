@@ -1,6 +1,6 @@
 // Google Play Android Developer API with the developer's own service account: an RS256-signed JSON Web Token is
 // exchanged for an access token (developers.google.com/identity/protocols/oauth2/service-account), then the edits,
-// tracks and releases resources of developers.google.com/android-publisher/api-ref/rest/v3.
+// tracks, releases and generatedapks resources of developers.google.com/android-publisher/api-ref/rest/v3.
 import type { Deps, Env } from "./env.js";
 import { fromBase64, toBase64url } from "./crypto.js";
 
@@ -122,11 +122,16 @@ export class GooglePlayClient {
     return this.token.value;
   }
 
-  private async call<T>(method: string, path: string, init: { body?: BodyInit; json?: unknown; headers?: Record<string, string>; raw?: boolean } = {}): Promise<T> {
+  private async call<T>(method: string, path: string, init: { body?: BodyInit; json?: unknown; headers?: Record<string, string>; raw?: boolean; follow?: boolean } = {}): Promise<T> {
     const headers: Record<string, string> = { Authorization: `Bearer ${await this.bearer()}`, Accept: "application/json", ...init.headers };
     if (init.json !== undefined) headers["Content-Type"] = "application/json";
     const url = path.startsWith("https://") ? path : `${this.env.GOOGLE_PLAY_API_BASE}${path}`;
-    const res = await this.deps.fetch(url, { method, headers, redirect: "manual", body: init.json !== undefined ? JSON.stringify(init.json) : init.body });
+    let res = await this.deps.fetch(url, { method, headers, redirect: "manual", body: init.json !== undefined ? JSON.stringify(init.json) : init.body });
+    // A media download Google sends elsewhere is followed once, to a Google host, without the access token.
+    if (init.follow && res.status >= 300 && res.status < 400 && googleHost(res.headers.get("Location"))) {
+      await res.body?.cancel();
+      res = await this.deps.fetch(res.headers.get("Location")!, { headers: { Accept: headers.Accept }, redirect: "manual" });
+    }
     if (res.status >= 300 && res.status < 400 && res.status !== 308) throw new GoogleError(res.status, "Google redirected the request; no credentials were forwarded.");
     if (init.raw && res.ok) return res as T;
     if (res.status === 204) return undefined as T;
@@ -228,6 +233,46 @@ export class GooglePlayClient {
   async trackReleases(packageName: string, track: string): Promise<ReleaseSummary[]> {
     return (await this.call<{ releases?: ReleaseSummary[] }>("GET", this.app(packageName, `/tracks/${encodeURIComponent(track)}/releases`))).releases ?? [];
   }
+
+  // The universal APK Google Play generated from the bundle with this version code, signed with the app signing key
+  // Play holds (generatedapks.list); null until Google has generated it.
+  async universalApk(packageName: string, versionCode: number): Promise<UniversalApk | null> {
+    const list = await this.call<{ generatedApks?: { certificateSha256Hash?: string; generatedUniversalApk?: { downloadId?: string } }[] }>("GET", this.app(packageName, `/generatedApks/${versionCode}`));
+    const found = (list.generatedApks ?? []).find((g) => g.generatedUniversalApk?.downloadId);
+    return found ? { downloadId: found.generatedUniversalApk!.downloadId!, certificateSha256: found.certificateSha256Hash ?? "" } : null;
+  }
+
+  // The APK's bytes as Google sends them (generatedapks.download with alt=media), for the caller to stream.
+  async downloadApk(packageName: string, versionCode: number, downloadId: string): Promise<Response> {
+    return this.call<Response>("GET", this.app(packageName, `/generatedApks/${versionCode}/downloads/${encodeURIComponent(downloadId)}:download?alt=media`), { raw: true, follow: true, headers: { Accept: "*/*" } });
+  }
+}
+
+export interface UniversalApk {
+  downloadId: string;
+  certificateSha256: string;
+}
+
+function googleHost(location: string | null): boolean {
+  try {
+    const u = new URL(location ?? "");
+    return u.protocol === "https:" && /(^|\.)(googleapis|googleusercontent)\.com$/.test(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
+// Google's certificate hash as the colon-separated upper-case hex that Google Pay and other providers ask for.
+export function fingerprint(hash: string): string {
+  const plain = hash.replace(/[:\s]/g, "");
+  if (/^[0-9a-fA-F]{64}$/.test(plain)) return plain.toUpperCase().match(/../g)!.join(":");
+  try {
+    const bytes = Uint8Array.from(atob(plain.replaceAll("-", "+").replaceAll("_", "/")), (c) => c.charCodeAt(0));
+    if (bytes.length === 32) return [...bytes].map((b) => b.toString(16).padStart(2, "0").toUpperCase()).join(":");
+  } catch {
+    // Neither hex nor base64: shown as Google gave it.
+  }
+  return hash;
 }
 
 export function googleClient(env: Env, deps: Deps, stored: string | undefined): GooglePlayClient | null {
