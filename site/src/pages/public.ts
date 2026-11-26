@@ -246,6 +246,14 @@ export function deliveryChanged(previous: LinkPage, next: LinkPage): boolean {
   return JSON.stringify([previous.release?.version, previous.release?.install, previous.release?.apple]) !== JSON.stringify([next.release?.version, next.release?.install, next.release?.apple]);
 }
 
+// The version this device gets. iPhone and iPad get what TestFlight has and Android phones what the download installs
+// (Google Play's APK once the app is there); either can be older than the latest release.
+export function deviceVersion(release: LinkPage["release"], platform: Platform): string | undefined {
+  const compatibilityVersion = platform === "macos" && !release?.install.macos?.packages.length && !release?.apple?.macos ? release?.apple?.iosOnMac?.version : null;
+  const androidVersion = platform === "android" && release?.install.android ? release.androidVersion : null;
+  return compatibilityVersion ?? androidVersion ?? (platform === "ios" && release?.install.ios?.testflight ? (release.apple?.ios?.version ?? release.testflightVersion ?? release.version) : release?.version);
+}
+
 export function hasDelivery(data: LinkPage): boolean {
   const install = data.release?.install;
   return Boolean(install && (install.ios || install.android || install.pwa || install.macos || install.windows || install.tvos));
@@ -271,9 +279,7 @@ export function renderInstall(root: HTMLElement, data: LinkPage, opts: InstallOp
   const blocked = Boolean(d.inApp && !d.inApp.installWorks) || !data.release || !hasDelivery(data);
   const history = data.history ?? [];
   // The latest release's notes are the truth; the dashboard field only fills in when there are none.
-  // iPhone and iPad get what TestFlight has, which can be older than the latest release.
-  const compatibilityVersion = d.platform === "macos" && !data.release?.install.macos?.packages.length && !data.release?.apple?.macos ? data.release?.apple?.iosOnMac?.version : null;
-  const version = compatibilityVersion ?? (d.platform === "ios" && data.release?.install.ios?.testflight ? (data.release.apple?.ios?.version ?? data.release.testflightVersion ?? data.release.version) : data.release?.version);
+  const version = deviceVersion(data.release, d.platform);
   const latest = history.find((h) => h.version === version) ?? history[0];
   const whatsNew = latest?.notes || app.whatsNew || "";
   const updated = latest?.date ?? (history.length === 0 ? app.updatedAt : null);
@@ -539,7 +545,7 @@ function installPanel(view: ViewKind | null, data: LinkPage, d: Detected, name: 
   if (view === "web") return remote ? webOnComputer(install.pwa!, name) : pwaSteps(install.pwa!, d.platform);
   const store = data.release!.appStore?.ios ?? null;
   const play = data.release!.googlePlay ?? { store: null, testing: null };
-  if (remote) return remoteCard(view, install, pageUrl, data.release!.testflightVersion ?? null, data.release!.version, view === "android" ? play.store : store);
+  if (remote) return remoteCard(view, install, pageUrl, (view === "android" ? data.release!.androidVersion : data.release!.testflightVersion) ?? null, data.release!.version, view === "android" ? play.store : store);
   if (view === "android") return androidSteps(install.android!.apk, name, play.store, play.testing);
   const note = deviceNote(install.ios?.devices, d.device);
   if (install.ios?.testflight) return testflightSteps(name, d.device, install.ios.testflight, note, store);
@@ -591,13 +597,14 @@ function iosComingSoon(name: string, device: string, pwa: string | null): Raw {
     </div>`;
 }
 
-function remoteCard(view: "iphone" | "ipad" | "android", install: Install, pageUrl: string, tfVersion: string | null, version: string, store: string | null = null): Raw {
+// installed is the version the device gets: TestFlight's on iPhone and iPad, the download's on Android.
+function remoteCard(view: "iphone" | "ipad" | "android", install: Install, pageUrl: string, installed: string | null, version: string, store: string | null = null): Raw {
   const device = view === "android" ? "Android phone" : VIEW_LABEL[view];
   const steps =
     view === "android"
-      ? html`<li>Tap <b>Get</b>; the app downloads.</li><li>The first time, allow installs from the browser when Android asks.</li><li>Tap <b>Install</b>.</li>${store ? html`<li>Or tap <b>Get it on Google Play</b> on this page, on the phone.</li>` : ""}`
+      ? html`<li>Tap <b>Get</b>; the app downloads.</li><li>The first time, allow installs from the browser when Android asks.</li><li>Tap <b>Install</b>.${installed && installed !== version ? html` The download is version ${installed}.` : ""}</li>${store ? html`<li>Or tap <b>Get it on Google Play</b> on this page, on the phone.</li>` : ""}`
       : install.ios?.testflight
-        ? html`<li>Get Apple's free <b>TestFlight</b> app from the App Store.</li><li>Tap <b>Open the invitation</b> on this page, on the ${device}.</li><li>In TestFlight tap <b>Accept</b>, then <b>Install</b>.${tfVersion && tfVersion !== version ? html` TestFlight has version ${tfVersion}.` : ""}</li>${store ? html`<li>Or tap <b>Get it on the App Store</b> on this page, on the ${device}.</li>` : ""}`
+        ? html`<li>Get Apple's free <b>TestFlight</b> app from the App Store.</li><li>Tap <b>Open the invitation</b> on this page, on the ${device}.</li><li>In TestFlight tap <b>Accept</b>, then <b>Install</b>.${installed && installed !== version ? html` TestFlight has version ${installed}.` : ""}</li>${store ? html`<li>Or tap <b>Get it on the App Store</b> on this page, on the ${device}.</li>` : ""}`
         : store
           ? html`<li>Tap <b>Get it on the App Store</b> on this page, on the ${device}.</li>`
           : html`<li>The ${device} version is coming soon${install.pwa ? "; the web version works there meanwhile" : ""}.</li>`;

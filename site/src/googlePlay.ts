@@ -31,10 +31,25 @@ const stepError = (error: string | null) => (error ? callout("bad", html`<p>${er
 const copyable = (text: string): Raw => html`<code>${text}</code> <button type="button" class="btn sm ghost" data-copy="${text}">${icon("copy")} Copy</button>`;
 const external = (href: string, text: string): Raw => html`<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
 
-// Play App Signing re-signs what Google Play delivers; only the same key lets phones with the APK take Play's updates.
+// Play App Signing re-signs what Google Play delivers; the Android download is Google Play's APK, so both carry its signature.
 export function signingNote(s: GooglePlayStatus): Raw {
   return callout("info", html`
-    <p><b>Signing.</b> Google Play signs what it delivers with its own app signing key, and the key your workflow signs with becomes the upload key. A phone that has the APK from ourapps then cannot take Google Play's version as an update, because the signatures differ, unless Google Play signs with the same key. When Play Console asks how the app is signed at the first release, choose to give Google a copy of your existing key (the keystore the release workflow signs the APK with), following ${external(s.links.signing, "Google's instructions for Play App Signing")}. Use the same key for both.</p>`);
+    <p><b>Signing.</b> Google Play signs what it delivers with the app signing key it holds, and the key your workflow signs with is the upload key. Once the app is on Google Play, the Android download on the install page is Google Play's own signed APK, so the downloaded copy and the Google Play copy update each other whichever key Google Play holds. Phones that installed the workflow's APK before the first Google Play release uninstall it once and install the app again, unless you gave Google Play your own key. Giving your own key is an option: when Play Console asks how the app is signed at the first release, choose your existing key (the keystore the release workflow signs with), following ${external(s.links.signing, "Google's instructions for Play App Signing")}.</p>`);
+}
+
+// The Android download once ourapps has released the app to Google Play, and the certificate Google Play signs it with.
+export function apkNote(s: GooglePlayStatus): Raw {
+  const a = s.apk;
+  if (!a) return html``;
+  const offered = a.offered;
+  const waiting = a.waiting;
+  return html`
+    <h3 class="mt">Android download</h3>
+    ${offered ? html`<p class="small">The install page gives Google Play's signed APK of version ${offered.version} (${offered.versionCode}), the same signature as the Google Play copy.</p>` : ""}
+    ${offered?.error ? stepError(offered.error) : ""}
+    ${waiting ? html`<p class="small">Google Play is preparing the APK of version ${waiting.version} (${waiting.versionCode}); ourapps asks Google every ten minutes. ${offered ? `Until then the install page gives version ${offered.version}.` : "Until then the Android download on the install page says Google Play is preparing it."}</p>` : ""}
+    ${waiting?.error ? stepError(waiting.error) : ""}
+    ${offered?.certificateSha256 ? html`<p class="small">Google Play signing certificate, SHA-256: the fingerprint to register with Google Pay and other providers that check the app's signature.</p><p class="small">${copyable(offered.certificateSha256)}</p>` : ""}`;
 }
 
 export const GOOGLE_PAY_CONSOLE = "https://pay.google.com/business/console";
@@ -43,7 +58,7 @@ const GOOGLE_PAY_ACCESS = "https://developers.google.com/pay/api/android/guides/
 // For apps that take payments: Google Pay's approval goes through the Play app, under the same Google account.
 export function googlePayNote(): Raw {
   return callout("info", html`
-    <p><b>Google Pay.</b> For an app that takes payments, Google approves Google Pay in the ${external(GOOGLE_PAY_CONSOLE, "Google Pay and Wallet Console")}, which lists only apps in Google Play under the Google account signed in to it. Use the same Google account for both, or invite the Play Console's owner or admin account under Users in the Google Pay and Wallet Console and sign in with it. A release on any track, Internal testing included, puts the app on that list; approval comes before the app goes public (${external(GOOGLE_PAY_ACCESS, "Google's steps")}). Google Pay in production checks the app's release signature, so the APK from ourapps takes Google Pay only when it is signed with the same key as the Google Play copy: when you gave Google Play your own key as the app signing key.</p>`);
+    <p><b>Google Pay.</b> For an app that takes payments, Google approves Google Pay in the ${external(GOOGLE_PAY_CONSOLE, "Google Pay and Wallet Console")}, which lists only apps in Google Play under the Google account signed in to it. Use the same Google account for both, or invite the Play Console's owner or admin account under Users in the Google Pay and Wallet Console and sign in with it. A release on any track, Internal testing included, puts the app on that list; approval comes before the app goes public (${external(GOOGLE_PAY_ACCESS, "Google's steps")}). Google Pay in production checks the app's signature. The Android download from ourapps is Google Play's own signed APK, the same signature as the Google Play copy; where Google Pay or another provider asks for the app's fingerprint, give the Google Play signing certificate's SHA-256 under Android download on this card.</p>`);
 }
 
 function appStep(s: GooglePlayStatus): Raw {
@@ -199,9 +214,9 @@ export function googlePlayCard(s: GooglePlayStatus, open: GooglePlayStep | null 
   const latest = s.releases[0];
   const status = !s.setUp ? pill("needs a service account", "warn") : s.live.production ? pill("live on Google Play", "ok", true) : latest ? pill(STAGE_PILL[latest.stage][0], STAGE_PILL[latest.stage][1] || "accent", true) : pill("not released", "warn", true);
   const head = html`<div class="row wrap"><div class="grow card-title"><h2>Google Play</h2><p class="small faint">Takes the Android app to Google Play with your own Google Play developer account. The app is free.</p></div>${status}</div>`;
-  if (!s.setUp) return html`<div class="card mt">${head}<p class="small">Save a Google service account key in <a href="/dev/settings#google-play">Settings</a> first; it lets ourapps work in your Google Play developer account.</p></div>`;
+  if (!s.setUp) return html`<div class="card mt">${head}<p class="small">Save a Google service account key in <a href="/dev/settings#google-play">Settings</a> first; it lets ourapps work in your Google Play developer account.</p>${apkNote(s)}</div>`;
   const live = s.live.url ? html`<p class="small">The app is <a href="${s.live.url}" target="_blank" rel="noopener">live on Google Play</a>; the install page offers it beside the APK.</p>` : "";
-  return html`<div class="card mt">${head}${live}${stepList(s, open)}${releaseList(s)}${testingGate(s)}${signingNote(s)}${googlePayNote()}<div data-gp-result></div></div>`;
+  return html`<div class="card mt">${head}${live}${stepList(s, open)}${releaseList(s)}${apkNote(s)}${testingGate(s)}${signingNote(s)}${googlePayNote()}<div data-gp-result></div></div>`;
 }
 
 // Reads a form into the body the worker takes for that step.
@@ -306,13 +321,13 @@ export async function loadGooglePlayCard(root: HTMLElement, appId: string): Prom
   };
   const schedule = () => {
     clearTimeout(timer);
-    if (!s.releases.some((r) => WAITING.includes(r.stage)) || Date.now() > until) return;
+    if ((!s.releases.some((r) => WAITING.includes(r.stage)) && !s.apk?.waiting) || Date.now() > until) return;
     timer = window.setTimeout(async () => {
       if (!box.isConnected) return;
       if (document.visibilityState === "visible") {
         try {
           const next = await api<GooglePlayStatus>("GET", path);
-          if (JSON.stringify(next.releases) !== JSON.stringify(s.releases)) {
+          if (JSON.stringify([next.releases, next.apk]) !== JSON.stringify([s.releases, s.apk])) {
             s = next;
             if (!open) render();
           }

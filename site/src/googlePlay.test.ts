@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GooglePlayRelease, GooglePlayStatus } from "./api.js";
 import { googlePlayCard } from "./googlePlay.js";
-import { googlePlayLink } from "./pages/public.js";
+import { deviceVersion, googlePlayLink } from "./pages/public.js";
 import { targetSections } from "./targets.js";
 
 const PACKAGE = "club.pokernight.app";
@@ -23,6 +23,7 @@ function status(over: Partial<GooglePlayStatus> = {}): GooglePlayStatus {
     releases: [],
     testing: { firstClosedAt: null, days: null, requiredDays: 14, readyAt: null, testingLink: false },
     live: { production: false, url: null },
+    apk: null,
     ...over,
   };
 }
@@ -47,19 +48,41 @@ describe("Google Play card", () => {
     expect(card).toContain("From the latest release&#39;s my-app.json.");
   });
 
-  it("says how signing decides whether phones with the APK take Google Play's updates", () => {
+  it("says the Android download is Google Play's own APK, with the owner's key as an option", () => {
     const card = googlePlayCard(status()).html;
-    expect(card).toContain("A phone that has the APK from ourapps then cannot take Google Play's version as an update, because the signatures differ, unless Google Play signs with the same key.");
-    expect(card).toContain("Use the same key for both.");
+    expect(card).toContain("Once the app is on Google Play, the Android download on the install page is Google Play's own signed APK, so the downloaded copy and the Google Play copy update each other whichever key Google Play holds.");
+    expect(card).toContain("Phones that installed the workflow's APK before the first Google Play release uninstall it once and install the app again, unless you gave Google Play your own key.");
+    expect(card).toContain("Giving your own key is an option");
+    expect(card).not.toContain("Use the same key for both");
+    expect(card).not.toContain("cannot take Google Play's version");
   });
 
-  it("notes how Google Pay is approved for an app in Google Play, and when the APK takes it", () => {
+  it("shows the APK the install page gives, the one Google is preparing, the refusal, and the signing certificate's fingerprint", () => {
+    expect(googlePlayCard(status()).html).not.toContain("Android download</h3>");
+    const fp = "9C:8F:2E:1A:7B:6D:5C:4E:3F:2A:1B:0C:9D:8E:7F:6A:5B:4C:3D:2E:1F:0A:9B:8C:7D:6E:5F:4A:3B:2C:1D:0E";
+    const offered = { versionCode: 42, version: "1.2.0", certificateSha256: fp, foundAt: "2026-11-26T10:10:00Z", error: null };
+    const card = googlePlayCard(status({ apk: { offered, waiting: { versionCode: 43, version: "1.3.0", checkedAt: null, error: null } } })).html;
+    expect(card).toContain("The install page gives Google Play's signed APK of version 1.2.0 (42)");
+    expect(card).toContain("Google Play is preparing the APK of version 1.3.0 (43); ourapps asks Google every ten minutes. Until then the install page gives version 1.2.0.");
+    expect(card).toContain("Google Play signing certificate, SHA-256: the fingerprint to register with Google Pay and other providers that check the app's signature.");
+    expect(card).toContain(`data-copy="${fp}"`);
+    const first = googlePlayCard(status({ apk: { offered: null, waiting: { versionCode: 42, version: "1.2.0", checkedAt: null, error: null } } })).html;
+    expect(first).toContain("Until then the Android download on the install page says Google Play is preparing it.");
+    const refusal = "Google Play did not give the Android download. Google did not accept the service account.";
+    expect(googlePlayCard(status({ apk: { offered: { ...offered, error: refusal }, waiting: null } })).html).toContain(refusal);
+    // Without the key the card still says why the download fails.
+    const noKey = "The Android download comes from Google Play with the developer's Google service account key, which is not saved in ourapps.";
+    expect(googlePlayCard(status({ setUp: false, needs: "service-account", serviceAccount: null, step: null, apk: { offered: { ...offered, error: noKey }, waiting: null } })).html).toContain("which is not saved in ourapps.");
+  });
+
+  it("notes how Google Pay is approved for an app in Google Play, and the fingerprint to give it", () => {
     const card = googlePlayCard(status()).html;
     expect(card).toContain('href="https://pay.google.com/business/console"');
     expect(card).toContain("which lists only apps in Google Play under the Google account signed in to it");
     expect(card).toContain("invite the Play Console's owner or admin account under Users in the Google Pay and Wallet Console and sign in with it");
     expect(card).toContain("Internal testing included");
-    expect(card).toContain("the APK from ourapps takes Google Pay only when it is signed with the same key as the Google Play copy");
+    expect(card).toContain("The Android download from ourapps is Google Play's own signed APK, the same signature as the Google Play copy");
+    expect(card).not.toContain("only when it is signed with the same key");
   });
 
   it("shows the address to paste in App content and waits for the developer's confirmation", () => {
@@ -97,5 +120,12 @@ describe("Google Play card", () => {
 
   it("offers Google Play on the install page", () => {
     expect(googlePlayLink(`https://play.google.com/store/apps/details?id=${PACKAGE}`).html).toContain("Get it on Google Play");
+  });
+
+  it("shows Android phones the version the download installs, which can be older than the release", () => {
+    const release = { version: "1.3.0", minPlayers: 2, maxPlayers: 9, fallbackName: "", fallbackIcon: "", fallbackDescription: "", fallbackScreenshots: [], androidVersion: "1.2.0", install: { pwa: null, android: { apk: "https://ourapps.app/dl/x" }, ios: null } };
+    expect(deviceVersion(release, "android")).toBe("1.2.0");
+    expect(deviceVersion(release, "windows")).toBe("1.3.0");
+    expect(deviceVersion({ ...release, install: { ...release.install, android: null } }, "android")).toBe("1.3.0");
   });
 });
