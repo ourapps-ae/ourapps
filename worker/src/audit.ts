@@ -19,7 +19,11 @@ export type AuditEvent =
   | "app-store-details-saved"
   | "app-store-screenshots-uploaded"
   | "app-store-submitted"
-  | "app-store-released";
+  | "app-store-released"
+  | "apple-pay-merchant-set"
+  | "apple-pay-certificate-created"
+  | "apple-pay-ticked"
+  | "apple-pay-profiles-made";
 
 export async function audit(request: Request | null, env: Env, deps: Deps, developerId: string, event: AuditEvent, detail = ""): Promise<void> {
   const cf = request ? (request as Request & { cf?: { country?: string } }).cf : undefined;
