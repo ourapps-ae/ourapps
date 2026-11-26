@@ -6,6 +6,7 @@ import { qrSvg, shareOrCopy } from "../qr.js";
 import { signingRequest } from "../signing.js";
 import { buildStatusCard, watchBuildStatus } from "../buildStatus.js";
 import { loadAppStoreCard } from "../appStore.js";
+import { loadApplePayCard } from "../applePay.js";
 import { retainedTargetRelease, targetEnabled, targetSections, wireTargets } from "../targets.js";
 import { appIcon, callout, copyRow, copyText, emptyState, errorBox, fmtDate, icon, pill, statePill, toast, wireCopy, wireImages } from "../ui.js";
 import { AGENT_REPO_PROMPT, AGENT_STORE_PROMPT } from "./prompts.js";
@@ -227,7 +228,7 @@ export async function appForm(root: HTMLElement, appId: string | null): Promise<
     me,
     isNew ? "New app" : app.name ?? "App",
     html`
-      ${!isNew ? html`<div id="release-card">${releaseCardSkeleton()}</div>${targetSections(app)}` : ""}
+      ${!isNew ? html`<div id="release-card">${releaseCardSkeleton()}</div>${targetSections(app)}<div id="applepay-card"></div>` : ""}
       <form id="app-form" class="card mt">
         ${SECTIONS.map((s) => html`<div class="form-section"><div class="about"><h3>${s.title}</h3><p>${s.about}</p></div><div>${s.fields.map(field)}</div></div>`)}
         <div class="form-section">
@@ -321,6 +322,7 @@ export async function appForm(root: HTMLElement, appId: string | null): Promise<
   }
   if (appId) for (const platform of ["macos", "tvos"] as const) void loadPlatformTestflightCard(root, app as DevApp, platform);
   if (appId) for (const platform of ["ios", "macos", "tvos"] as const) void loadAppStoreCard(root, appId, platform);
+  if (appId) void loadApplePayCard(root, appId);
   if (appId) {
     const fresh = sessionStorage.getItem(`buildToken:${appId}`);
     if (fresh) {
@@ -1392,6 +1394,8 @@ export async function agents(root: HTMLElement): Promise<void> {
             <tr><td><code>GET, POST /api/dev/apps/:id/testflight/:platform</code></td><td>separate Mac or Apple TV setup/status; Mac setup requires a browser session</td></tr>
             <tr><td><code>GET, PUT /api/dev/apps/:id/appstore/:platform</code></td><td>where App Store review stands and the next step; save a step</td></tr>
             <tr><td><code>POST /api/dev/apps/:id/appstore/:platform/{screenshots,submit,release}</code></td><td>upload screenshots, submit for review, release an approved version</td></tr>
+            <tr><td><code>GET /api/dev/apps/:id/applepay</code></td><td>where Apple Pay stands and the next step</td></tr>
+            <tr><td><code>POST /api/dev/apps/:id/applepay/{merchant,certificate,confirm,profiles}</code></td><td>choose the merchant identifier, make a Payment Processing certificate, confirm the tick on the App ID, make the profiles again</td></tr>
             <tr><td><code>GET /api/build/:app/targets</code></td><td>read <code>{targets:AppTargets}</code> using that app's build token as the bearer credential</td></tr>
           </table>
           <p class="small muted"><code>AppTargets</code> contains six booleans: <code>ios</code>, <code>android</code>, <code>web</code>, <code>macos</code>, <code>windows</code> and <code>tvos</code>.</p>

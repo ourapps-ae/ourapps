@@ -222,6 +222,48 @@ export interface AppStoreStatus {
   submission: { releaseType: "AFTER_APPROVAL" | "MANUAL"; appleState: string | null; message: string | null; liveVersion: string | null; submittedAt: string | null; checkedAt: string | null; releasedAt: string | null; error: string | null };
 }
 
+export type ApplePayStep = "merchant" | "certificate" | "capability" | "profiles";
+
+export interface ApplePayCertificate {
+  id: string;
+  name: string;
+  serialNumber: string;
+  expirationDate: string | null;
+  // When to give the payment processor the next certificate.
+  renewBy: string | null;
+  // Apple uses one certificate of a merchant identifier at a time; null when Apple did not say.
+  activated: boolean | null;
+  createdAt: string;
+  download: string;
+}
+
+export interface ApplePayStatus {
+  setUp: boolean;
+  // "testflight" until iPhone and iPad TestFlight is set up.
+  needs: "testflight" | null;
+  step: ApplePayStep | null;
+  entitlement: string;
+  merchant: {
+    id: string | null;
+    identifier: string | null;
+    name: string | null;
+    suggested: { identifier: string; name: string };
+    // The team's merchant identifiers, read while none is chosen; null when not read.
+    team: { identifier: string; name: string }[] | null;
+    done: boolean;
+    error: string | null;
+  };
+  certificate: { items: ApplePayCertificate[]; activeId: string | null; renewBy: string | null; done: boolean; error: string | null };
+  capability: { appIds: { id: string; identifier: string; platforms: ("ios" | "macos")[]; page: string }[]; turnedOnAt: string | null; tickedAt: string | null; done: boolean; error: string | null };
+  profiles: {
+    // merchantIdentifiers is null when the profile could not be read.
+    items: { platform: "ios" | "macos"; label: string; profileName: string | null; merchantIdentifiers: string[] | null; carries: boolean }[];
+    madeAt: string | null;
+    done: boolean;
+    error: string | null;
+  };
+}
+
 export interface BuildStatus {
   state: "not-started" | "requested" | "pending" | "running" | "complete" | "failed" | "cancelled" | "unavailable";
   checkedAt: string;

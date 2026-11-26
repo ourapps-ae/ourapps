@@ -271,6 +271,37 @@ export interface AppStoreVersionRow {
   updatedAt: string;
 }
 
+export type ApplePayStep = "merchant" | "certificate" | "capability" | "profiles";
+
+export interface ApplePayAppRow {
+  appId: string;
+  // Apple's id for the merchant identifier, the identifier, and its name; null until one is chosen.
+  merchantId: string | null;
+  merchantIdentifier: string | null;
+  merchantName: string | null;
+  // The App IDs whose Apple Pay capability ourapps turned on, with Apple's id and the platforms each serves.
+  appIds: { id: string; identifier: string; platforms: ApplePlatform[] }[];
+  capabilityAt: string | null;
+  // When the developer confirmed ticking the merchant identifier on those App IDs, which Apple's API cannot do.
+  tickedAt: string | null;
+  profilesAt: string | null;
+  errors: Partial<Record<ApplePayStep, string>>;
+  updatedAt: string;
+}
+
+export interface ApplePayCertificateRow {
+  certificateId: string;
+  appId: string;
+  merchantId: string;
+  name: string;
+  serialNumber: string;
+  certificateBase64: string;
+  expirationDate: string | null;
+  // Apple uses one certificate of a merchant at a time; null when Apple did not say.
+  activated: boolean | null;
+  createdAt: string;
+}
+
 type Raw = Record<string, unknown>;
 
 function camel(key: string): string {
@@ -301,6 +332,13 @@ const appStoreVersionConvert = (r: Raw): Raw => {
   const { draftJson, syncedJson, screenshotsJson, errorsJson, ...rest } = r;
   return { ...rest, draft: JSON.parse(draftJson as string), synced: JSON.parse(syncedJson as string), screenshots: screenshotsJson ? JSON.parse(screenshotsJson as string) : null, errors: JSON.parse(errorsJson as string) };
 };
+
+const applePayAppConvert = (r: Raw): Raw => {
+  const { appIdsJson, errorsJson, ...rest } = r;
+  return { ...rest, appIds: JSON.parse(appIdsJson as string), errors: JSON.parse(errorsJson as string) };
+};
+
+const applePayCertificateConvert = (r: Raw): Raw => ({ ...r, activated: r.activated === null || r.activated === undefined ? null : r.activated === 1 });
 
 export class Db {
   constructor(private d1: D1Database) {}
@@ -725,6 +763,40 @@ export class Db {
       .bind(policyId)
       .first<{ app_name: string; policy_json: string; updated_at: string }>();
     return r ? { appName: r.app_name, policy: JSON.parse(r.policy_json) as DefaultPolicy, updatedAt: r.updated_at } : null;
+  }
+
+  // Apple Pay
+
+  async applePayApp(appId: string): Promise<ApplePayAppRow | null> {
+    return row<ApplePayAppRow>(await this.d1.prepare("SELECT * FROM apple_pay_apps WHERE app_id = ?").bind(appId).first(), applePayAppConvert);
+  }
+
+  async putApplePayApp(a: ApplePayAppRow): Promise<void> {
+    await this.d1
+      .prepare(
+        `INSERT INTO apple_pay_apps (app_id, merchant_id, merchant_identifier, merchant_name, app_ids_json, capability_at, ticked_at, profiles_at, errors_json, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(app_id) DO UPDATE SET merchant_id = excluded.merchant_id, merchant_identifier = excluded.merchant_identifier, merchant_name = excluded.merchant_name, app_ids_json = excluded.app_ids_json,
+         capability_at = excluded.capability_at, ticked_at = excluded.ticked_at, profiles_at = excluded.profiles_at, errors_json = excluded.errors_json, updated_at = excluded.updated_at`,
+      )
+      .bind(a.appId, a.merchantId, a.merchantIdentifier, a.merchantName, JSON.stringify(a.appIds), a.capabilityAt, a.tickedAt, a.profilesAt, JSON.stringify(a.errors), a.updatedAt)
+      .run();
+  }
+
+  // One merchant's certificates for an app, newest first.
+  async applePayCertificates(appId: string, merchantId: string): Promise<ApplePayCertificateRow[]> {
+    const res = await this.d1.prepare("SELECT * FROM apple_pay_certificates WHERE app_id = ? AND merchant_id = ? ORDER BY created_at DESC, rowid DESC").bind(appId, merchantId).all<Raw>();
+    return res.results.map((r) => row<ApplePayCertificateRow>(r, applePayCertificateConvert)!);
+  }
+
+  async applePayCertificate(appId: string, certificateId: string): Promise<ApplePayCertificateRow | null> {
+    return row<ApplePayCertificateRow>(await this.d1.prepare("SELECT * FROM apple_pay_certificates WHERE app_id = ? AND certificate_id = ?").bind(appId, certificateId).first(), applePayCertificateConvert);
+  }
+
+  async insertApplePayCertificate(c: ApplePayCertificateRow): Promise<void> {
+    await this.d1
+      .prepare("INSERT INTO apple_pay_certificates (certificate_id, app_id, merchant_id, name, serial_number, certificate_base64, expiration_date, activated, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(c.certificateId, c.appId, c.merchantId, c.name, c.serialNumber, c.certificateBase64, c.expirationDate, c.activated === null ? null : c.activated ? 1 : 0, c.createdAt)
+      .run();
   }
 
   // Signing certificate

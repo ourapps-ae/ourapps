@@ -116,12 +116,12 @@ export class AppleClient {
     return app ? { id: app.id, name: app.attributes.name } : null;
   }
 
-  // An App Store profile for TestFlight builds, made again when it lacks the certificate.
-  async ensureStoreProfile(name: string, bundleIdRes: string, certificateId: string, profileType = "IOS_APP_STORE", check?: () => Promise<void>): Promise<{ id: string; uuid: string; profileContent: string; expirationDate: string }> {
+  // An App Store profile for TestFlight builds, made again when it lacks the certificate or what keep asks of its content.
+  async ensureStoreProfile(name: string, bundleIdRes: string, certificateId: string, profileType = "IOS_APP_STORE", check?: () => Promise<void>, keep: (profileContent: string) => boolean = () => true): Promise<{ id: string; uuid: string; profileContent: string; expirationDate: string }> {
     const old = await this.findProfileByName(name);
     const certs = asList(old?.relationships?.certificates?.data).map((c) => c.id);
     const attrs = old?.attributes as { profileType?: string; profileState?: string } | undefined;
-    if (old && certs.includes(certificateId) && attrs?.profileType === profileType && attrs?.profileState !== "INVALID" && Date.parse(old.attributes.expirationDate) > this.deps.now().getTime()) {
+    if (old && certs.includes(certificateId) && attrs?.profileType === profileType && attrs?.profileState !== "INVALID" && Date.parse(old.attributes.expirationDate) > this.deps.now().getTime() && keep(old.attributes.profileContent)) {
       return { id: old.id, uuid: old.attributes.uuid, profileContent: old.attributes.profileContent, expirationDate: old.attributes.expirationDate };
     }
     if (old) await this.call("DELETE", `/v1/profiles/${old.id}`, undefined, undefined, check);
@@ -609,6 +609,45 @@ export class AppleClient {
     const a = res.data.attributes;
     return { id: res.data.id, name: a.name, serialNumber: a.serialNumber, certificateContent: a.certificateContent, expirationDate: a.expirationDate ?? null };
   }
+
+  // Apple Pay
+
+  async merchants(identifier?: string): Promise<Merchant[]> {
+    const filter = identifier ? `filter[identifier]=${encodeURIComponent(identifier)}&` : "";
+    const res = await this.call<{ data: Resource<{ identifier?: string; name?: string }>[] }>("GET", `/v1/merchantIds?${filter}fields[merchantIds]=identifier,name&sort=identifier&limit=200`);
+    return res.data.map((m) => ({ id: m.id, identifier: m.attributes.identifier ?? "", name: m.attributes.name ?? "" })).filter((m) => !identifier || m.identifier === identifier);
+  }
+
+  async createMerchant(identifier: string, name: string, check?: () => Promise<void>): Promise<Merchant> {
+    const res = await this.call<{ data: Resource<{ identifier?: string; name?: string }> }>("POST", "/v1/merchantIds", { data: { type: "merchantIds", attributes: { identifier, name } } }, undefined, check);
+    return { id: res.data.id, identifier: res.data.attributes.identifier ?? identifier, name: res.data.attributes.name ?? name };
+  }
+
+  // A Payment Processing certificate from the payment processor's request; the private key stays with the processor.
+  async createPaymentCertificate(csrPem: string, merchantId: string, check?: () => Promise<void>): Promise<{ id: string; name: string; serialNumber: string; certificateContent: string; expirationDate: string | null; activated: boolean | null }> {
+    const res = await this.call<{ data: Resource<{ name: string; serialNumber: string; certificateContent: string; expirationDate?: string; activated?: boolean }> }>("POST", "/v1/certificates", {
+      data: { type: "certificates", attributes: { certificateType: "APPLE_PAY", csrContent: csrPem }, relationships: { merchantId: { data: { type: "merchantIds", id: merchantId } } } },
+    }, undefined, check);
+    const a = res.data.attributes;
+    return { id: res.data.id, name: a.name, serialNumber: a.serialNumber, certificateContent: a.certificateContent, expirationDate: a.expirationDate ?? null, activated: typeof a.activated === "boolean" ? a.activated : null };
+  }
+
+  // Turns a capability on for an App ID unless it is on already; true when it was turned on now. Apple has no setting
+  // that assigns a merchant identifier.
+  async ensureCapability(bundleIdRes: string, capabilityType: string, check?: () => Promise<void>): Promise<boolean> {
+    const res = await this.call<{ data: Resource<{ capabilityType?: string }>[] }>("GET", `/v1/bundleIds/${encodeURIComponent(bundleIdRes)}/bundleIdCapabilities?limit=200`);
+    if (res.data.some((c) => c.attributes.capabilityType === capabilityType)) return false;
+    await this.call("POST", "/v1/bundleIdCapabilities", {
+      data: { type: "bundleIdCapabilities", attributes: { capabilityType }, relationships: { bundleId: { data: { type: "bundleIds", id: bundleIdRes } } } },
+    }, undefined, check);
+    return true;
+  }
+}
+
+export interface Merchant {
+  id: string;
+  identifier: string;
+  name: string;
 }
 
 export interface UploadOperation {

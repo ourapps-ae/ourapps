@@ -17,6 +17,7 @@ import { applePlatform, profileType } from "../apple-platform.js";
 import { buildLinkPage } from "./public.js";
 import { requireTarget, TargetDisabledError } from "../targets.js";
 import { appStoreView, releaseAppStore, saveAppStoreDetails, submitAppStore, uploadScreenshots } from "../appstore.js";
+import { applePayView, certificateFile, chooseMerchant, confirmTicked, createCertificate, makeProfiles } from "../applepay.js";
 
 type AppInput = Partial<Record<"name" | "tagline" | "description" | "whatsNew" | "size" | "minOs" | "ageNote" | "privacySummary" | "iconUrl" | "repo" | "manifestUrl" | "bundleId", string>> & {
   screenshots?: unknown;
@@ -494,6 +495,25 @@ export async function appStoreAction(request: Request, env: Env, deps: Deps, dev
   if (action === "screenshots") return json(await uploadScreenshots(request, env, deps, dev, app, body));
   if (action === "submit") return json(await submitAppStore(request, env, deps, dev, app, body));
   return json(await releaseAppStore(request, env, deps, dev, app));
+}
+
+// GET /api/dev/apps/:id/applepay - where Apple Pay stands and the next step.
+export async function applePayStatus(env: Env, deps: Deps, dev: Developer, id: string): Promise<Response> {
+  return json(await applePayView(env, deps, await ownedApp(Db.from(env), dev, id), true));
+}
+
+// POST /api/dev/apps/:id/applepay/{merchant,certificate,confirm,profiles}
+export async function applePayAction(request: Request, env: Env, deps: Deps, dev: Developer, id: string, action: string): Promise<Response> {
+  const app = await ownedApp(Db.from(env), dev, id);
+  if (action === "merchant") return json(await chooseMerchant(request, env, deps, dev, app, await optionalJson<Record<string, unknown>>(request)));
+  if (action === "certificate") return json(await createCertificate(request, env, deps, dev, app, await optionalJson<Record<string, unknown>>(request)));
+  if (action === "confirm") return json(await confirmTicked(request, env, deps, dev, app));
+  return json(await makeProfiles(request, env, deps, dev, app));
+}
+
+// GET /api/dev/apps/:id/applepay/certificate/:certId - the .cer file for the payment processor.
+export async function applePayCertificate(env: Env, dev: Developer, id: string, certificateId: string): Promise<Response> {
+  return certificateFile(env, await ownedApp(Db.from(env), dev, id), certificateId);
 }
 
 // PUT /api/dev/review-contact - who Apple's TestFlight beta review contacts.
